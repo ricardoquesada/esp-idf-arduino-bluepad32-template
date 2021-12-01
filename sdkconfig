@@ -215,13 +215,6 @@ CONFIG_ESPTOOLPY_MONITOR_BAUD=115200
 # end of Serial flasher config
 
 #
-# Example Configuration
-#
-CONFIG_ESP_WIFI_SSID="myssid"
-CONFIG_ESP_WIFI_PASSWORD="mypassword"
-# end of Example Configuration
-
-#
 # Partition Table
 #
 CONFIG_PARTITION_TABLE_SINGLE_APP=y

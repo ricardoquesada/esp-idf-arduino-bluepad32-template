@@ -18,12 +18,13 @@ limitations under the License.
 
 #include <stddef.h>
 
-#include "btstack_port_esp32.h"
-#include "btstack_run_loop.h"
-#include "hci_dump.h"
 #include "sdkconfig.h"
-#include "uni_esp32.h"
-#include "uni_main.h"
+
+#include <btstack_port_esp32.h>
+#include <btstack_run_loop.h>
+#include <hci_dump.h>
+#include <uni_esp32.h>
+#include <uni_main.h>
 
 int app_main(void) {
   // hci_dump_open(NULL, HCI_DUMP_STDOUT);

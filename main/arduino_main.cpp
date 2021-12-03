@@ -20,8 +20,7 @@ limitations under the License.
 #ifdef CONFIG_BLUEPAD32_PLATFORM_ARDUINO
 
 #include <Arduino.h>
-
-#include "ArduinoBluepad32.h"
+#include <Bluepad32.h>
 
 GamepadPtr myGamepad;
 
@@ -69,18 +68,18 @@ void loop() {
       // Some gamepads like DS4 and DualSense support changing the color LED.
       // It is possible to change it by calling:
       switch (colorIdx % 3) {
-        case 0:
-          // Red
-          myGamepad->setColorLED(255, 0, 0);
-          break;
-        case 1:
-          // Green
-          myGamepad->setColorLED(0, 255, 0);
-          break;
-        case 2:
-          // Blue
-          myGamepad->setColorLED(0, 0, 255);
-          break;
+      case 0:
+        // Red
+        myGamepad->setColorLED(255, 0, 0);
+        break;
+      case 1:
+        // Green
+        myGamepad->setColorLED(0, 255, 0);
+        break;
+      case 2:
+        // Blue
+        myGamepad->setColorLED(0, 0, 255);
+        break;
       }
       colorIdx++;
     }
@@ -100,7 +99,7 @@ void loop() {
       // Duration: 255 is ~2 seconds
       // force: intensity
       // Some gamepads like DS3, DS4, DualSense, Switch, Xbox One S support
-      // force feedback.
+      // rumble.
       // It is possible to set it by calling:
       myGamepad->setRumble(0xc0 /* force */, 0xc0 /* duration */);
     }
@@ -112,15 +111,15 @@ void loop() {
     snprintf(buffer, sizeof(buffer) - 1,
              "dpad: 0x%02x, buttons: 0x%04x, axis L: %4d, %4d, axis R: %4d, "
              "%4d, brake: %4d, throttle: %4d, misc: 0x%02x",
-             myGamepad->dpad(),        // DPAD
-             myGamepad->buttons(),     // bitmask of pressed buttons
-             myGamepad->axisX(),       // (-511 - 512) left X Axis
-             myGamepad->axisY(),       // (-511 - 512) left Y axis
-             myGamepad->axisRX(),      // (-511 - 512) right X axis
-             myGamepad->axisRY(),      // (-511 - 512) right Y axis
-             myGamepad->brake(),       // (0 - 1023): brake button
-             myGamepad->throttle(),    // (0 - 1023): throttle (AKA gas) button
-             myGamepad->miscButtons()  // bitmak of pressed "misc" buttons
+             myGamepad->dpad(),       // DPAD
+             myGamepad->buttons(),    // bitmask of pressed buttons
+             myGamepad->axisX(),      // (-511 - 512) left X Axis
+             myGamepad->axisY(),      // (-511 - 512) left Y axis
+             myGamepad->axisRX(),     // (-511 - 512) right X axis
+             myGamepad->axisRY(),     // (-511 - 512) right Y axis
+             myGamepad->brake(),      // (0 - 1023): brake button
+             myGamepad->throttle(),   // (0 - 1023): throttle (AKA gas) button
+             myGamepad->miscButtons() // bitmak of pressed "misc" buttons
     );
     Serial.println(buffer);
 
@@ -131,4 +130,4 @@ void loop() {
   delay(150);
 }
 
-#endif  // CONFIG_BLUEPAD32_PLATFORM_ARDUINO
+#endif // CONFIG_BLUEPAD32_PLATFORM_ARDUINO

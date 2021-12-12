@@ -43,7 +43,7 @@ Requirements: **Linux** (**macOS** might work as well). It should be possible to
     # Needs to be done just once
     # Clone the ESP-IDF git repo
     mkdir ~/esp && cd ~/esp
-    git clone -b v4.4 --recursive https://github.com/espressif/esp-idf.git
+    git clone -b release/v4.4 --recursive https://github.com/espressif/esp-idf.git
 
     # Then install the toolchain
     cd ~/esp/esp-idf

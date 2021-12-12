@@ -52,15 +52,29 @@ Requirements: **Linux** (**macOS** might work as well). It should be possible to
 
 3. Compile the template
 
+    Clone the template:
+
     ```sh
-    # Do it everything you want to start a new project
+    # Do it everytime you want to start a new project
     # Clone the template somewhere
     mkdir ~/src && cd ~/src
     git clone --recursive https://gitlab.com/ricardoquesada/esp-idf-arduino-bluepad32-template.git my_project
+    ```
 
+    Export the ESP-IDF environment variables in your shell:
+
+    ```sh
+    # Do it everytime you open a new shell
+    # Optional: add it in your ~/.bashrc or ~/.profile
+    source ~/esp/esp-idf/export.sh
+    ```
+
+    And finally compile and install your project.
+
+    ```sh
     # Compile it
-    cd my_project
-    make
+    cd ~/src/my_project
+    make -j
 
     # Run it
     make flash monitor

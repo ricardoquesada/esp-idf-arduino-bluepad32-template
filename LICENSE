@@ -1,1 +1,7 @@
-# TODO
+LICENSES
+
+* Template code: Apache-2.0
+* bluepad32: Apache-2.0
+* bluepad32_arduino: Apache-2.0 and LGPL-2.1-or-later
+* btstack: https://github.com/bluekitchen/btstack/blob/master/LICENSE
+

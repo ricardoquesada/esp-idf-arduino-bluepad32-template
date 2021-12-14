@@ -51,9 +51,9 @@ void setup() {
 
 // Arduino loop function. Runs in CPU 1
 void loop() {
-  // This call fetches all the gamepad info from the NINA (ESP32) module.
+  // This call fetches all the gamepad info.
   // Just call this function in your main loop.
-  // The gamepads pointer (the ones received in the callbacks) gets updated
+  // The gamepad pointers (the ones received in the callbacks) gets updated
   // automatically.
   BP32.update();
 

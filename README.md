@@ -96,7 +96,7 @@ Let's use two real 3rd party libraries as example:
 
 [component.mk]: https://gitlab.com/ricardoquesada/esp-idf-arduino-bluepad32-template/-/blob/main/components/bluepad32_arduino/component.mk
 
-### Example: ESP32MotorControl
+### Example: Adding ESP32MotorControl
 
 [ESP32MotorControl][esp32motorcontrol] has the source code in the "root" folder. This means that the source code is placed in the correct place. E.g:
 
@@ -114,9 +114,16 @@ cd ESP32MotorControl
 cp ../bluepad32_arduino/component.mk .
 ```
 
+And that's it. Now you can include `ESP32MotorControl` from your code. E.g:
+
+```cpp
+// Add this include in your arduino_main.cpp file
+#include <ESP32MotorControl.h>
+```
+
 [esp32motorcontrol]: https://github.com/JoaoLopesF/ESP32MotorControl
 
-### Example: ESP32Servo
+### Example: Adding ESP32Servo
 
 [ESP32Servo] has the source code placed in `src`. So the source code must be moved (or copied) to the root folder. E.g:
 
@@ -136,6 +143,13 @@ And as in the previous example, add the `component.mk` file.
 # Finally add the component.mk file.
 cd ESP32Servo
 cp ../bluepad32_arduino/component.mk .
+```
+
+And that's it. Now you can include `ESP32Servo` from your code. E.g:
+
+```cpp
+// Add this include in your arduino_main.cpp file
+#include <ESP32Servo.h>
 ```
 
 [esp32servo]: https://github.com/madhephaestus/ESP32Servo.git

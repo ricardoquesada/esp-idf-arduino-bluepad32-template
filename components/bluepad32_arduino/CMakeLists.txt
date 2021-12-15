@@ -1,9 +1,7 @@
-set(COMPONENT_ADD_INCLUDEDIRS ".")
+set(srcs "ArduinoBluepad32.cpp"
+         "ArduinoGamepad.cpp")
 
-set(COMPONENT_SRCS "ArduinoBluepad32.cpp"
-                   "ArduinoGamepad.cpp"
-                   )
-
-set(COMPONENT_REQUIRES "bluepad32")
-
-register_component()
+idf_component_register(SRCS "${srcs}"
+                    INCLUDE_DIRS "."
+                    REQUIRES "arduino"
+                             "bluepad32")

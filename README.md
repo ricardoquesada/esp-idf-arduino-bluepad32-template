@@ -72,6 +72,21 @@ Requirements: **Linux** (**macOS** might work as well). It should be possible to
     And finally compile and install your project.
 
     ```sh
+    # Option A: using idf.py
+
+    # Compile it
+    cd ~/src/my_project
+    idf.py build
+
+    # Run it
+    idf.py flash monitor
+    ```
+
+    Alternative, you can compile it using the "old" way. E.g:
+
+    ```sh
+    # Option B: using make (old way)
+
     # Compile it
     cd ~/src/my_project
     make -j

@@ -1,12 +1,13 @@
+#FIXME
+#if(NOT CONFIG_BLUEPAD32_PLATFORM_ARDUINO)
+#    return()
+#endif()
+
 set(srcs "ArduinoBluepad32.cpp"
          "ArduinoGamepad.cpp")
 
-set(requires "bluepad32")
+set(requires "bluepad32" "arduino")
 
-if(CONFIG_BLUEPAD32_PLATFORM_ARDUINO)
-    list(APPEND requires "arduino")
-endif()
-
-idf_component_register(SRCS "${srcs}"
-                    INCLUDE_DIRS "."
-                    REQUIRES "${requires}")
+idf_component_register(SRCS ${srcs}
+                    INCLUDE_DIRS "include"
+                    REQUIRES ${requires})

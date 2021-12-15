@@ -30,6 +30,7 @@ set(srcs "uni_bt_conn.c"
 
 set(requires "nvs_flash" "btstack")
 
+#FIXME
 #if(CONFIG_BLUEPAD32_PLATFORM_ARDUINO)
     list(APPEND requires "arduino")
 #endif()

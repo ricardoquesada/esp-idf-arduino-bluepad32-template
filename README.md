@@ -104,30 +104,59 @@ Requirements: **Linux** (**macOS** might work as well). It should be possible to
 To include 3rd party Arduino libraries in your project, you have to:
 
 * Add them to the `components` folder.
-* Add a file `component.mk` inside the component's folder (Use this file as reference: [component.mk])
+* Add a file `component.mk` and/or `CMakeLists.txt` inside the component's folder
 
-ESP-IDF requires that the compoonent's source code must be placed in the component's "root" folder.
+`component.mk` is needed if you use `make` to compile it. And `CMakeLists.txt` is needed if you use `idf.py` to compile it.
 
 Let's use two real 3rd party libraries as example:
 
-[component.mk]: https://gitlab.com/ricardoquesada/esp-idf-arduino-bluepad32-template/-/blob/main/components/bluepad32_arduino/component.mk
-
 ### Example: Adding ESP32MotorControl
 
-[ESP32MotorControl][esp32motorcontrol] has the source code in the "root" folder. This means that the source code is placed in the correct place. E.g:
+[ESP32MotorControl][esp32motorcontrol] has the source code in the "root" folder. So we have to add a `component.mk` and/or `CMakeLists.txt` with that in mind. Let's see:
 
 ```sh
 # Add ESP32MotorControl into the components folder
 cd components
 git clone https://github.com/JoaoLopesF/ESP32MotorControl
+cd ESP32MotorControl
 ```
 
-The only thing that we have to do is to create the `component.mk` file. You can copy the one from `components/bluepad32_arduino/`. E.g:
+And now create create these files files inside `components/ESP32MotorControl` folder:
 
 ```sh
-# Finally add the component.mk file.
-cd ESP32MotorControl
-cp ../bluepad32_arduino/component.mk .
+# Create component.mk file
+# Needed if you use "make" to compile the project
+# Copy & paste the following lines to the terminal:
+cat << EOF > component.mk
+COMPONENT_ADD_INCLUDEDIRS := .
+EOF
+```
+
+```sh
+# Create CMakeLists.txt file
+# Needed if you use "idf.py" to compile the project
+# Copy & paste the following lines to the terminal:
+cat << EOF > CMakeLists.txt
+idf_component_register(SRC_DIRS "."
+                    INCLUDE_DIRS "."
+                    REQUIRES "arduino")
+EOF
+```
+
+Finally, if you use `idf.py`, you have to update the dependencies in the `main/CMakeLists.txt`. E.g:
+
+```sh
+# Needed if you use "idf.py" to compile the project
+cd main
+edit CMakeLists.txt
+```
+
+...and append `ESP32MotorControl` to `REQUIRES`. The `main/CMakeLists.txt` should look like this:
+
+```cmake
+idf_component_register(SRCS "${srcs}"
+                    INCLUDE_DIRS "."
+                    REQUIRES "${requires}" "ESP32MotorControl")
 ```
 
 And that's it. Now you can include `ESP32MotorControl` from your code. E.g:
@@ -141,24 +170,52 @@ And that's it. Now you can include `ESP32MotorControl` from your code. E.g:
 
 ### Example: Adding ESP32Servo
 
-[ESP32Servo] has the source code placed in `src`. So the source code must be moved (or copied) to the root folder. E.g:
+[ESP32Servo] has the source code placed in `src`. So the we have to make `component.mk` and/or `CMakeLists.txt` to point to that folder. Let's see:
 
 ```sh
 # Add ESP32Servo into components folder
 cd components
 git clone https://github.com/madhephaestus/ESP32Servo.git
-
-# And then move the "src" into "root"
 cd ESP32Servo
-mv src/* .
 ```
 
-And as in the previous example, add the `component.mk` file.
+And now create create these files files inside `components/ESP32Servo` folder:
 
 ```sh
-# Finally add the component.mk file.
-cd ESP32Servo
-cp ../bluepad32_arduino/component.mk .
+# Create component.mk file
+# Needed if you use "make" to compile the project
+# Copy & paste the following lines to the terminal:
+cat << EOF > component.mk
+COMPONENT_ADD_INCLUDEDIRS := src
+COMPONENT_SRCDIRS := src
+EOF
+```
+
+```sh
+# Create CMakeLists.txt file
+# Needed if you use "idf.py" to compile the project
+# Copy & paste the following lines to the terminal:
+cat << EOF > CMakeLists.txt
+idf_component_register(SRC_DIRS "src"
+                    INCLUDE_DIRS "src"
+                    REQUIRES "arduino")
+EOF
+```
+
+Finally, if you use `idf.py`, you have to update the dependencies in the `main/CMakeLists.txt`. E.g:
+
+```sh
+# Needed if you use "idf.py" to compile the project
+cd main
+edit CMakeLists.txt
+```
+
+...and append `ESP32Servo` to `REQUIRES`. The `main/CMakeLists.txt` should look like this:
+
+```cmake
+idf_component_register(SRCS "${srcs}"
+                    INCLUDE_DIRS "."
+                    REQUIRES "${requires}" "ESP32Servo")
 ```
 
 And that's it. Now you can include `ESP32Servo` from your code. E.g:

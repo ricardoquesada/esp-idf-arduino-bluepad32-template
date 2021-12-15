@@ -72,7 +72,20 @@ Requirements: **Linux** (**macOS** might work as well). It should be possible to
     And finally compile and install your project.
 
     ```sh
-    # Option A: using idf.py
+    # Option A: using make
+
+    # Compile it
+    cd ~/src/my_project
+    make -j
+
+    # Run it
+    make flash monitor
+    ```
+
+    Alternative, you can compile it using the "new" way, but experimental. E.g:
+
+    ```sh
+    # Option A: using idf.py (new way, experimental)
 
     # Compile it
     cd ~/src/my_project
@@ -82,18 +95,6 @@ Requirements: **Linux** (**macOS** might work as well). It should be possible to
     idf.py flash monitor
     ```
 
-    Alternative, you can compile it using the "old" way. E.g:
-
-    ```sh
-    # Option B: using make (old way)
-
-    # Compile it
-    cd ~/src/my_project
-    make -j
-
-    # Run it
-    make flash monitor
-    ```
 
 [toolchain-deps]: https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/linux-setup.html
 [ttyusb0]: https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/establish-serial-connection.html#linux-dialout-group

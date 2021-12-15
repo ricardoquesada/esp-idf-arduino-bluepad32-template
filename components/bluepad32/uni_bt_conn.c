@@ -16,23 +16,30 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ****************************************************************************/
 
-#include "uni_utils.h"
+#include "uni_bt_conn.h"
 
-// This is a well-known function. No need to add the "uni_" prefix.
-#define CRCPOLY 0xedb88320
-uint32_t crc32_le(uint32_t seed, const void* data, size_t len) {
-    uint32_t crc = seed;
-    const uint8_t* src = data;
-    uint32_t mult;
-    int i;
+#include <string.h>
 
-    while (len--) {
-        crc ^= *src++;
-        for (i = 0; i < 8; i++) {
-            mult = (crc & 1) ? CRCPOLY : 0;
-            crc = (crc >> 1) ^ mult;
-        }
-    }
+void uni_bt_conn_init(uni_bt_conn_t* conn) {
+    memset(conn, 0, sizeof(*conn));
+}
 
-    return crc;
+void uni_bt_conn_set_state(uni_bt_conn_t* conn, uni_bt_conn_state_t state) {
+    conn->state = state;
+}
+
+uni_bt_conn_state_t uni_bt_conn_get_state(uni_bt_conn_t* conn) {
+    return conn->state;
+}
+
+void uni_bt_conn_get_address(uni_bt_conn_t* conn, bd_addr_t out_addr) {
+    memcpy(out_addr, conn->remote_addr, 6);
+}
+
+bool uni_bt_conn_is_incoming(uni_bt_conn_t* conn) {
+    return conn->incoming;
+}
+
+bool uni_bt_conn_is_connected(uni_bt_conn_t* conn) {
+    return conn->connected;
 }

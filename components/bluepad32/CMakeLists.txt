@@ -1,4 +1,5 @@
-set(srcs "uni_bluetooth.c"
+set(srcs "uni_bt_conn.c"
+         "uni_bluetooth.c"
          "uni_circular_buffer.c"
          "uni_esp32.c"
          "uni_gamepad.c"
@@ -29,7 +30,6 @@ set(srcs "uni_bluetooth.c"
 
 set(requires "nvs_flash" "btstack")
 
-# FIXME: For some reason it doesn't work if I add this guard (???)
 #if(CONFIG_BLUEPAD32_PLATFORM_ARDUINO)
     list(APPEND requires "arduino")
 #endif()

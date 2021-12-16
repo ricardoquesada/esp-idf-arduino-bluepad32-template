@@ -162,7 +162,6 @@ void uni_hid_parser_ds5_setup(uni_hid_device_t* d) {
 void uni_hid_parser_ds5_parse_raw(uni_hid_device_t* d, const uint8_t* report, uint16_t len) {
     if (report[0] != 0x31) {
         loge("DS5: Unexpected report type: got 0x%02x, want: 0x31\n", report[0]);
-        printf_hexdump(report, len);
         return;
     }
     if (len != 78) {
@@ -286,9 +285,8 @@ static void ds5_send_output_report(uni_hid_device_t* d, ds5_output_report_t* out
         ins->output_seq = 0;
 
     /* CRC generation */
-    uint8_t bthdr = 0xa2;
-    uint32_t crc32 = crc32_le(0xffffffff, &bthdr, 1);
-    crc32 = ~crc32_le(crc32, (uint8_t*)&out->report_id, sizeof(*out) - 5);
+    uint32_t crc32 = uni_crc32_le(0xffffffff, &out->transaction_type, 1);
+    crc32 = ~uni_crc32_le(crc32, (uint8_t*)&out->report_id, sizeof(*out) - 5);
     out->crc32 = crc32;
 
     uni_hid_device_send_intr_report(d, (uint8_t*)out, sizeof(*out));

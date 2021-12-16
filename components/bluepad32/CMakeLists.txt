@@ -26,13 +26,14 @@ set(srcs "uni_bt_conn.c"
          "uni_platform_mightymiggy.c"
          "uni_platform_nina.c"
          "uni_platform_pc_debug.c"
-         "uni_platform_unijoysticle.c")
+         "uni_platform_unijoysticle.c"
+         "uni_utils.c")
 
 set(requires "nvs_flash" "btstack")
 
 #FIXME
 #if(CONFIG_BLUEPAD32_PLATFORM_ARDUINO)
-    list(APPEND requires "arduino")
+list(APPEND requires "arduino")
 #endif()
 
 idf_component_register(SRCS "${srcs}"

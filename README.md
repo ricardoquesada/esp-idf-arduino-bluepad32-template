@@ -108,72 +108,18 @@ To include 3rd party Arduino libraries in your project, you have to:
 
 `component.mk` is needed if you use `make` to compile it. And `CMakeLists.txt` is needed if you use `idf.py` to compile it.
 
-Let's use two real 3rd party libraries as example:
-
-### Example: Adding ESP32MotorControl
-
-[ESP32MotorControl][esp32motorcontrol] has the source code in the "root" folder. So we have to add a `component.mk` and/or `CMakeLists.txt` with that in mind. Let's see:
-
-```sh
-# Add ESP32MotorControl into the components folder
-cd components
-git clone https://github.com/JoaoLopesF/ESP32MotorControl
-cd ESP32MotorControl
-```
-
-And now create create these files files inside `components/ESP32MotorControl` folder:
-
-```sh
-# Create component.mk file
-# Needed if you use "make" to compile the project
-# Copy & paste the following lines to the terminal:
-cat << EOF > component.mk
-COMPONENT_ADD_INCLUDEDIRS := .
-EOF
-```
-
-```sh
-# Create CMakeLists.txt file
-# Needed if you use "idf.py" to compile the project
-# Copy & paste the following lines to the terminal:
-cat << EOF > CMakeLists.txt
-idf_component_register(SRC_DIRS "."
-                    INCLUDE_DIRS "."
-                    REQUIRES "arduino")
-EOF
-```
-
-Finally, if you use `idf.py`, you have to update the dependencies in the `main/CMakeLists.txt`. E.g:
-
-```sh
-# Needed if you use "idf.py" to compile the project
-cd main
-edit CMakeLists.txt
-```
-
-...and append `ESP32MotorControl` to `REQUIRES`. The `main/CMakeLists.txt` should look like this:
-
-```cmake
-idf_component_register(SRCS "${srcs}"
-                    INCLUDE_DIRS "."
-                    REQUIRES "${requires}" "ESP32MotorControl")
-```
-
-And that's it. Now you can include `ESP32MotorControl` from your code. E.g:
-
-```cpp
-// Add this include in your arduino_main.cpp file
-#include <ESP32MotorControl.h>
-```
-
-[esp32motorcontrol]: https://github.com/JoaoLopesF/ESP32MotorControl
+Let's use a real case as example:
 
 ### Example: Adding ESP32Servo
 
-[ESP32Servo] has the source code placed in `src`. So the we have to make `component.mk` and/or `CMakeLists.txt` to point to that folder. Let's see:
+Suppose you want to use [ESP32Servo] project. The first thing to notice is that the source files are placed
+in the `src` folder.  We have to create a `component.mk` and/or `CMakeLists.txt` files that tells the
+ESP-IDF to look for the sources in the `src` folder.
+
+Example:
 
 ```sh
-# Add ESP32Servo into components folder
+# 1) We clone ESP32Servo into components folder
 cd components
 git clone https://github.com/madhephaestus/ESP32Servo.git
 cd ESP32Servo
@@ -182,8 +128,8 @@ cd ESP32Servo
 And now create create these files files inside `components/ESP32Servo` folder:
 
 ```sh
-# Create component.mk file
-# Needed if you use "make" to compile the project
+# 2) Create component.mk file
+# Only needed if you use "make" to compile the project
 # Copy & paste the following lines to the terminal:
 cat << EOF > component.mk
 COMPONENT_ADD_INCLUDEDIRS := src
@@ -192,8 +138,8 @@ EOF
 ```
 
 ```sh
-# Create CMakeLists.txt file
-# Needed if you use "idf.py" to compile the project
+# 3) Create CMakeLists.txt file
+# Only needed if you use "idf.py" to compile the project
 # Copy & paste the following lines to the terminal:
 cat << EOF > CMakeLists.txt
 idf_component_register(SRC_DIRS "src"

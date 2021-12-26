@@ -8,7 +8,7 @@ This is a template application to be used with [Espressif IoT Development Framew
 
 Please check [ESP-IDF docs](https://docs.espressif.com/projects/esp-idf/en/latest/get-started/index.html) for getting started instructions.
 
-Requires ESP-IDF v4.4 or newer.
+Requires ESP-IDF **v4.4** or newer.
 
 Includes the following ESP-IDF components, with a pre-configured `sdkconfig` file:
 
@@ -18,7 +18,8 @@ Includes the following ESP-IDF components, with a pre-configured `sdkconfig` fil
 
 ## How to compile it
 
-Requirements: **Linux** (**macOS** might work as well). It should be possible to compile ESP-IDF + Bluepad32 on Windows. I justs don't have one to test it. So if you have Windows and don't know how to do it yourself, install a VM with Linux and follow these instructions:
+The following are the instructions for **Linux**, and should work for **macOS** as well. For **Windows**, use the
+[ESP-IDF online installer][esp-idf-online-installer], and select `release/v4.4` branch.
 
 1. Requirements and permissions
 
@@ -72,30 +73,15 @@ Requirements: **Linux** (**macOS** might work as well). It should be possible to
     And finally compile and install your project.
 
     ```sh
-    # Option A: using make
-
-    # Compile it
-    cd ~/src/my_project
-    make -j
-
-    # Run it
-    make flash monitor
-    ```
-
-    Alternative, you can compile it using the "new" way, but experimental. E.g:
-
-    ```sh
-    # Option A: using idf.py (new way, experimental)
-
     # Compile it
     cd ~/src/my_project
     idf.py build
 
-    # Run it
+    # Flash + open debug terminal
     idf.py flash monitor
     ```
 
-
+[esp-idf-online-installer]: https://dl.espressif.com/dl/esp-idf/?idf=4.4
 [toolchain-deps]: https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/linux-setup.html
 [ttyusb0]: https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/establish-serial-connection.html#linux-dialout-group
 
@@ -173,10 +159,28 @@ And that's it. Now you can include `ESP32Servo` from your code. E.g:
 
 [esp32servo]: https://github.com/madhephaestus/ESP32Servo.git
 
+## IDE
+
+Arduino IDE is not supported, but you can use [Visual Studio Code][vscode] + [ESP-IDF plugin][esp-idf-plugin].
+
+You can do:
+
+* All the regular Visual Studio Code regular features
+* ...plus configure, build, flash and monitor your project
+* ...and much more
+
+![ide](https://lh3.googleusercontent.com/pw/AM-JKLUxjqUhU2tM-bKw3togS3gTkBdtmi40kqW2c2KieAybnD770I3pdaLnFU7a-sM7dUUGmcWpigvElc1fGo1J-5bJlVdbg8HOJZKbUXo6A_IqIvUGEK6GtwxqNy5EFJmijrBnB_aQhd_fi3GQnXZ1V7WYvw=-no)
+
+Subjective opinion: VSCode + ESP-IDF plugin is muuuuuch better than Arduino IDE. Highly recommended!
+
+[vscode]: https://code.visualstudio.com/
+[esp-idf-plugin]: https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/vscode-setup.html
+
 ## Further info
 
 * [Bluepad32 for Arduino](https://gitlab.com/ricardoquesada/bluepad32/-/blob/main/docs/plat_arduino.md)
 * [Arduino as ESP-IDF component](https://docs.espressif.com/projects/arduino-esp32/en/latest/esp-idf_component.html)
+* [ESP-IDF VSCode plugin](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/vscode-setup.html)
 
 ## Support
 

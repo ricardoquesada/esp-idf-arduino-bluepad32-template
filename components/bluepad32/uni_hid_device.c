@@ -202,11 +202,11 @@ void uni_hid_device_set_connected(uni_hid_device_t* d, bool connected) {
         uni_get_platform()->on_device_connected(d);
     } else {
         // disconnected
-        d->conn.control_cid = 0;
-        d->conn.interrupt_cid = 0;
-        d->conn.incoming = false;
-
         uni_get_platform()->on_device_disconnected(d);
+
+        // When disconnected, to simplify code and possible bugs, better to just "reset" the
+        // device state.
+        memset(d, 0, sizeof(*d));
     }
 }
 
@@ -328,7 +328,7 @@ uint16_t uni_hid_device_get_vendor_id(uni_hid_device_t* d) {
     return d->vendor_id;
 }
 
-// XXX: Replace it with a timed-ballback
+// XXX: Replace it with a timed-callback
 bool uni_hid_device_auto_delete(uni_hid_device_t* d) {
     if (d == NULL) {
         loge("Invalid hid device: NULL\n");

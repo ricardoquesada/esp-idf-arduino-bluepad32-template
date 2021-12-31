@@ -1,5 +1,11 @@
 build-esp-idf-4.4:
   image: espressif/idf:release-v4.4
   stage: build
+  before_script:
+    - export DEBIAN_FRONTEND=noninteractive
+    - apt update
+    - apt -y install tzdata
+    - apt -y install git
+    - git submodule update --init
   script:
     - idf.py build

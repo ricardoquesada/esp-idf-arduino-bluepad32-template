@@ -4,9 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - 2022-??
+## [1.1.0] - 2022-01-08
 ### Changed
 
+- Bluepad32 v2.5.0
 - BTStack v1.5.1, hash: d778e7488c62d361fc176e8ae40c0d6bc8b00089
 
 

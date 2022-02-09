@@ -22,6 +22,10 @@ Includes the following ESP-IDF components, with a pre-configured `sdkconfig` fil
 
 1. Install [ESP-IDF v4.4][esp-idf-windows-installer]. For further info, read: [ESP-IDF Getting Started for Windows][esp-idf-windows-setup]
 
+   * Either the Online or Offline version shoud work
+   * When asked which components to install, don't change anything. Default options are Ok.
+   * When asked whether ESP can modify the system, answer "Yes"
+
 2. Launch the "ESP-IDF v4.4 CMD" (type that in the Windows search box)
 
 3. From the ESP-IDF cmd, clone the template

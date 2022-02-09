@@ -18,8 +18,33 @@ Includes the following ESP-IDF components, with a pre-configured `sdkconfig` fil
 
 ## How to compile it
 
-The following are the instructions for **Linux**, and should work for **macOS** as well. For **Windows**, use the
-[ESP-IDF online installer][esp-idf-online-installer], and select `release/v4.4` branch.
+### For Windows
+
+1. Install [ESP-IDF v4.4][esp-idf-windows-installer]. For further info, read: [ESP-IDF Getting Started for Windows][esp-idf-windows-setup]
+
+2. Launch the "ESP-IDF v4.4 CMD" (type that in the Windows search box)
+
+3. From the ESP-IDF cmd, clone the template
+
+   ```sh
+   git clone --recursive https://gitlab.com/ricardoquesada/esp-idf-arduino-bluepad32-template.git my_project
+   ```
+
+4. Compile it
+
+    ```sh
+    # Compile it
+    cd my_project
+    idf.py build
+
+    # Flash + open debug terminal
+    idf.py flash monitor
+    ```
+
+[esp-idf-windows-setup]: https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/windows-setup.html
+[esp-idf-windows-installer]: https://dl.espressif.com/dl/esp-idf/?idf=4.4
+
+### For Linux / macOS
 
 1. Requirements and permissions
 
@@ -81,7 +106,6 @@ The following are the instructions for **Linux**, and should work for **macOS** 
     idf.py flash monitor
     ```
 
-[esp-idf-online-installer]: https://dl.espressif.com/dl/esp-idf/?idf=4.4
 [toolchain-deps]: https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/linux-setup.html
 [ttyusb0]: https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/establish-serial-connection.html#linux-dialout-group
 

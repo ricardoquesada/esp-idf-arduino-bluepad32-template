@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+### Changed
+- Bluetooth config: Reduce heap size by changing:
+  - Max ACL connections: from 7 to 4
+  - Max SCO connections: from 3 to 0
+  - Max BLE connections: from 3 to 1
+
 ## [1.2.2] - 2022-02-27
 ### Changed
 - Bluepad32 v3.0.0

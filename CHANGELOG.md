@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Changed
+- Bluepad32 v3.x.x
+- BtStack hash: 45e937e1ce34444aabbc21ec35504e1c50ad528d
+- Compiler config: Use "optimize for performance" by default
 - Bluetooth config: Reduce heap size by changing:
   - Max ACL connections: from 7 to 4
   - Max SCO connections: from 3 to 0

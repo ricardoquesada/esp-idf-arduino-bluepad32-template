@@ -31,7 +31,8 @@ static GamepadPtr myGamepad;
 void onConnectedGamepad(GamepadPtr gp) {
     // In this example we only use one gamepad at the same time.
     myGamepad = gp;
-    Serial.println("CALLBACK: Gamepad is connected!");
+    Serial.print("CALLBACK: Gamepad is connected, model: ");
+    Serial.println(gp->getModelName());
 }
 
 void onDisconnectedGamepad(GamepadPtr gp) {

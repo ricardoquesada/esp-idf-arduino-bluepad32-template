@@ -4,9 +4,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.2.3] - 2022-03-15
 ### Changed
-- Bluepad32 v3.x.x
+- Bluepad32 v3.0.1
 - BtStack hash: 45e937e1ce34444aabbc21ec35504e1c50ad528d
 - Compiler config: Use "optimize for performance" by default
 - Bluetooth config: Reduce heap size by changing:

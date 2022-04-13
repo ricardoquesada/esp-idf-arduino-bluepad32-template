@@ -30,12 +30,12 @@
  * THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * Please inquire about commercial licensing options at 
+ * Please inquire about commercial licensing options at
  * contact@bluekitchen-gmbh.com
  *
  */
 
- 
+
 /**
  * HCI Event Getter
  *
@@ -6156,13 +6156,40 @@ static inline uint8_t hfp_subevent_call_waiting_notification_get_type(const uint
     return event[5];
 }
 /**
+ * @brief Get field number_length from event HFP_SUBEVENT_CALL_WAITING_NOTIFICATION
+ * @param event packet
+ * @return number_length
+ * @note: btstack_type J
+ */
+static inline uint8_t hfp_subevent_call_waiting_notification_get_number_length(const uint8_t * event){
+    return event[6];
+}
+/**
  * @brief Get field number from event HFP_SUBEVENT_CALL_WAITING_NOTIFICATION
  * @param event packet
  * @return number
- * @note: btstack_type T
+ * @note: btstack_type V
  */
-static inline const char * hfp_subevent_call_waiting_notification_get_number(const uint8_t * event){
-    return (const char *) &event[6];
+static inline const uint8_t * hfp_subevent_call_waiting_notification_get_number(const uint8_t * event){
+    return &event[7];
+}
+/**
+ * @brief Get field alpha_length from event HFP_SUBEVENT_CALL_WAITING_NOTIFICATION
+ * @param event packet
+ * @return alpha_length
+ * @note: btstack_type J
+ */
+static inline uint8_t hfp_subevent_call_waiting_notification_get_alpha_length(const uint8_t * event){
+    return event[7u + event[6]];
+}
+/**
+ * @brief Get field alpha from event HFP_SUBEVENT_CALL_WAITING_NOTIFICATION
+ * @param event packet
+ * @return alpha
+ * @note: btstack_type V
+ */
+static inline const uint8_t * hfp_subevent_call_waiting_notification_get_alpha(const uint8_t * event){
+    return &event[7u + event[6] + 1u];
 }
 
 /**
@@ -6184,13 +6211,40 @@ static inline uint8_t hfp_subevent_calling_line_identification_notification_get_
     return event[5];
 }
 /**
+ * @brief Get field number_length from event HFP_SUBEVENT_CALLING_LINE_IDENTIFICATION_NOTIFICATION
+ * @param event packet
+ * @return number_length
+ * @note: btstack_type J
+ */
+static inline uint8_t hfp_subevent_calling_line_identification_notification_get_number_length(const uint8_t * event){
+    return event[6];
+}
+/**
  * @brief Get field number from event HFP_SUBEVENT_CALLING_LINE_IDENTIFICATION_NOTIFICATION
  * @param event packet
  * @return number
- * @note: btstack_type T
+ * @note: btstack_type V
  */
-static inline const char * hfp_subevent_calling_line_identification_notification_get_number(const uint8_t * event){
-    return (const char *) &event[6];
+static inline const uint8_t * hfp_subevent_calling_line_identification_notification_get_number(const uint8_t * event){
+    return &event[7];
+}
+/**
+ * @brief Get field alpha_length from event HFP_SUBEVENT_CALLING_LINE_IDENTIFICATION_NOTIFICATION
+ * @param event packet
+ * @return alpha_length
+ * @note: btstack_type J
+ */
+static inline uint8_t hfp_subevent_calling_line_identification_notification_get_alpha_length(const uint8_t * event){
+    return event[7u + event[6]];
+}
+/**
+ * @brief Get field alpha from event HFP_SUBEVENT_CALLING_LINE_IDENTIFICATION_NOTIFICATION
+ * @param event packet
+ * @return alpha
+ * @note: btstack_type V
+ */
+static inline const uint8_t * hfp_subevent_calling_line_identification_notification_get_alpha(const uint8_t * event){
+    return &event[7u + event[6] + 1u];
 }
 
 /**
@@ -10706,6 +10760,34 @@ static inline uint16_t avrcp_subevent_browsing_set_browsed_player_get_browsing_c
  */
 static inline uint16_t avrcp_subevent_browsing_set_browsed_player_get_player_id(const uint8_t * event){
     return little_endian_read_16(event, 5);
+}
+
+/**
+ * @brief Get field goep_cid from event GOEP_SUBEVENT_INCOMING_CONNECTION
+ * @param event packet
+ * @return goep_cid
+ * @note: btstack_type 2
+ */
+static inline uint16_t goep_subevent_incoming_connection_get_goep_cid(const uint8_t * event){
+    return little_endian_read_16(event, 3);
+}
+/**
+ * @brief Get field address from event GOEP_SUBEVENT_INCOMING_CONNECTION
+ * @param event packet
+ * @param Pointer to storage for address
+ * @note: btstack_type B
+ */
+static inline void goep_subevent_incoming_connection_get_address(const uint8_t * event, bd_addr_t address){
+    reverse_bytes(&event[5], address, 6);
+}
+/**
+ * @brief Get field handle from event GOEP_SUBEVENT_INCOMING_CONNECTION
+ * @param event packet
+ * @return handle
+ * @note: btstack_type H
+ */
+static inline hci_con_handle_t goep_subevent_incoming_connection_get_handle(const uint8_t * event){
+    return little_endian_read_16(event, 11);
 }
 
 /**

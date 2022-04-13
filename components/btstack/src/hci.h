@@ -79,6 +79,7 @@ extern "C" {
 #define HCI_ACL_HEADER_SIZE          4
 #define HCI_SCO_HEADER_SIZE          3
 #define HCI_EVENT_HEADER_SIZE        2
+#define HCI_ISO_HEADER_SIZE          4
 
 #define HCI_EVENT_PAYLOAD_SIZE     255
 #define HCI_CMD_PAYLOAD_SIZE       255
@@ -830,12 +831,26 @@ enum {
     LE_WHITELIST_REMOVE_FROM_CONTROLLER = 1 << 2,
 };
 
+enum {
+    LE_PERIODIC_ADVERTISER_LIST_ENTRY_ON_CONTROLLER          = 1 << 0,
+    LE_PERIODIC_ADVERTISER_LIST_ENTRY_ADD_TO_CONTROLLER      = 1 << 1,
+    LE_PERIODIC_ADVERTISER_LIST_ENTRY_REMOVE_FROM_CONTROLLER = 1 << 2,
+};
+
 typedef struct {
     btstack_linked_item_t  item;
     bd_addr_t      address;
     bd_addr_type_t address_type;
     uint8_t        state;   
 } whitelist_entry_t;
+
+typedef struct {
+    btstack_linked_item_t  item;
+    bd_addr_t      address;
+    bd_addr_type_t address_type;
+    uint8_t        sid;
+    uint8_t        state;
+} periodic_advertiser_list_entry_t;
 
 #define MAX_NUM_RESOLVING_LIST_ENTRIES 64
 typedef enum {
@@ -881,6 +896,11 @@ typedef struct {
 #ifdef ENABLE_CLASSIC
     /* callback for reject classic connection */
     int (*gap_classic_accept_callback)(bd_addr_t addr, hci_link_type_t link_type);
+#endif
+
+#ifdef ENABLE_BLE
+    /* callback for ISO data */
+    btstack_packet_handler_t iso_packet_handler;
 #endif
 
     // hardware error callback
@@ -989,6 +1009,8 @@ typedef struct {
     uint8_t   bondable;
 
     uint8_t   inquiry_state;    // see hci.c for state defines
+    uint16_t  inquiry_max_period_length;
+    uint16_t  inquiry_min_period_length;
 
     bd_addr_t remote_name_addr;
     uint16_t  remote_name_clock_offset;
@@ -1050,9 +1072,28 @@ typedef struct {
     uint16_t le_connection_scan_window;
     uint8_t  le_connection_own_addr_type;
     bd_addr_t le_connection_own_address;
+
+#ifdef ENABLE_LE_EXTENDED_ADVERTISING
+    btstack_linked_list_t le_periodic_advertiser_list;
+    uint16_t        le_periodic_terminate_sync_handle;
+    // Periodic Advertising Sync parameters
+    uint8_t         le_periodic_sync_options;
+    uint8_t         le_periodic_sync_advertising_sid;
+    bd_addr_type_t  le_periodic_sync_advertiser_address_type;
+    bd_addr_t       le_periodic_sync_advertiser_address;
+    uint16_t        le_periodic_sync_skip;
+    uint16_t        le_periodic_sync_timeout;
+    uint8_t         le_periodic_sync_cte_type;
+    le_connecting_state_t le_periodic_sync_state;
+    le_connecting_state_t le_periodic_sync_request;
+#endif
 #endif
 
     le_connection_parameter_range_t le_connection_parameter_range;
+
+    // TODO: move LE_ADVERTISEMENT_TASKS_SET_ADDRESS flag which is used for both roles into
+    //  some generic gap_le variable
+    uint8_t  le_advertisements_todo;
 
 #ifdef ENABLE_LE_PERIPHERAL
     uint8_t  * le_advertisements_data;
@@ -1071,7 +1112,6 @@ typedef struct {
     uint8_t   le_advertisements_own_addr_type;
     bd_addr_t le_advertisements_own_address;
 
-    uint8_t  le_advertisements_todo;
     uint8_t  le_advertisements_state;
 
     bool     le_advertisements_enabled_for_current_roles;
@@ -1221,6 +1261,10 @@ void hci_register_acl_packet_handler(btstack_packet_handler_t handler);
  */
 void hci_register_sco_packet_handler(btstack_packet_handler_t handler);
 
+/**
+ * @brief Registers a packet handler for ISO data. Used for LE Audio profiles
+ */
+void hci_register_iso_packet_handler(btstack_packet_handler_t handler);
 
 // Sending HCI Commands
 
@@ -1268,6 +1312,11 @@ bool hci_can_send_prepared_sco_packet_now(void);
  * @brief Send SCO packet prepared in HCI packet buffer
  */
 uint8_t hci_send_sco_packet_buffer(int size);
+
+/**
+ * @brief Send ISO packet prepared in HCI packet buffer
+ */
+uint8_t hci_send_iso_packet_buffer(uint16_t size);
 
 /**
  * Reserves outgoing packet buffer.
@@ -1469,6 +1518,57 @@ void hci_remove_le_device_db_entry_from_resolving_list(uint16_t le_device_db_ind
  * @note internal use
  */
 uint16_t hci_number_free_acl_slots_for_connection_type(bd_addr_type_t address_type);
+
+/**
+ * @brief Clear Periodic Advertiser List
+ * @return status
+ */
+uint8_t gap_periodic_advertiser_list_clear(void);
+
+/**
+ * @brief Add entry to Periodic Advertiser List
+ * @param address_type
+ * @param address
+ * @param advertising_sid
+ * @return
+ */
+uint8_t gap_periodic_advertiser_list_add(bd_addr_type_t address_type, const bd_addr_t address, uint8_t advertising_sid);
+
+/**
+ * Remove entry from Periodic Advertising List
+ * @param address_type
+ * @param address
+ * @param advertising_sid
+ * @return
+ */
+uint8_t gap_periodic_advertiser_list_remove(bd_addr_type_t address_type, const bd_addr_t address, uint8_t advertising_sid);
+
+/**
+ * @brief Synchronize with a periodic advertising train from an advertiser and begin receiving periodic advertising packets.
+ * @param options
+ * @param advertising_sid
+ * @param advertiser_address_type
+ * @param advertiser_address
+ * @param skip
+ * @param sync_timeout
+ * @param sync_cte_type
+ * @return
+ */
+uint8_t gap_periodic_advertising_create_sync(uint8_t options, uint8_t advertising_sid, bd_addr_type_t advertiser_address_type,
+                                             bd_addr_t advertiser_address, uint16_t skip, uint16_t sync_timeout, uint8_t sync_cte_type);
+
+/**
+ * @brief Cancel sync periodic advertising train while it is pending.
+ * @return status
+ */
+uint8_t gap_periodic_advertising_create_sync_cancel(void);
+
+/**
+ * @biref Stop reception of the periodic advertising train
+ * @param sync_handle
+ * @return status
+ */
+uint8_t gap_periodic_advertising_terminate_sync(uint16_t sync_handle);
 
 /**
  * @brief Get Manufactured

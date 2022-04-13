@@ -73,6 +73,7 @@ extern "C" {
 #include "classic/bnep.h"
 #include "classic/btstack_link_key_db.h"
 #include "classic/btstack_link_key_db_memory.h"
+#include "classic/goep_server.h"
 #include "classic/hfp.h"
 #include "classic/hid_host.h"
 #include "classic/rfcomm.h"
@@ -139,7 +140,7 @@ cfile_header_begin = """
 #include <stdlib.h>
 
 #ifdef ENABLE_MALLOC_TEST
-extern "C" void * test_malloc(size_t size);
+void * test_malloc(size_t size);
 #define malloc test_malloc
 #endif
 
@@ -294,6 +295,7 @@ list_of_classic_structs = [
     ["rfcomm_multiplexer", "rfcomm_service", "rfcomm_channel"],
     ["btstack_link_key_db_memory_entry"],
     ["bnep_service", "bnep_channel"],
+    ["goep_server_service", "goep_server_connection"],
     ["hfp_connection"],
     ["hid_host_connection"],
     ["service_record_item"],
@@ -303,7 +305,7 @@ list_of_classic_structs = [
     ["avrcp_browsing_connection"],   
 ]
 list_of_le_structs = [
-    ["battery_service_client", "gatt_client", "hids_client", "scan_parameters_service_client", "sm_lookup_entry", "whitelist_entry"],
+    ["battery_service_client", "gatt_client", "hids_client", "scan_parameters_service_client", "sm_lookup_entry", "whitelist_entry", "periodic_advertiser_list_entry"],
 ]
 list_of_mesh_structs = [
     ['mesh_network_pdu', 'mesh_segmented_pdu', 'mesh_upper_transport_pdu', 'mesh_network_key', 'mesh_transport_key', 'mesh_virtual_address', 'mesh_subnet']

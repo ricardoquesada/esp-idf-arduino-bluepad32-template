@@ -183,6 +183,9 @@ typedef uint8_t sm_key_t[16];
 // create l2cap channel: param bd_addr(48), psm (16), mtu (16)
 #define L2CAP_CREATE_CHANNEL_MTU                           0x26u
 
+// request can send now event: l2cap_cid
+#define L2CAP_REQUEST_CAN_SEND_NOW                         0x27u
+
 // register SDP Service Record: service record (size)
 #define SDP_REGISTER_SERVICE_RECORD                        0x30u
 
@@ -196,17 +199,19 @@ typedef uint8_t sm_key_t[16];
 #define SDP_CLIENT_QUERY_SERVICES                          0x33u
 
 // RFCOMM "HCI" Commands
-#define RFCOMM_CREATE_CHANNEL       0x40u
-#define RFCOMM_DISCONNECT     0x41u
-#define RFCOMM_REGISTER_SERVICE     0x42u
-#define RFCOMM_UNREGISTER_SERVICE   0x43u
-#define RFCOMM_ACCEPT_CONNECTION    0x44u
-#define RFCOMM_DECLINE_CONNECTION   0x45u
-#define RFCOMM_PERSISTENT_CHANNEL   0x46u
-#define RFCOMM_CREATE_CHANNEL_WITH_CREDITS   0x47u
-#define RFCOMM_REGISTER_SERVICE_WITH_CREDITS 0x48u
-#define RFCOMM_GRANT_CREDITS                 0x49u
-    
+#define RFCOMM_CREATE_CHANNEL                              0x40u
+#define RFCOMM_DISCONNECT                                  0x41u
+#define RFCOMM_REGISTER_SERVICE                            0x42u
+#define RFCOMM_UNREGISTER_SERVICE                          0x43u
+#define RFCOMM_ACCEPT_CONNECTION                           0x44u
+#define RFCOMM_DECLINE_CONNECTION                          0x45u
+#define RFCOMM_CREATE_CHANNEL_WITH_CREDITS                 0x47u
+#define RFCOMM_PERSISTENT_CHANNEL                          0x46u
+#define RFCOMM_REGISTER_SERVICE_WITH_CREDITS               0x48u
+#define RFCOMM_GRANT_CREDITS                               0x49u
+// request can send now event: rfcomm_cid
+#define RFCOMM_REQUEST_CAN_SEND_NOW                        0x4Au
+
 // GAP Classic 0x50u
 #define GAP_DISCONNECT                0x50u
 #define GAP_INQUIRY_START             0x51u
@@ -1039,13 +1044,6 @@ typedef uint8_t sm_key_t[16];
  * @param psm
  */
 #define DAEMON_EVENT_L2CAP_SERVICE_REGISTERED              0x75u
-
-/**
- * @format 21
- * @param rfcomm_cid
- * @param credits
- */
-#define DAEMON_EVENT_RFCOMM_CREDITS                        0x84u
 
 /**
  * @format 11
@@ -2121,20 +2119,26 @@ typedef uint8_t sm_key_t[16];
 #define HFP_SUBEVENT_MICROPHONE_VOLUME                        0x15u
 
 /**
- * @format 1H1T
+ * @format 1H1JVJV
  * @param subevent_code
  * @param acl_handle
  * @param type
+ * @param number_length
  * @param number
+ * @param alpha_length
+ * @param alpha
  */
 #define HFP_SUBEVENT_CALL_WAITING_NOTIFICATION                0x16u
 
 /**
- * @format 1H1T
+ * @format 1H1JVJV
  * @param subevent_code
  * @param acl_handle
  * @param type
+ * @param number_length
  * @param number
+ * @param alpha_length
+ * @param alpha
  */
 #define HFP_SUBEVENT_CALLING_LINE_IDENTIFICATION_NOTIFICATION 0x17u
 
@@ -3369,6 +3373,14 @@ typedef uint8_t sm_key_t[16];
 #define AVRCP_SUBEVENT_BROWSING_SET_BROWSED_PLAYER                            0x36u
 
 
+/**
+ * @format 12BH
+ * @param subevent_code
+ * @param goep_cid
+ * @param address
+ * @param handle
+ */
+#define GOEP_SUBEVENT_INCOMING_CONNECTION                                  0x01u
 
 /**
  * @format 121BH1
@@ -3379,21 +3391,21 @@ typedef uint8_t sm_key_t[16];
  * @param con_handle
  * @param incoming
  */
-#define GOEP_SUBEVENT_CONNECTION_OPENED                                    0x01u
+#define GOEP_SUBEVENT_CONNECTION_OPENED                                    0x02u
 
 /**
  * @format 12
  * @param subevent_code
  * @param goep_cid
 */
-#define GOEP_SUBEVENT_CONNECTION_CLOSED                                    0x02u
+#define GOEP_SUBEVENT_CONNECTION_CLOSED                                    0x03u
 
 /**
  * @format 12
  * @param subevent_code
  * @param goep_cid
 */
-#define GOEP_SUBEVENT_CAN_SEND_NOW                                         0x03u
+#define GOEP_SUBEVENT_CAN_SEND_NOW                                         0x04u
 
 /**
  * @format 121BH1

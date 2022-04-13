@@ -648,7 +648,13 @@ static int codecs_exchange_state_machine(hfp_connection_t * hfp_connection){
 static void hfp_ag_slc_established(hfp_connection_t * hfp_connection){
     hfp_connection->state = HFP_SERVICE_LEVEL_CONNECTION_ESTABLISHED;
     hfp_emit_slc_connection_event(hfp_connection->local_role, 0, hfp_connection->acl_handle, hfp_connection->remote_addr);
-    
+
+    // HFP 4.35: "When [...] a new Service Level Connection is established all indicators are activated by default."
+    uint16_t i;
+    for (i=0;i<hfp_connection->ag_indicators_nr;i++){
+        hfp_connection->ag_indicators[i].enabled = 1;
+    }
+
     // if active call exist, set per-hfp_connection state active, too (when audio is on)
     if (hfp_gsm_call_status() == HFP_CALL_STATUS_ACTIVE_OR_HELD_CALL_IS_PRESENT){
         hfp_connection->call_state = HFP_CALL_W4_AUDIO_CONNECTION_FOR_ACTIVE;
@@ -2064,16 +2070,12 @@ static int hfp_ag_send_commands(hfp_connection_t *hfp_connection){
         return 1;
     }
 
-    // update AG indicators
-    if (hfp_connection->ag_indicators_status_update_bitmap){
-        int i;
+    // update AG indicators only if enabled by AT+CMER=3,0,0,1
+    if ((hfp_connection->enable_status_update_for_ag_indicators == 1) && (hfp_connection->ag_indicators_status_update_bitmap != 0)){
+        uint16_t i;
         for (i=0;i<hfp_connection->ag_indicators_nr;i++){
             if (get_bit(hfp_connection->ag_indicators_status_update_bitmap, i)){
                 hfp_connection->ag_indicators_status_update_bitmap = store_bit(hfp_connection->ag_indicators_status_update_bitmap, i, 0);
-                if (!hfp_connection->enable_status_update_for_ag_indicators) {
-                    log_info("+CMER:3,0,0,0 - not sending update for '%s'", hfp_ag_indicators[i].name);
-                    break;
-                }
                 hfp_ag_send_transfer_ag_indicators_status_cmd(hfp_connection->rfcomm_cid, &hfp_ag_indicators[i]);
                 return 1;
             }

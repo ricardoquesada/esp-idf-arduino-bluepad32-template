@@ -65,6 +65,7 @@ extern "C" {
 #include "classic/bnep.h"
 #include "classic/btstack_link_key_db.h"
 #include "classic/btstack_link_key_db_memory.h"
+#include "classic/goep_server.h"
 #include "classic/hfp.h"
 #include "classic/hid_host.h"
 #include "classic/rfcomm.h"
@@ -130,6 +131,12 @@ void   btstack_memory_bnep_service_free(bnep_service_t *bnep_service);
 bnep_channel_t * btstack_memory_bnep_channel_get(void);
 void   btstack_memory_bnep_channel_free(bnep_channel_t *bnep_channel);
 
+// goep_server_service, goep_server_connection
+goep_server_service_t * btstack_memory_goep_server_service_get(void);
+void   btstack_memory_goep_server_service_free(goep_server_service_t *goep_server_service);
+goep_server_connection_t * btstack_memory_goep_server_connection_get(void);
+void   btstack_memory_goep_server_connection_free(goep_server_connection_t *goep_server_connection);
+
 // hfp_connection
 hfp_connection_t * btstack_memory_hfp_connection_get(void);
 void   btstack_memory_hfp_connection_free(hfp_connection_t *hfp_connection);
@@ -137,10 +144,6 @@ void   btstack_memory_hfp_connection_free(hfp_connection_t *hfp_connection);
 // hid_host_connection
 hid_host_connection_t * btstack_memory_hid_host_connection_get(void);
 void   btstack_memory_hid_host_connection_free(hid_host_connection_t *hid_host_connection);
-
-// service_record_item
-service_record_item_t * btstack_memory_service_record_item_get(void);
-void   btstack_memory_service_record_item_free(service_record_item_t *service_record_item);
 
 // avdtp_stream_endpoint
 avdtp_stream_endpoint_t * btstack_memory_avdtp_stream_endpoint_get(void);
@@ -158,9 +161,13 @@ void   btstack_memory_avrcp_connection_free(avrcp_connection_t *avrcp_connection
 avrcp_browsing_connection_t * btstack_memory_avrcp_browsing_connection_get(void);
 void   btstack_memory_avrcp_browsing_connection_free(avrcp_browsing_connection_t *avrcp_browsing_connection);
 
+// service_record_item
+service_record_item_t * btstack_memory_service_record_item_get(void);
+void   btstack_memory_service_record_item_free(service_record_item_t *service_record_item);
+
 #endif
 #ifdef ENABLE_BLE
-// battery_service_client, gatt_client, hids_client, scan_parameters_service_client, sm_lookup_entry, whitelist_entry
+// battery_service_client, gatt_client, hids_client, scan_parameters_service_client, sm_lookup_entry, whitelist_entry, periodic_advertiser_list_entry
 battery_service_client_t * btstack_memory_battery_service_client_get(void);
 void   btstack_memory_battery_service_client_free(battery_service_client_t *battery_service_client);
 gatt_client_t * btstack_memory_gatt_client_get(void);
@@ -173,6 +180,8 @@ sm_lookup_entry_t * btstack_memory_sm_lookup_entry_get(void);
 void   btstack_memory_sm_lookup_entry_free(sm_lookup_entry_t *sm_lookup_entry);
 whitelist_entry_t * btstack_memory_whitelist_entry_get(void);
 void   btstack_memory_whitelist_entry_free(whitelist_entry_t *whitelist_entry);
+periodic_advertiser_list_entry_t * btstack_memory_periodic_advertiser_list_entry_get(void);
+void   btstack_memory_periodic_advertiser_list_entry_free(periodic_advertiser_list_entry_t *periodic_advertiser_list_entry);
 #endif
 #ifdef ENABLE_MESH
 // mesh_network_pdu, mesh_segmented_pdu, mesh_upper_transport_pdu, mesh_network_key, mesh_transport_key, mesh_virtual_address, mesh_subnet

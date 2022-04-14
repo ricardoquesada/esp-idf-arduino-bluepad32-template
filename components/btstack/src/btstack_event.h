@@ -30,12 +30,12 @@
  * THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * Please inquire about commercial licensing options at
+ * Please inquire about commercial licensing options at 
  * contact@bluekitchen-gmbh.com
  *
  */
 
-
+ 
 /**
  * HCI Event Getter
  *
@@ -1476,6 +1476,43 @@ static inline uint8_t btstack_event_discoverable_enabled_get_discoverable(const 
  */
 static inline uint8_t hci_event_transport_sleep_mode_get_active(const uint8_t * event){
     return event[2];
+}
+
+/**
+ * @brief Get field vendor_id from event HCI_EVENT_TRANSPORT_USB_INFO
+ * @param event packet
+ * @return vendor_id
+ * @note: btstack_type 2
+ */
+static inline uint16_t hci_event_transport_usb_info_get_vendor_id(const uint8_t * event){
+    return little_endian_read_16(event, 2);
+}
+/**
+ * @brief Get field product_id from event HCI_EVENT_TRANSPORT_USB_INFO
+ * @param event packet
+ * @return product_id
+ * @note: btstack_type 2
+ */
+static inline uint16_t hci_event_transport_usb_info_get_product_id(const uint8_t * event){
+    return little_endian_read_16(event, 4);
+}
+/**
+ * @brief Get field path_len from event HCI_EVENT_TRANSPORT_USB_INFO
+ * @param event packet
+ * @return path_len
+ * @note: btstack_type J
+ */
+static inline uint8_t hci_event_transport_usb_info_get_path_len(const uint8_t * event){
+    return event[6];
+}
+/**
+ * @brief Get field path from event HCI_EVENT_TRANSPORT_USB_INFO
+ * @param event packet
+ * @return path
+ * @note: btstack_type V
+ */
+static inline const uint8_t * hci_event_transport_usb_info_get_path(const uint8_t * event){
+    return &event[7];
 }
 
 /**

@@ -120,7 +120,6 @@
 #define GAP_INQUIRY_STATE_W4_CANCELLED 0x83
 #define GAP_INQUIRY_STATE_PERIODIC     0x84
 #define GAP_INQUIRY_STATE_W2_EXIT_PERIODIC 0x85
-#define GAP_INQUIRY_STATE_W4_EXIT_PERIODIC_COMPLETE 0x86
 
 // GAP Remote Name Request
 #define GAP_REMOTE_NAME_STATE_IDLE 0
@@ -209,11 +208,11 @@ static void hci_trigger_remote_features_for_connection(hci_connection_t * connec
 #endif
 
 #ifdef ENABLE_BLE
+static void hci_whitelist_free(void);
 #ifdef ENABLE_LE_CENTRAL
 // called from test/ble_client/advertising_data_parser.c
 void le_handle_advertisement_report(uint8_t *packet, uint16_t size);
 static uint8_t hci_whitelist_remove(bd_addr_type_t address_type, const bd_addr_t address);
-static void hci_whitelist_free(void);
 static hci_connection_t * gap_get_outgoing_connection(void);
 static void hci_le_scan_stop(void);
 static bool hci_run_general_gap_le(void);
@@ -978,7 +977,7 @@ uint8_t hci_send_sco_packet_buffer(int size){
 }
 #endif
 
-#ifdef ENABLE_BLE
+#ifdef ENABLE_LE_ISOCHRONOUS_STREAMS
 uint8_t hci_send_iso_packet_buffer(uint16_t size){
     btstack_assert(hci_stack->hci_packet_buffer_reserved);
 
@@ -2537,6 +2536,14 @@ static void handle_command_complete_event(uint8_t * packet, uint16_t size){
         case HCI_OPCODE_HCI_WRITE_SCAN_ENABLE:
             hci_emit_discoverable_enabled(hci_stack->discoverable);
             break;
+        case HCI_OPCODE_HCI_PERIODIC_INQUIRY_MODE:
+            status = hci_event_command_complete_get_return_parameters(packet)[0];
+            if (status == ERROR_CODE_SUCCESS) {
+                hci_stack->inquiry_state = GAP_INQUIRY_STATE_PERIODIC;
+            } else {
+                hci_stack->inquiry_state = GAP_INQUIRY_STATE_IDLE;
+            }
+            break;
         case HCI_OPCODE_HCI_INQUIRY_CANCEL:
         case HCI_OPCODE_HCI_EXIT_PERIODIC_INQUIRY_MODE:
             if (hci_stack->inquiry_state == GAP_INQUIRY_STATE_W4_CANCELLED){
@@ -2866,17 +2873,6 @@ static void event_handler(uint8_t *packet, uint16_t size){
     switch (hci_event_packet_get_type(packet)) {
                         
         case HCI_EVENT_COMMAND_COMPLETE:
-#ifdef ENABLE_CLASSIC
-            if (HCI_EVENT_IS_COMMAND_COMPLETE(packet, hci_periodic_inquiry_mode)) {
-                const uint8_t *params= hci_event_command_complete_get_return_parameters(packet);
-                log_info("command complete (periodic inquiry), status %x", params[0]);
-                if (params[0] == ERROR_CODE_SUCCESS) {
-                    hci_stack->inquiry_state = GAP_INQUIRY_STATE_PERIODIC;
-                } else {
-                    hci_stack->inquiry_state = GAP_INQUIRY_STATE_IDLE;
-                }
-            }
-#endif
             handle_command_complete_event(packet, size);
             break;
             
@@ -3743,7 +3739,7 @@ static void packet_handler(uint8_t packet_type, uint8_t *packet, uint16_t size){
             sco_handler(packet, size);
             break;
 #endif
-#ifdef ENABLE_BLE
+#ifdef ENABLE_LE_ISOCHRONOUS_STREAMS
         case HCI_ISO_DATA_PACKET:
             if (hci_stack->iso_packet_handler != NULL){
                 (hci_stack->iso_packet_handler)(HCI_ISO_DATA_PACKET, 0, packet, size);
@@ -3783,7 +3779,7 @@ void hci_register_sco_packet_handler(btstack_packet_handler_t handler){
 }
 #endif
 
-#ifdef ENABLE_BLE
+#ifdef ENABLE_LE_ISOCHRONOUS_STREAMS
 void hci_register_iso_packet_handler(btstack_packet_handler_t handler){
     hci_stack->iso_packet_handler = handler;
 }
@@ -4789,7 +4785,7 @@ static bool hci_run_general_gap_classic(void){
     }
 
     if (hci_stack->inquiry_state == GAP_INQUIRY_STATE_W2_EXIT_PERIODIC){
-        hci_stack->inquiry_state = GAP_INQUIRY_STATE_W4_EXIT_PERIODIC_COMPLETE;
+        hci_stack->inquiry_state = GAP_INQUIRY_STATE_W4_CANCELLED;
         hci_send_cmd(&hci_exit_periodic_inquiry_mode);
         return true;
     }

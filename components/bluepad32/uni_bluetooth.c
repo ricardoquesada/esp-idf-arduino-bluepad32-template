@@ -843,6 +843,7 @@ void uni_bluetooth_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t
                     if (device) {
                         logi("Device %s disconnected, deleting it\n", bd_addr_to_str(device->conn.remote_addr));
                         uni_hid_device_delete(device);
+                        device = NULL;
                     }
                     break;
                 case HCI_EVENT_LINK_KEY_REQUEST:
@@ -984,6 +985,7 @@ void uni_bluetooth_process_fsm(uni_hid_device_t* d) {
             logi("uni_bluetooth_process_fsm: gamepad is 'Wireless Controller', starting SDP query\n");
             d->sdp_query_type = SDP_QUERY_BEFORE_CONNECT;
             uni_bt_sdp_query_start(d);
+            /* 'd' might be invalid */
             return;
         }
 
@@ -1000,6 +1002,7 @@ void uni_bluetooth_process_fsm(uni_hid_device_t* d) {
             } else {
                 logi("uni_bluetooth_process_fsm: starting SDP query\n");
                 uni_bt_sdp_query_start(d);
+                /* 'd' might be invalid */
             }
             return;
         }
@@ -1049,6 +1052,7 @@ void uni_bluetooth_process_fsm(uni_hid_device_t* d) {
                 case SDP_QUERY_AFTER_CONNECT:
                     logi("uni_bluetooth_process_fsm: starting SDP query\n");
                     uni_bt_sdp_query_start(d);
+                    /* 'd' might be invalid */
                     break;
                 default:
                     break;

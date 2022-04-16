@@ -70,6 +70,8 @@ void uni_hid_device_init(void) {
 uni_hid_device_t* uni_hid_device_create(bd_addr_t address) {
     for (int i = 0; i < CONFIG_BLUEPAD32_MAX_DEVICES; i++) {
         if (bd_addr_cmp(g_devices[i].conn.remote_addr, zero_addr) == 0) {
+            logi("Creating device: %s (idx=%d)\n", bd_addr_to_str(address), i);
+
             memset(&g_devices[i], 0, sizeof(g_devices[i]));
             memcpy(g_devices[i].conn.remote_addr, address, 6);
             g_devices[i].hids_cid = -1;
@@ -172,6 +174,7 @@ void uni_hid_device_set_ready(uni_hid_device_t* d) {
 }
 
 void uni_hid_device_set_ready_complete(uni_hid_device_t* d) {
+    // Called once the "parser" is ready.
     if (d == NULL) {
         loge("ERROR: Invalid NULL device\n");
         return;
@@ -187,7 +190,7 @@ void uni_hid_device_set_ready_complete(uni_hid_device_t* d) {
     // Remove the timer once the connection was established.
     btstack_run_loop_remove_timer(&d->connection_timer);
 
-    // This is called once the "parser" is ready.
+    // Platform is able to decline a gamepad, should it needs it.
     if (uni_get_platform()->on_device_ready(d) == 0) {
         uni_bt_conn_set_state(&d->conn, UNI_BT_CONN_STATE_DEVICE_READY);
     } else {
@@ -363,6 +366,7 @@ void uni_hid_device_delete(uni_hid_device_t* d) {
         loge("uni_hid_device_delete: invalid hid device: NULL\n");
         return;
     }
+    logi("Deleting device: %s\n", bd_addr_to_str(d->conn.remote_addr));
 
     // Remove the timer. If it was still running, it will crash if the handler gets called.
     btstack_run_loop_remove_timer(&d->connection_timer);

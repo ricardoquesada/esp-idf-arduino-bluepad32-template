@@ -395,9 +395,11 @@ static void on_l2cap_channel_opened(uint16_t channel, const uint8_t* packet, uin
         if (status == L2CAP_CONNECTION_RESPONSE_RESULT_REFUSED_SECURITY) {
             logi("Probably GAP-security-related issues. Set GAP security to 2\n");
         }
-        logi("Disconnecting/removing device: %s.\n", bd_addr_to_str(address));
+        logi("Removing key for device: %s.\n", bd_addr_to_str(address));
+        gap_drop_link_key_for_bd_addr(device->conn.remote_addr);
         uni_hid_device_disconnect(device);
         uni_hid_device_delete(device);
+        /* 'device' is destroyed, don't use */
         return;
     }
     psm = l2cap_event_channel_opened_get_psm(packet);
@@ -425,7 +427,7 @@ static void on_l2cap_channel_opened(uint16_t channel, const uint8_t* packet, uin
             uni_bt_conn_set_state(&device->conn, UNI_BT_CONN_STATE_L2CAP_INTERRUPT_CONNECTED);
 
             // Set "connected" only after PSM_HID_INTERRUPT.
-            uni_hid_device_set_connected(device, true);
+            uni_hid_device_connect(device);
             break;
         default:
             break;
@@ -447,7 +449,9 @@ static void on_l2cap_channel_closed(uint16_t channel, const uint8_t* packet, uin
         logi("Couldn't not find hid_device for cid = 0x%04x\n", local_cid);
         return;
     }
-    uni_hid_device_set_connected(device, false);
+    uni_hid_device_disconnect(device);
+    uni_hid_device_delete(device);
+    /* device is destroyed after this call, don't use it */
 }
 
 static void on_l2cap_incoming_connection(uint16_t channel, const uint8_t* packet, uint16_t size) {
@@ -488,6 +492,7 @@ static void on_l2cap_incoming_connection(uint16_t channel, const uint8_t* packet
         logi("Device %s with an existing connection, disconnecting current connection\n", bd_addr_to_str(event_addr));
         uni_hid_device_disconnect(device);
         uni_hid_device_delete(device);
+        /* device is destroyed after this call, don't use it */
         device = NULL;
     }
 

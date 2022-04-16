@@ -137,16 +137,16 @@ void uni_hid_device_set_ready_complete(uni_hid_device_t* d);
 
 void uni_hid_device_request_inquire(void);
 
-void uni_hid_device_set_connected(uni_hid_device_t* d, bool connected);
+void uni_hid_device_on_connected(uni_hid_device_t* d, bool connected);
+void uni_hid_device_connect(uni_hid_device_t* d);
+void uni_hid_device_disconnect(uni_hid_device_t* d);
+void uni_hid_device_delete(uni_hid_device_t* d);
 
 void uni_hid_device_set_cod(uni_hid_device_t* d, uint32_t cod);
 bool uni_hid_device_is_cod_supported(uint32_t cod);
 
 void uni_hid_device_set_hid_descriptor(uni_hid_device_t* d, const uint8_t* descriptor, int len);
 bool uni_hid_device_has_hid_descriptor(uni_hid_device_t* d);
-
-void uni_hid_device_disconnect(uni_hid_device_t* d);
-void uni_hid_device_delete(uni_hid_device_t* d);
 
 void uni_hid_device_set_incoming(uni_hid_device_t* d, bool incoming);
 bool uni_hid_device_is_incoming(uni_hid_device_t* d);

@@ -213,6 +213,7 @@ void uni_bt_sdp_query_start(uni_hid_device_t* d) {
         logi("Another SDP query is in progress (%s), disconnecting...\n", bd_addr_to_str(sdp_device->conn.remote_addr));
         uni_hid_device_disconnect(d);
         uni_hid_device_delete(d);
+        /* 'd'' is destroyed after this call, don't use it */
         return;
     }
 
@@ -243,6 +244,7 @@ void uni_bt_sdp_query_start_vid_pid(uni_hid_device_t* d) {
         loge("Failed to perform SDP VID/PID query\n");
         uni_hid_device_disconnect(d);
         uni_hid_device_delete(d);
+        /* 'd' is destroyed after this call, don't use it */
         return;
     }
 }
@@ -270,5 +272,6 @@ void uni_bt_sdp_query_start_hid_descriptor(uni_hid_device_t* d) {
         btstack_run_loop_remove_timer(&sdp_query_timer);
         uni_hid_device_disconnect(d);
         uni_hid_device_delete(d);
+        /* 'd'' is destroyed after this call, don't use it */
     }
 }

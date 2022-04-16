@@ -20,6 +20,8 @@ limitations under the License.
 
 #include <string.h>
 
+#include "uni_debug.h"
+
 void uni_bt_conn_init(uni_bt_conn_t* conn) {
     memset(conn, 0, sizeof(*conn));
 }
@@ -40,6 +42,14 @@ bool uni_bt_conn_is_incoming(uni_bt_conn_t* conn) {
     return conn->incoming;
 }
 
+void uni_bt_conn_set_connected(uni_bt_conn_t* conn, bool connected) {
+    if (conn->connected == connected) {
+        logi("connection %s already in state %d, ignoring\n", bd_addr_to_str(conn->remote_addr), connected);
+        return;
+    }
+    conn->connected = connected;
+}
+
 bool uni_bt_conn_is_connected(uni_bt_conn_t* conn) {
     return conn->connected;
 }
@@ -53,5 +63,5 @@ void uni_bt_conn_disconnect(uni_bt_conn_t* conn) {
         l2cap_disconnect(conn->interrupt_cid);
         conn->interrupt_cid = 0;
     }
-    conn->connected = false;
+    uni_bt_conn_set_connected(conn, false);
 }

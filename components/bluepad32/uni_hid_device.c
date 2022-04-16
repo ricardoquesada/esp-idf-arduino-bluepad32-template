@@ -197,6 +197,7 @@ void uni_hid_device_set_ready_complete(uni_hid_device_t* d) {
         loge("Platform declined the gamepad, deleting it");
         uni_hid_device_disconnect(d);
         uni_hid_device_delete(d);
+        /* 'd' is destroyed after this call, don't use it */
     }
 }
 
@@ -208,14 +209,11 @@ void uni_hid_device_request_inquire(void) {
     }
 }
 
-void uni_hid_device_set_connected(uni_hid_device_t* d, bool connected) {
+void uni_hid_device_on_connected(uni_hid_device_t* d, bool connected) {
     if (d == NULL) {
         log_error("ERROR: Invalid device\n");
         return;
     }
-
-    // Must be updated before calling the callbacks.
-    d->conn.connected = connected;
 
     if (connected) {
         // connected
@@ -223,9 +221,6 @@ void uni_hid_device_set_connected(uni_hid_device_t* d, bool connected) {
     } else {
         // disconnected
         uni_get_platform()->on_device_disconnected(d);
-
-        // When disconnected, to simplify code and possible bugs, better to just delete it.
-        uni_hid_device_delete(d);
     }
 }
 
@@ -346,19 +341,40 @@ uint16_t uni_hid_device_get_vendor_id(uni_hid_device_t* d) {
     return d->vendor_id;
 }
 
+void uni_hid_device_connect(uni_hid_device_t* d) {
+    if (d == NULL) {
+        loge("uni_hid_device_connect: invalid hid device: NULL\n");
+        return;
+    }
+
+    logi("Device %s is connected\n", bd_addr_to_str(d->conn.remote_addr));
+
+    // Update connection state
+    uni_bt_conn_set_connected(&d->conn, true);
+    // Tell platforms connection is ready
+    uni_hid_device_on_connected(d, true);
+}
+
 void uni_hid_device_disconnect(uni_hid_device_t* d) {
     if (d == NULL) {
         loge("uni_hid_device_disconnect: invalid hid device: NULL\n");
         return;
     }
 
-    btstack_run_loop_remove_timer(&d->connection_timer);
+    logi("Disconnecting device: %s\n", bd_addr_to_str(d->conn.remote_addr));
+    if (!d->conn.connected) {
+        logi("Device %s already disconnected, ignoring\n", bd_addr_to_str(d->conn.remote_addr));
+        return;
+    }
 
     // Close possible open connections
     uni_bt_conn_disconnect(&d->conn);
-    // Remove "key" just in case
-    // TODO: Should be documented somehow
-    gap_drop_link_key_for_bd_addr(d->conn.remote_addr);
+
+    // Tell platforms
+    uni_hid_device_on_connected(d, false);
+
+    // Disconnected, so no longer needs the connection timer
+    btstack_run_loop_remove_timer(&d->connection_timer);
 }
 
 void uni_hid_device_delete(uni_hid_device_t* d) {
@@ -733,6 +749,7 @@ static void device_connection_timeout(btstack_timer_source_t* ts) {
 
     uni_hid_device_disconnect(d);
     uni_hid_device_delete(d);
+    /* 'd'' is destroyed after this call, don't use it */
 }
 
 static void start_connection_timeout(uni_hid_device_t* d) {

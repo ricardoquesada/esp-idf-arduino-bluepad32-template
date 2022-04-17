@@ -47,7 +47,7 @@ typedef enum {
 } uni_bt_conn_state_t;
 
 typedef struct {
-    bd_addr_t remote_addr;
+    bd_addr_t btaddr;
     hci_con_handle_t handle;
 
     uint16_t control_cid;

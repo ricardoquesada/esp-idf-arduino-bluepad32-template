@@ -69,11 +69,11 @@ void uni_hid_device_init(void) {
 
 uni_hid_device_t* uni_hid_device_create(bd_addr_t address) {
     for (int i = 0; i < CONFIG_BLUEPAD32_MAX_DEVICES; i++) {
-        if (bd_addr_cmp(g_devices[i].conn.remote_addr, zero_addr) == 0) {
+        if (bd_addr_cmp(g_devices[i].conn.btaddr, zero_addr) == 0) {
             logi("Creating device: %s (idx=%d)\n", bd_addr_to_str(address), i);
 
             memset(&g_devices[i], 0, sizeof(g_devices[i]));
-            memcpy(g_devices[i].conn.remote_addr, address, 6);
+            memcpy(g_devices[i].conn.btaddr, address, 6);
             g_devices[i].hids_cid = -1;
 
             // Delete device if it doesn't have a connection
@@ -86,7 +86,7 @@ uni_hid_device_t* uni_hid_device_create(bd_addr_t address) {
 
 uni_hid_device_t* uni_hid_device_get_instance_for_address(bd_addr_t addr) {
     for (int i = 0; i < CONFIG_BLUEPAD32_MAX_DEVICES; i++) {
-        if (bd_addr_cmp(addr, g_devices[i].conn.remote_addr) == 0) {
+        if (bd_addr_cmp(addr, g_devices[i].conn.btaddr) == 0) {
             return &g_devices[i];
         }
     }
@@ -143,7 +143,7 @@ uni_hid_device_t* uni_hid_device_get_instance_with_predicate(uni_hid_device_pred
 
 uni_hid_device_t* uni_hid_device_get_first_device_with_state(uni_bt_conn_state_t state) {
     for (int i = 0; i < CONFIG_BLUEPAD32_MAX_DEVICES; i++) {
-        if ((bd_addr_cmp(g_devices[i].conn.remote_addr, zero_addr) != 0) &&
+        if ((bd_addr_cmp(g_devices[i].conn.btaddr, zero_addr) != 0) &&
             uni_bt_conn_get_state(&g_devices[i].conn) == state)
             return &g_devices[i];
     }
@@ -185,7 +185,7 @@ void uni_hid_device_set_ready_complete(uni_hid_device_t* d) {
         return;
     }
 
-    logi("Device setup (%s) is complete\n", bd_addr_to_str(d->conn.remote_addr));
+    logi("Device setup (%s) is complete\n", bd_addr_to_str(d->conn.btaddr));
 
     // Remove the timer once the connection was established.
     btstack_run_loop_remove_timer(&d->connection_timer);
@@ -347,7 +347,7 @@ void uni_hid_device_connect(uni_hid_device_t* d) {
         return;
     }
 
-    logi("Device %s is connected\n", bd_addr_to_str(d->conn.remote_addr));
+    logi("Device %s is connected\n", bd_addr_to_str(d->conn.btaddr));
 
     // Update connection state
     uni_bt_conn_set_connected(&d->conn, true);
@@ -361,9 +361,9 @@ void uni_hid_device_disconnect(uni_hid_device_t* d) {
         return;
     }
 
-    logi("Disconnecting device: %s\n", bd_addr_to_str(d->conn.remote_addr));
+    logi("Disconnecting device: %s\n", bd_addr_to_str(d->conn.btaddr));
     if (!d->conn.connected) {
-        logi("Device %s already disconnected, ignoring\n", bd_addr_to_str(d->conn.remote_addr));
+        logi("Device %s already disconnected, ignoring\n", bd_addr_to_str(d->conn.btaddr));
         return;
     }
 
@@ -373,8 +373,12 @@ void uni_hid_device_disconnect(uni_hid_device_t* d) {
     // Tell platforms
     uni_hid_device_on_connected(d, false);
 
-    // Disconnected, so no longer needs the connection timer
+    // Disconnected, so no longer needs the timers
     btstack_run_loop_remove_timer(&d->connection_timer);
+    btstack_run_loop_remove_timer(&d->inquiry_remote_name_timer);
+
+    // TODO: If the inquiry_remote_name_timeout_callback is associated with this device,
+    // then it should be removed as well.
 }
 
 void uni_hid_device_delete(uni_hid_device_t* d) {
@@ -382,7 +386,7 @@ void uni_hid_device_delete(uni_hid_device_t* d) {
         loge("uni_hid_device_delete: invalid hid device: NULL\n");
         return;
     }
-    logi("Deleting device: %s\n", bd_addr_to_str(d->conn.remote_addr));
+    logi("Deleting device: %s\n", bd_addr_to_str(d->conn.btaddr));
 
     // Remove the timer. If it was still running, it will crash if the handler gets called.
     btstack_run_loop_remove_timer(&d->connection_timer);
@@ -394,14 +398,14 @@ void uni_hid_device_dump_device(uni_hid_device_t* d) {
     logi(
         "%s, handle=%d, ctrl_cid=0x%04x, intr_cid=0x%04x, cod=0x%08x, vid=0x%04x, pid=0x%04x, "
         "flags=0x%08x, ctrl_type=0x%02x, incoming=%d, name='%s'\n",
-        bd_addr_to_str(d->conn.remote_addr), d->conn.handle, d->conn.control_cid, d->conn.interrupt_cid, d->cod,
+        bd_addr_to_str(d->conn.btaddr), d->conn.handle, d->conn.control_cid, d->conn.interrupt_cid, d->cod,
         d->vendor_id, d->product_id, d->flags, d->controller_type, d->conn.incoming, d->name);
 }
 
 void uni_hid_device_dump_all(void) {
     logi("Connected devices:\n");
     for (int i = 0; i < CONFIG_BLUEPAD32_MAX_DEVICES; i++) {
-        if (bd_addr_cmp(g_devices[i].conn.remote_addr, zero_addr) == 0)
+        if (bd_addr_cmp(g_devices[i].conn.btaddr, zero_addr) == 0)
             continue;
         uni_hid_device_dump_device(&g_devices[i]);
     }

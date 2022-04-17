@@ -511,8 +511,8 @@ static void process_reply_read_spi_factory_calibration(struct uni_hid_device_s* 
 
 static void process_reply_read_spi_user_calibration(struct uni_hid_device_s* d, const uint8_t* data, int len) {
     UNUSED(d);
-    logi("process_reply_read_spi_user_calibration\n");
-    printf_hexdump(data, len);
+    logd("process_reply_read_spi_user_calibration\n");
+    // printf_hexdump(data, len);
 }
 
 // Reply to SUBCMD_REQ_DEV_INFO
@@ -710,7 +710,7 @@ static void parse_report_30_joycon_left(uni_hid_device_t* d, const struct switch
     // Misc buttons
     // Since the JoyCon is in horizontal mode, map "-" / "Capture" as if they where "-" and "+"
     gp->misc_buttons |= (r->buttons_misc & 0b00000001) ? MISC_BUTTON_BACK : 0;  // -
-    gp->misc_buttons |= (r->buttons_misc & 0b00100000) ? MISC_BUTTON_HOME: 0;   // Capture
+    gp->misc_buttons |= (r->buttons_misc & 0b00100000) ? MISC_BUTTON_HOME : 0;  // Capture
 }
 
 static void parse_report_30_joycon_right(uni_hid_device_t* d, const struct switch_report_30_s* r) {
@@ -738,8 +738,8 @@ static void parse_report_30_joycon_right(uni_hid_device_t* d, const struct switc
 
     // Misc buttons
     // Since the JoyCon is in horizontal mode, map "Home" / "+" as if they where "-" and "+"
-    gp->misc_buttons |= (r->buttons_misc & 0b00010000) ? MISC_BUTTON_BACK: 0;  // Home
-    gp->misc_buttons |= (r->buttons_misc & 0b00000010) ? MISC_BUTTON_HOME: 0;  // +
+    gp->misc_buttons |= (r->buttons_misc & 0b00010000) ? MISC_BUTTON_BACK : 0;  // Home
+    gp->misc_buttons |= (r->buttons_misc & 0b00000010) ? MISC_BUTTON_HOME : 0;  // +
 }
 
 // Process 0x3f input report: SWITCH_INPUT_BUTTON_EVENT

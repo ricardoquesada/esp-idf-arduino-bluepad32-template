@@ -35,7 +35,7 @@ uni_bt_conn_state_t uni_bt_conn_get_state(uni_bt_conn_t* conn) {
 }
 
 void uni_bt_conn_get_address(uni_bt_conn_t* conn, bd_addr_t out_addr) {
-    memcpy(out_addr, conn->remote_addr, 6);
+    memcpy(out_addr, conn->btaddr, 6);
 }
 
 bool uni_bt_conn_is_incoming(uni_bt_conn_t* conn) {
@@ -44,7 +44,7 @@ bool uni_bt_conn_is_incoming(uni_bt_conn_t* conn) {
 
 void uni_bt_conn_set_connected(uni_bt_conn_t* conn, bool connected) {
     if (conn->connected == connected) {
-        logi("connection %s already in state %d, ignoring\n", bd_addr_to_str(conn->remote_addr), connected);
+        logi("connection %s already in state %d, ignoring\n", bd_addr_to_str(conn->btaddr), connected);
         return;
     }
     conn->connected = connected;

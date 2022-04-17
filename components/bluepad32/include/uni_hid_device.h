@@ -64,6 +64,7 @@ struct uni_hid_device_s {
 
     // Will abort connection if the connection was not established after timeout.
     btstack_timer_source_t connection_timer;
+    // Max amount of time to wait to get the device name.
     btstack_timer_source_t inquiry_remote_name_timer;
 
     // SDP

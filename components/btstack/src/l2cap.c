@@ -1952,7 +1952,7 @@ static void l2cap_run_signaling_response(void) {
 #endif
             case SM_PAIRING_FAILED:
                 buffer[0] = SM_CODE_PAIRING_FAILED;
-                buffer[1] = result;
+                buffer[1] = (uint8_t) result;
                 l2cap_send_connectionless(handle, source_cid, buffer, 2);
                 break;
             default:
@@ -2597,11 +2597,11 @@ static bool l2cap_channel_ready_to_send(l2cap_channel_t * channel){
             // send if we have more data and remote windows isn't full yet
             if (channel->mode == L2CAP_CHANNEL_MODE_ENHANCED_RETRANSMISSION) {
                 if (channel->unacked_frames >= btstack_min(channel->num_stored_tx_frames, channel->remote_tx_window_size)) return false;
-                return hci_can_send_acl_classic_packet_now() != 0;
+                return hci_can_send_acl_packet_now(channel->con_handle) != 0;
             }
 #endif
             if (!channel->waiting_for_can_send_now) return false;
-            return (hci_can_send_acl_classic_packet_now() != 0);
+            return hci_can_send_acl_packet_now(channel->con_handle) != 0;
         case L2CAP_CHANNEL_TYPE_CONNECTIONLESS:
             if (!channel->waiting_for_can_send_now) return false;
             return hci_can_send_acl_classic_packet_now() != 0;
@@ -2615,7 +2615,7 @@ static bool l2cap_channel_ready_to_send(l2cap_channel_t * channel){
             if (channel->state != L2CAP_STATE_OPEN) return false;
             if (channel->send_sdu_buffer == NULL) return false;
             if (channel->credits_outgoing == 0u) return false;
-            return hci_can_send_acl_le_packet_now() != 0;
+            return hci_can_send_acl_packet_now(channel->con_handle) != 0;
 #endif
 #endif
 #ifdef ENABLE_L2CAP_ENHANCED_CREDIT_BASED_FLOW_CONTROL_MODE
@@ -2623,11 +2623,7 @@ static bool l2cap_channel_ready_to_send(l2cap_channel_t * channel){
             if (channel->state != L2CAP_STATE_OPEN) return false;
             if (channel->send_sdu_buffer == NULL) return false;
             if (channel->credits_outgoing == 0u) return false;
-            if (channel->address_type == BD_ADDR_TYPE_ACL) {
-                return hci_can_send_acl_classic_packet_now() != 0;
-            } else {
-                return hci_can_send_acl_le_packet_now() != 0;
-            }
+            return hci_can_send_acl_packet_now(channel->con_handle) != 0;
 #endif
         default:
             return false;
@@ -2949,13 +2945,16 @@ static void l2cap_hci_event_handler(uint8_t packet_type, uint16_t cid, uint8_t *
         case HCI_EVENT_TRANSPORT_PACKET_SENT:
         case HCI_EVENT_NUMBER_OF_COMPLETED_PACKETS:
         case BTSTACK_EVENT_NR_CONNECTIONS_CHANGED:
+#ifdef ENABLE_TESTING_SUPPORT
+        case HCI_EVENT_NOP:
+#endif
             l2cap_call_notify_channel_in_run = true;
             break;
 
         case HCI_EVENT_COMMAND_STATUS:
 #ifdef ENABLE_CLASSIC
             // check command status for create connection for errors
-            if (HCI_EVENT_IS_COMMAND_STATUS(packet, hci_create_connection)){
+            if (hci_event_command_status_get_command_opcode(packet) == HCI_OPCODE_HCI_CREATE_CONNECTION){
                 // cache outgoing address and reset
                 (void)memcpy(address, l2cap_outgoing_classic_addr, 6);
                 memset(l2cap_outgoing_classic_addr, 0, 6);
@@ -2983,7 +2982,7 @@ static void l2cap_hci_event_handler(uint8_t packet_type, uint16_t cid, uint8_t *
 
         // handle successful create connection cancel command
         case HCI_EVENT_COMMAND_COMPLETE:
-            if (HCI_EVENT_IS_COMMAND_COMPLETE(packet, hci_create_connection_cancel)) {
+            if (hci_event_command_complete_get_command_opcode(packet) == HCI_OPCODE_HCI_CREATE_CONNECTION_CANCEL) {
                 if (packet[5] == 0){
                     reverse_bd_addr(&packet[6], address);
                     // CONNECTION TERMINATED BY LOCAL HOST (0X16)
@@ -4674,7 +4673,7 @@ static void l2cap_acl_le_handler(hci_con_handle_t handle, uint8_t *packet, uint1
     switch (channel_id) {
 
         case L2CAP_CID_SIGNALING_LE: {
-            uint16_t sig_id = packet[COMPLETE_L2CAP_HEADER + 1];
+            uint8_t sig_id = packet[COMPLETE_L2CAP_HEADER + 1];
             uint16_t len = little_endian_read_16(packet, COMPLETE_L2CAP_HEADER + 2);
             if ((COMPLETE_L2CAP_HEADER + 4u + len) > size) break;
             int      valid  = l2cap_le_signaling_handler_dispatch(handle, &packet[COMPLETE_L2CAP_HEADER], sig_id);

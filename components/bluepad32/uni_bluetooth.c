@@ -67,6 +67,7 @@
 #include "uni_bt_defines.h"
 #include "uni_bt_sdp.h"
 #include "uni_bt_setup.h"
+#include "uni_common.h"
 #include "uni_config.h"
 #include "uni_debug.h"
 #include "uni_hci_cmd.h"
@@ -122,9 +123,9 @@ static uint8_t stop_scan(void);
 // BLE only
 #ifdef UNI_ENABLE_BLE
 static void handle_gatt_client_event(uint8_t packet_type, uint16_t channel, uint8_t* packet, uint16_t size) {
-    UNUSED(packet_type);
-    UNUSED(channel);
-    UNUSED(size);
+    ARG_UNUSED(packet_type);
+    ARG_UNUSED(channel);
+    ARG_UNUSED(size);
 
     uint8_t status;
 
@@ -172,8 +173,8 @@ static void handle_gatt_client_event(uint8_t packet_type, uint16_t channel, uint
  */
 #ifdef UNI_ENABLE_BLE
 static void sm_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t* packet, uint16_t size) {
-    UNUSED(channel);
-    UNUSED(size);
+    ARG_UNUSED(channel);
+    ARG_UNUSED(size);
 
     if (packet_type != HCI_EVENT_PACKET)
         return;
@@ -220,8 +221,8 @@ static void on_hci_connection_request(uint16_t channel, const uint8_t* packet, u
     uint32_t cod;
     uni_hid_device_t* device;
 
-    UNUSED(channel);
-    UNUSED(size);
+    ARG_UNUSED(channel);
+    ARG_UNUSED(size);
 
     hci_event_connection_request_get_bd_addr(packet, event_addr);
     cod = hci_event_connection_request_get_class_of_device(packet);
@@ -245,8 +246,8 @@ static void on_hci_connection_complete(uint16_t channel, const uint8_t* packet, 
     hci_con_handle_t handle;
     uint8_t status;
 
-    UNUSED(channel);
-    UNUSED(size);
+    ARG_UNUSED(channel);
+    ARG_UNUSED(size);
 
     hci_event_connection_complete_get_bd_addr(packet, event_addr);
     status = hci_event_connection_complete_get_status(packet);
@@ -289,8 +290,8 @@ static void on_gap_inquiry_result(uint16_t channel, const uint8_t* packet, uint1
     int name_len = 0;
     uint8_t rssi = 255;
 
-    UNUSED(channel);
-    UNUSED(size);
+    ARG_UNUSED(channel);
+    ARG_UNUSED(size);
 
     gap_event_inquiry_result_get_bd_addr(packet, addr);
     uint8_t page_scan_repetition_mode = gap_event_inquiry_result_get_page_scan_repetition_mode(packet);
@@ -351,8 +352,8 @@ static void on_gap_event_advertising_report(uint16_t channel, const uint8_t* pac
     bd_addr_t addr;
     bd_addr_type_t addr_type;
 
-    UNUSED(channel);
-    UNUSED(size);
+    ARG_UNUSED(channel);
+    ARG_UNUSED(size);
 
     if (adv_event_contains_hid_service(packet) == false)
         return;
@@ -376,7 +377,7 @@ static void on_l2cap_channel_opened(uint16_t channel, const uint8_t* packet, uin
     uni_hid_device_t* device;
     uint8_t incoming;
 
-    UNUSED(size);
+    ARG_UNUSED(size);
 
     logi("L2CAP_EVENT_CHANNEL_OPENED (channel=0x%04x)\n", channel);
 
@@ -430,6 +431,7 @@ static void on_l2cap_channel_opened(uint16_t channel, const uint8_t* packet, uin
             uni_hid_device_connect(device);
             break;
         default:
+            logi("Unknown PSM = 0x%02x\n", psm);
             break;
     }
     uni_bluetooth_process_fsm(device);
@@ -439,7 +441,7 @@ static void on_l2cap_channel_closed(uint16_t channel, const uint8_t* packet, uin
     uint16_t local_cid;
     uni_hid_device_t* device;
 
-    UNUSED(size);
+    ARG_UNUSED(size);
 
     local_cid = l2cap_event_channel_closed_get_local_cid(packet);
     logi("L2CAP_EVENT_CHANNEL_CLOSED: 0x%04x (channel=0x%04x)\n", local_cid, channel);
@@ -461,7 +463,7 @@ static void on_l2cap_incoming_connection(uint16_t channel, const uint8_t* packet
     uint16_t psm;
     hci_con_handle_t handle;
 
-    UNUSED(size);
+    ARG_UNUSED(size);
 
     if (!accept_incoming_connections) {
         logi("Declining incoming connection\n");
@@ -569,7 +571,8 @@ static void on_l2cap_data_packet(uint16_t channel, const uint8_t* packet, uint16
 
 // BLE only
 static void hog_connection_timeout(btstack_timer_source_t* ts) {
-    UNUSED(ts);
+    ARG_UNUSED(ts);
+
     logi("Timeout - abort connection\n");
     gap_connect_cancel();
 }
@@ -638,7 +641,7 @@ static void bluetooth_del_keys_callback(void* context) {
     link_key_type_t type;
     btstack_link_key_iterator_t it;
 
-    UNUSED(context);
+    ARG_UNUSED(context);
 
     int ok = gap_link_key_iterator_init(&it);
     if (!ok) {
@@ -792,24 +795,41 @@ void uni_bluetooth_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t
                     break;
                 }
                 case HCI_EVENT_PIN_CODE_REQUEST: {
-                    // gap_pin_code_response_binary does not copy the data, and data
-                    // must be valid until the next hci_send_cmd is called.
-                    static bd_addr_t pin_code;
-                    bd_addr_t local_addr;
+                    bool is_mouse = false;
+
                     logi("--> HCI_EVENT_PIN_CODE_REQUEST\n");
-                    // FIXME: Assumes incoming connection from Nintendo Wii using Sync.
-                    //
-                    // From: https://wiibrew.org/wiki/Wiimote#Bluetooth_Pairing:
-                    //  If connecting by holding down the 1+2 buttons, the PIN is the
-                    //  bluetooth address of the wiimote backwards, if connecting by
-                    //  pressing the "sync" button on the back of the wiimote, then the
-                    //  PIN is the bluetooth address of the host backwards.
                     hci_event_pin_code_request_get_bd_addr(packet, event_addr);
-                    gap_local_bd_addr(local_addr);
-                    reverse_bd_addr(local_addr, pin_code);
-                    logi("Using PIN code: \n");
-                    printf_hexdump(pin_code, sizeof(pin_code));
-                    gap_pin_code_response_binary(event_addr, pin_code, sizeof(pin_code));
+                    device = uni_hid_device_get_instance_for_address(event_addr);
+                    if (!device) {
+                        loge("Failed to get device for: %s, assuming it is not a mouse\n", bd_addr_to_str(event_addr));
+                    } else {
+                        uint32_t mouse_cod = UNI_BT_COD_MAJOR_PERIPHERAL | UNI_BT_COD_MINOR_MICE;
+                        is_mouse = (device->cod & mouse_cod) == mouse_cod;
+                    }
+
+                    if (is_mouse) {
+                        // For mice, use "0000" as pins, which seems to be the exected one.
+                        logi("Using PIN code: '0000'\n");
+                        gap_pin_code_response_binary(event_addr, (uint8_t*)"0000", 4);
+                    } else {
+                        // gap_pin_code_response_binary() does not copy the data, and data
+                        // must be valid until the next hci_send_cmd is called.
+                        static bd_addr_t pin_code;
+                        bd_addr_t local_addr;
+
+                        // FIXME: Assumes incoming connection from Nintendo Wii using Sync.
+                        //
+                        // From: https://wiibrew.org/wiki/Wiimote#Bluetooth_Pairing:
+                        //  If connecting by holding down the 1+2 buttons, the PIN is the
+                        //  bluetooth address of the wiimote backwards, if connecting by
+                        //  pressing the "sync" button on the back of the wiimote, then the
+                        //  PIN is the bluetooth address of the host backwards.
+                        gap_local_bd_addr(local_addr);
+                        reverse_bd_addr(local_addr, pin_code);
+                        logi("Using PIN code: \n");
+                        printf_hexdump(pin_code, sizeof(pin_code));
+                        gap_pin_code_response_binary(event_addr, pin_code, sizeof(pin_code));
+                    }
                     break;
                 }
                 case HCI_EVENT_USER_CONFIRMATION_REQUEST:

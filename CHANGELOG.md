@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased] - ???
 ### Changed
 - ESP-IDF Arduino Core v2.0.3
+- Bluepad32 v3.5.0-beta0
+- BTstack hash: a45da34ed9d3615c94c57ef08760939900575afb
 
 ## [1.3.1] - 2022-04-24
 ### Changed

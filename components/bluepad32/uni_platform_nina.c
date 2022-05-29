@@ -44,6 +44,7 @@ limitations under the License.
 
 #include "sdkconfig.h"
 #include "uni_bluetooth.h"
+#include "uni_common.h"
 #include "uni_config.h"
 #include "uni_debug.h"
 #include "uni_esp32.h"
@@ -57,8 +58,8 @@ limitations under the License.
 // NINA / AirLift don't use the pre-designated IO_MUX pins for VSPI.
 // Instead it uses the GPIO matrix, that might not be suitable for fast SPI
 // communications.
-//#define GPIO_MOSI GPIO_NUM_23
-//#define GPIO_MISO GPIO_NUM_19
+// #define GPIO_MOSI GPIO_NUM_23
+// #define GPIO_MISO GPIO_NUM_19
 
 // The only difference between NINA and AirLift, seems to be the MOSI pin.
 #ifdef CONFIG_BLUEPAD32_PLATFORM_AIRLIFT
@@ -673,7 +674,7 @@ static int process_request(const uint8_t command[], int command_len, uint8_t res
 
 // Called after a transaction is queued and ready for pickup by master.
 static void IRAM_ATTR spi_post_setup_cb(spi_slave_transaction_t* trans) {
-    UNUSED(trans);
+    ARG_UNUSED(trans);
     xSemaphoreGiveFromISR(_ready_semaphore, NULL);
 }
 
@@ -786,8 +787,8 @@ static void process_pending_requests(void) {
 // Platform Overrides
 //
 static void nina_init(int argc, const char** argv) {
-    UNUSED(argc);
-    UNUSED(argv);
+    ARG_UNUSED(argc);
+    ARG_UNUSED(argv);
 
     // First things first:
     // Set READY pin as not-ready (HIGH) so that SPI-master doesn't start the

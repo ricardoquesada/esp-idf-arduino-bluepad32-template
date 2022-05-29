@@ -144,12 +144,22 @@ uint8_t goep_server_request_can_send_now(uint16_t goep_cid);
 uint8_t goep_server_response_create_connect(uint16_t goep_cid, uint8_t obex_version_number, uint8_t flags, uint16_t maximum_obex_packet_length);
 
 /**
- * @brief Start General response with opcode
+ * @brief Start General response
+ * @note response code is set by goep_server_execute
  * @param goep_cid
  * @param opcode
  * @return status
  */
-uint8_t goep_server_response_create_general(uint16_t goep_cid, uint8_t opcode);
+uint8_t goep_server_response_create_general(uint16_t goep_cid);
+
+/**
+ * @brief Get max size of body data that can be added to current response with goep_server_header_add_end_of_body
+ * @param goep_cid
+ * @param data
+ * @param length
+ * @return size in bytes or 0
+ */
+uint16_t goep_server_response_get_max_body_size(uint16_t goep_cid);
 
 /**
  * @brief Add who header to current response
@@ -169,11 +179,29 @@ uint8_t goep_server_header_add_who(uint16_t goep_cid, const uint8_t * who);
 uint8_t goep_server_header_add_end_of_body(uint16_t goep_cid, const uint8_t * end_of_body, uint16_t length);
 
 /**
- * @brief Execute prepared request
+ * @brief Add SRM ENABLE header to current response
  * @param goep_cid
+ * @return
+ */
+uint8_t goep_server_header_add_srm_enable(uint16_t goep_cid);
+
+
+/**
+ * @brief Add application parameters header to current request
+ * @param goep_cid
+ * @param data
+ * @param length
+ * @return
+ */
+uint8_t goep_server_header_add_application_parameters(uint16_t goep_cid, const uint8_t * data, uint16_t length);
+
+/**
+ * @brief Send prepared response
+ * @param goep_cid
+ * @param response_code
  * @return status
  */
-uint8_t goep_server_execute(uint16_t goep_cid);
+uint8_t goep_server_execute(uint16_t goep_cid, uint8_t response_code);
 
 /**
  * De-Init

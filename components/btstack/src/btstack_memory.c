@@ -866,6 +866,64 @@ void btstack_memory_hid_host_connection_free(hid_host_connection_t *hid_host_con
 
 
 
+// MARK: service_record_item_t
+#if !defined(HAVE_MALLOC) && !defined(MAX_NR_SERVICE_RECORD_ITEMS)
+    #if defined(MAX_NO_SERVICE_RECORD_ITEMS)
+        #error "Deprecated MAX_NO_SERVICE_RECORD_ITEMS defined instead of MAX_NR_SERVICE_RECORD_ITEMS. Please update your btstack_config.h to use MAX_NR_SERVICE_RECORD_ITEMS."
+    #else
+        #define MAX_NR_SERVICE_RECORD_ITEMS 0
+    #endif
+#endif
+
+#ifdef MAX_NR_SERVICE_RECORD_ITEMS
+#if MAX_NR_SERVICE_RECORD_ITEMS > 0
+static service_record_item_t service_record_item_storage[MAX_NR_SERVICE_RECORD_ITEMS];
+static btstack_memory_pool_t service_record_item_pool;
+service_record_item_t * btstack_memory_service_record_item_get(void){
+    void * buffer = btstack_memory_pool_get(&service_record_item_pool);
+    if (buffer){
+        memset(buffer, 0, sizeof(service_record_item_t));
+    }
+    return (service_record_item_t *) buffer;
+}
+void btstack_memory_service_record_item_free(service_record_item_t *service_record_item){
+    btstack_memory_pool_free(&service_record_item_pool, service_record_item);
+}
+#else
+service_record_item_t * btstack_memory_service_record_item_get(void){
+    return NULL;
+}
+void btstack_memory_service_record_item_free(service_record_item_t *service_record_item){
+    UNUSED(service_record_item);
+};
+#endif
+#elif defined(HAVE_MALLOC)
+
+typedef struct {
+    btstack_memory_buffer_t tracking;
+    service_record_item_t data;
+} btstack_memory_service_record_item_t;
+
+service_record_item_t * btstack_memory_service_record_item_get(void){
+    btstack_memory_service_record_item_t * buffer = (btstack_memory_service_record_item_t *) malloc(sizeof(btstack_memory_service_record_item_t));
+    if (buffer){
+        memset(buffer, 0, sizeof(btstack_memory_service_record_item_t));
+        btstack_memory_tracking_add(&buffer->tracking);
+        return &buffer->data;
+    } else {
+        return NULL;
+    }
+}
+void btstack_memory_service_record_item_free(service_record_item_t *service_record_item){
+    // reconstruct buffer start
+    btstack_memory_buffer_t * buffer = &((btstack_memory_buffer_t *) service_record_item)[-1];
+    btstack_memory_tracking_remove(buffer);
+    free(buffer);
+}
+#endif
+
+
+
 // MARK: avdtp_stream_endpoint_t
 #if !defined(HAVE_MALLOC) && !defined(MAX_NR_AVDTP_STREAM_ENDPOINTS)
     #if defined(MAX_NO_AVDTP_STREAM_ENDPOINTS)
@@ -1091,64 +1149,6 @@ avrcp_browsing_connection_t * btstack_memory_avrcp_browsing_connection_get(void)
 void btstack_memory_avrcp_browsing_connection_free(avrcp_browsing_connection_t *avrcp_browsing_connection){
     // reconstruct buffer start
     btstack_memory_buffer_t * buffer = &((btstack_memory_buffer_t *) avrcp_browsing_connection)[-1];
-    btstack_memory_tracking_remove(buffer);
-    free(buffer);
-}
-#endif
-
-
-
-// MARK: service_record_item_t
-#if !defined(HAVE_MALLOC) && !defined(MAX_NR_SERVICE_RECORD_ITEMS)
-    #if defined(MAX_NO_SERVICE_RECORD_ITEMS)
-        #error "Deprecated MAX_NO_SERVICE_RECORD_ITEMS defined instead of MAX_NR_SERVICE_RECORD_ITEMS. Please update your btstack_config.h to use MAX_NR_SERVICE_RECORD_ITEMS."
-    #else
-        #define MAX_NR_SERVICE_RECORD_ITEMS 0
-    #endif
-#endif
-
-#ifdef MAX_NR_SERVICE_RECORD_ITEMS
-#if MAX_NR_SERVICE_RECORD_ITEMS > 0
-static service_record_item_t service_record_item_storage[MAX_NR_SERVICE_RECORD_ITEMS];
-static btstack_memory_pool_t service_record_item_pool;
-service_record_item_t * btstack_memory_service_record_item_get(void){
-    void * buffer = btstack_memory_pool_get(&service_record_item_pool);
-    if (buffer){
-        memset(buffer, 0, sizeof(service_record_item_t));
-    }
-    return (service_record_item_t *) buffer;
-}
-void btstack_memory_service_record_item_free(service_record_item_t *service_record_item){
-    btstack_memory_pool_free(&service_record_item_pool, service_record_item);
-}
-#else
-service_record_item_t * btstack_memory_service_record_item_get(void){
-    return NULL;
-}
-void btstack_memory_service_record_item_free(service_record_item_t *service_record_item){
-    UNUSED(service_record_item);
-};
-#endif
-#elif defined(HAVE_MALLOC)
-
-typedef struct {
-    btstack_memory_buffer_t tracking;
-    service_record_item_t data;
-} btstack_memory_service_record_item_t;
-
-service_record_item_t * btstack_memory_service_record_item_get(void){
-    btstack_memory_service_record_item_t * buffer = (btstack_memory_service_record_item_t *) malloc(sizeof(btstack_memory_service_record_item_t));
-    if (buffer){
-        memset(buffer, 0, sizeof(btstack_memory_service_record_item_t));
-        btstack_memory_tracking_add(&buffer->tracking);
-        return &buffer->data;
-    } else {
-        return NULL;
-    }
-}
-void btstack_memory_service_record_item_free(service_record_item_t *service_record_item){
-    // reconstruct buffer start
-    btstack_memory_buffer_t * buffer = &((btstack_memory_buffer_t *) service_record_item)[-1];
     btstack_memory_tracking_remove(buffer);
     free(buffer);
 }
@@ -1960,6 +1960,66 @@ void btstack_memory_mesh_subnet_free(mesh_subnet_t *mesh_subnet){
 
 
 #endif
+#ifdef ENABLE_LE_ISOCHRONOUS_STREAMS
+
+// MARK: hci_iso_stream_t
+#if !defined(HAVE_MALLOC) && !defined(MAX_NR_HCI_ISO_STREAMS)
+    #if defined(MAX_NO_HCI_ISO_STREAMS)
+        #error "Deprecated MAX_NO_HCI_ISO_STREAMS defined instead of MAX_NR_HCI_ISO_STREAMS. Please update your btstack_config.h to use MAX_NR_HCI_ISO_STREAMS."
+    #else
+        #define MAX_NR_HCI_ISO_STREAMS 0
+    #endif
+#endif
+
+#ifdef MAX_NR_HCI_ISO_STREAMS
+#if MAX_NR_HCI_ISO_STREAMS > 0
+static hci_iso_stream_t hci_iso_stream_storage[MAX_NR_HCI_ISO_STREAMS];
+static btstack_memory_pool_t hci_iso_stream_pool;
+hci_iso_stream_t * btstack_memory_hci_iso_stream_get(void){
+    void * buffer = btstack_memory_pool_get(&hci_iso_stream_pool);
+    if (buffer){
+        memset(buffer, 0, sizeof(hci_iso_stream_t));
+    }
+    return (hci_iso_stream_t *) buffer;
+}
+void btstack_memory_hci_iso_stream_free(hci_iso_stream_t *hci_iso_stream){
+    btstack_memory_pool_free(&hci_iso_stream_pool, hci_iso_stream);
+}
+#else
+hci_iso_stream_t * btstack_memory_hci_iso_stream_get(void){
+    return NULL;
+}
+void btstack_memory_hci_iso_stream_free(hci_iso_stream_t *hci_iso_stream){
+    UNUSED(hci_iso_stream);
+};
+#endif
+#elif defined(HAVE_MALLOC)
+
+typedef struct {
+    btstack_memory_buffer_t tracking;
+    hci_iso_stream_t data;
+} btstack_memory_hci_iso_stream_t;
+
+hci_iso_stream_t * btstack_memory_hci_iso_stream_get(void){
+    btstack_memory_hci_iso_stream_t * buffer = (btstack_memory_hci_iso_stream_t *) malloc(sizeof(btstack_memory_hci_iso_stream_t));
+    if (buffer){
+        memset(buffer, 0, sizeof(btstack_memory_hci_iso_stream_t));
+        btstack_memory_tracking_add(&buffer->tracking);
+        return &buffer->data;
+    } else {
+        return NULL;
+    }
+}
+void btstack_memory_hci_iso_stream_free(hci_iso_stream_t *hci_iso_stream){
+    // reconstruct buffer start
+    btstack_memory_buffer_t * buffer = &((btstack_memory_buffer_t *) hci_iso_stream)[-1];
+    btstack_memory_tracking_remove(buffer);
+    free(buffer);
+}
+#endif
+
+
+#endif
 
 // init
 void btstack_memory_init(void){
@@ -1971,12 +2031,14 @@ void btstack_memory_init(void){
 #if MAX_NR_HCI_CONNECTIONS > 0
     btstack_memory_pool_create(&hci_connection_pool, hci_connection_storage, MAX_NR_HCI_CONNECTIONS, sizeof(hci_connection_t));
 #endif
+
 #if MAX_NR_L2CAP_SERVICES > 0
     btstack_memory_pool_create(&l2cap_service_pool, l2cap_service_storage, MAX_NR_L2CAP_SERVICES, sizeof(l2cap_service_t));
 #endif
 #if MAX_NR_L2CAP_CHANNELS > 0
     btstack_memory_pool_create(&l2cap_channel_pool, l2cap_channel_storage, MAX_NR_L2CAP_CHANNELS, sizeof(l2cap_channel_t));
 #endif
+
 #ifdef ENABLE_CLASSIC
 #if MAX_NR_RFCOMM_MULTIPLEXERS > 0
     btstack_memory_pool_create(&rfcomm_multiplexer_pool, rfcomm_multiplexer_storage, MAX_NR_RFCOMM_MULTIPLEXERS, sizeof(rfcomm_multiplexer_t));
@@ -1987,42 +2049,53 @@ void btstack_memory_init(void){
 #if MAX_NR_RFCOMM_CHANNELS > 0
     btstack_memory_pool_create(&rfcomm_channel_pool, rfcomm_channel_storage, MAX_NR_RFCOMM_CHANNELS, sizeof(rfcomm_channel_t));
 #endif
+
 #if MAX_NR_BTSTACK_LINK_KEY_DB_MEMORY_ENTRIES > 0
     btstack_memory_pool_create(&btstack_link_key_db_memory_entry_pool, btstack_link_key_db_memory_entry_storage, MAX_NR_BTSTACK_LINK_KEY_DB_MEMORY_ENTRIES, sizeof(btstack_link_key_db_memory_entry_t));
 #endif
+
 #if MAX_NR_BNEP_SERVICES > 0
     btstack_memory_pool_create(&bnep_service_pool, bnep_service_storage, MAX_NR_BNEP_SERVICES, sizeof(bnep_service_t));
 #endif
 #if MAX_NR_BNEP_CHANNELS > 0
     btstack_memory_pool_create(&bnep_channel_pool, bnep_channel_storage, MAX_NR_BNEP_CHANNELS, sizeof(bnep_channel_t));
 #endif
+
 #if MAX_NR_GOEP_SERVER_SERVICES > 0
     btstack_memory_pool_create(&goep_server_service_pool, goep_server_service_storage, MAX_NR_GOEP_SERVER_SERVICES, sizeof(goep_server_service_t));
 #endif
 #if MAX_NR_GOEP_SERVER_CONNECTIONS > 0
     btstack_memory_pool_create(&goep_server_connection_pool, goep_server_connection_storage, MAX_NR_GOEP_SERVER_CONNECTIONS, sizeof(goep_server_connection_t));
 #endif
+
 #if MAX_NR_HFP_CONNECTIONS > 0
     btstack_memory_pool_create(&hfp_connection_pool, hfp_connection_storage, MAX_NR_HFP_CONNECTIONS, sizeof(hfp_connection_t));
 #endif
+
 #if MAX_NR_HID_HOST_CONNECTIONS > 0
     btstack_memory_pool_create(&hid_host_connection_pool, hid_host_connection_storage, MAX_NR_HID_HOST_CONNECTIONS, sizeof(hid_host_connection_t));
 #endif
-#if MAX_NR_AVDTP_STREAM_ENDPOINTS > 0
-    btstack_memory_pool_create(&avdtp_stream_endpoint_pool, avdtp_stream_endpoint_storage, MAX_NR_AVDTP_STREAM_ENDPOINTS, sizeof(avdtp_stream_endpoint_t));
-#endif
-#if MAX_NR_AVDTP_CONNECTIONS > 0
-    btstack_memory_pool_create(&avdtp_connection_pool, avdtp_connection_storage, MAX_NR_AVDTP_CONNECTIONS, sizeof(avdtp_connection_t));
-#endif
-#if MAX_NR_AVRCP_CONNECTIONS > 0
-    btstack_memory_pool_create(&avrcp_connection_pool, avrcp_connection_storage, MAX_NR_AVRCP_CONNECTIONS, sizeof(avrcp_connection_t));
-#endif
-#if MAX_NR_AVRCP_BROWSING_CONNECTIONS > 0
-    btstack_memory_pool_create(&avrcp_browsing_connection_pool, avrcp_browsing_connection_storage, MAX_NR_AVRCP_BROWSING_CONNECTIONS, sizeof(avrcp_browsing_connection_t));
-#endif
+
 #if MAX_NR_SERVICE_RECORD_ITEMS > 0
     btstack_memory_pool_create(&service_record_item_pool, service_record_item_storage, MAX_NR_SERVICE_RECORD_ITEMS, sizeof(service_record_item_t));
 #endif
+
+#if MAX_NR_AVDTP_STREAM_ENDPOINTS > 0
+    btstack_memory_pool_create(&avdtp_stream_endpoint_pool, avdtp_stream_endpoint_storage, MAX_NR_AVDTP_STREAM_ENDPOINTS, sizeof(avdtp_stream_endpoint_t));
+#endif
+
+#if MAX_NR_AVDTP_CONNECTIONS > 0
+    btstack_memory_pool_create(&avdtp_connection_pool, avdtp_connection_storage, MAX_NR_AVDTP_CONNECTIONS, sizeof(avdtp_connection_t));
+#endif
+
+#if MAX_NR_AVRCP_CONNECTIONS > 0
+    btstack_memory_pool_create(&avrcp_connection_pool, avrcp_connection_storage, MAX_NR_AVRCP_CONNECTIONS, sizeof(avrcp_connection_t));
+#endif
+
+#if MAX_NR_AVRCP_BROWSING_CONNECTIONS > 0
+    btstack_memory_pool_create(&avrcp_browsing_connection_pool, avrcp_browsing_connection_storage, MAX_NR_AVRCP_BROWSING_CONNECTIONS, sizeof(avrcp_browsing_connection_t));
+#endif
+
 #endif
 #ifdef ENABLE_BLE
 #if MAX_NR_BATTERY_SERVICE_CLIENTS > 0
@@ -2046,6 +2119,7 @@ void btstack_memory_init(void){
 #if MAX_NR_PERIODIC_ADVERTISER_LIST_ENTRIES > 0
     btstack_memory_pool_create(&periodic_advertiser_list_entry_pool, periodic_advertiser_list_entry_storage, MAX_NR_PERIODIC_ADVERTISER_LIST_ENTRIES, sizeof(periodic_advertiser_list_entry_t));
 #endif
+
 #endif
 #ifdef ENABLE_MESH
 #if MAX_NR_MESH_NETWORK_PDUS > 0
@@ -2069,5 +2143,12 @@ void btstack_memory_init(void){
 #if MAX_NR_MESH_SUBNETS > 0
     btstack_memory_pool_create(&mesh_subnet_pool, mesh_subnet_storage, MAX_NR_MESH_SUBNETS, sizeof(mesh_subnet_t));
 #endif
+
+#endif
+#ifdef ENABLE_LE_ISOCHRONOUS_STREAMS
+#if MAX_NR_HCI_ISO_STREAMS > 0
+    btstack_memory_pool_create(&hci_iso_stream_pool, hci_iso_stream_storage, MAX_NR_HCI_ISO_STREAMS, sizeof(hci_iso_stream_t));
+#endif
+
 #endif
 }

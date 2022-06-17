@@ -1,7 +1,7 @@
 /****************************************************************************
 http://retro.moe/unijoysticle2
 
-Copyright 2019 Ricardo Quesada
+Copyright 2022 Ricardo Quesada
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,10 +16,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ****************************************************************************/
 
-#ifndef UNI_DEBUG_H
-#define UNI_DEBUG_H
+#ifndef UNI_PROPERTY_MEM_H
+#define UNI_PROPERTY_MEM_H
 
-/* uni_debug.h code moved to uni_log.h */
-#include "uni_log.h"
+#include "uni_property.h"
 
-#endif  // UNI_DEBUG_H
+void uni_property_mem_init(void);
+void uni_property_mem_set(const char* key, uni_property_type_t type, uni_property_value_t value);
+uni_property_value_t uni_property_mem_get(const char* key, uni_property_type_t type, uni_property_value_t def);
+
+#endif  // UNI_PROPERTY_MEM_H

@@ -30,8 +30,6 @@ limitations under the License.
 #include <freertos/FreeRTOS.h>
 #include <freertos/event_groups.h>
 #include <freertos/queue.h>
-#include <nvs.h>
-#include <nvs_flash.h>
 
 #include "sdkconfig.h"
 #include "uni_bluetooth.h"
@@ -43,6 +41,7 @@ limitations under the License.
 #include "uni_hid_device.h"
 #include "uni_joystick.h"
 #include "uni_mouse_quadrature.h"
+#include "uni_property.h"
 
 // --- Defines / Enums
 
@@ -217,7 +216,6 @@ static void process_mouse(uni_hid_device_t* d,
                           uint16_t buttons);
 static void joy_update_port(const uni_joystick_t* joy, const gpio_num_t* gpios);
 static int get_mouse_emulation();
-static bool is_device_a_mouse(uni_hid_device_t* d);
 
 // Interrupt handlers
 static void handle_event_button(int button_idx);
@@ -338,10 +336,6 @@ static struct {
 } set_mouse_emulation_args;
 
 static btstack_context_callback_registration_t cmd_callback_registration;
-
-// NVS
-static const char* STORAGE_NAMESPACE = "bp32";
-static const char* NVS_KEY_MOUSE_EMULATION = "uni.mouse.emu";
 
 //
 // Platform Overrides
@@ -574,7 +568,7 @@ static int unijoysticle_on_device_ready(uni_hid_device_t* d) {
         // ... unless it is a mouse which should try with PORT A.
         // Amiga/Atari ST use mice in PORT A. Undefined on the C64, but
         // most apps use it in PORT A as well.
-        if (is_device_a_mouse(d)) {
+        if (uni_hid_device_is_mouse(d)) {
             wanted_seat = GAMEPAD_SEAT_A;
             ins->emu_mode = EMULATION_MODE_SINGLE_MOUSE;
         }
@@ -715,7 +709,7 @@ static void unijoysticle_device_dump(uni_hid_device_t* d) {
     unijoysticle_instance_t* ins = get_unijoysticle_instance(d);
 
     logi("\tunijoysticle: ");
-    if (is_device_a_mouse(d)) {
+    if (uni_hid_device_is_mouse(d)) {
         logi("type=mouse, ");
     } else {
         logi("type=gamepad, mode=");
@@ -735,75 +729,31 @@ static void unijoysticle_device_dump(uni_hid_device_t* d) {
 // Helpers
 //
 
-static bool is_device_a_mouse(uni_hid_device_t* d) {
-    uint32_t mouse_cod = UNI_BT_COD_MAJOR_PERIPHERAL | UNI_BT_COD_MINOR_MICE;
-    return (d->cod & mouse_cod) == mouse_cod;
-}
-
 static void set_mouse_emulation_to_nvs(int mode) {
-    nvs_handle_t nvs_handle;
-    esp_err_t err;
-    uint8_t u8mode = mode;
+    uni_property_value_t value;
+    value.u32 = mode;
 
-    err = nvs_open(STORAGE_NAMESPACE, NVS_READWRITE, &nvs_handle);
-    if (err != ESP_OK) {
-        loge("Could not open NVS storage\n");
-        return;
-    }
-
-    err = nvs_set_u8(nvs_handle, NVS_KEY_MOUSE_EMULATION, u8mode);
-    if (err != ESP_OK) {
-        loge("Could not save mouse emulation in NVS\n");
-        goto out;
-    }
-
-    err = nvs_commit(nvs_handle);
-    if (err != ESP_OK) {
-        loge("Could commit mouse emulation in NVS\n");
-        /* fallthrough */
-    } else {
-        logi("Done. Restart required. Type 'restart' + Enter\n");
-    }
-
-out:
-    nvs_close(nvs_handle);
+    uni_property_set(UNI_PROPERTY_KEY_MOUSE_EMULATION, UNI_PROPERTY_TYPE_U32, value);
+    logi("Done. Restart required. Type 'restart' + Enter\n");
 }
 
 static int get_mouse_emulation_from_nvs() {
-    nvs_handle_t nvs_handle;
-    esp_err_t err;
-    uint8_t mouse_emulation;
+    uni_property_value_t value;
+    uni_property_value_t def;
 
-    err = nvs_open(STORAGE_NAMESPACE, NVS_READONLY, &nvs_handle);
-    if (err != ESP_OK)
-        return MOUSE_EMULATION_FROM_BOARD_MODEL;
+    def.u32 = MOUSE_EMULATION_FROM_BOARD_MODEL;
 
-    err = nvs_get_u8(nvs_handle, NVS_KEY_MOUSE_EMULATION, &mouse_emulation);
-    if (err != ESP_OK) {
-        mouse_emulation = MOUSE_EMULATION_FROM_BOARD_MODEL;
-        /* falltrhough */
-    }
-
-    nvs_close(nvs_handle);
-    return mouse_emulation;
+    value = uni_property_get(UNI_PROPERTY_KEY_MOUSE_EMULATION, UNI_PROPERTY_TYPE_U32, def);
+    return value.u8;
 }
 
 static int get_mouse_emulation() {
-    int ret = MOUSE_EMULATION_AMIGA;
-#if CONFIG_BLUEPAD32_UNIJOYSTICLE_MOUSE_AUTO
-    // When compiled with "auto", it means that the mouse emulation can be set based on:
-    // - NVS setting
-    // - or board model
+    int ret;
     int nvs_setting = get_mouse_emulation_from_nvs();
     if (nvs_setting == MOUSE_EMULATION_FROM_BOARD_MODEL)
         ret = (get_board_model() == BOARD_MODEL_UNIJOYSTICLE2_ST520) ? MOUSE_EMULATION_ATARIST : MOUSE_EMULATION_AMIGA;
     else
         ret = nvs_setting;
-#elif defined(CONFIG_BLUEPAD32_UNIJOYSTICLE_MOUSE_AMIGA)
-    ret = MOUSE_EMULATION_AMIGA;
-#elif defined(CONFIG_BLUEPAD32_UNIJOYSTICLE_MOUSE_ATARIST)
-    ret = MOUSE_EMULATION_ATARIST;
-#endif  // CONFIG_BLUEPAD32_UNIJOYSTICLE_MOUSE
     return ret;
 }
 
@@ -1106,7 +1056,7 @@ static void get_gamepad_mode() {
         uni_hid_device_t* tmp_d = uni_hid_device_get_instance_for_idx(j);
         if (uni_bt_conn_is_connected(&tmp_d->conn)) {
             num_devices++;
-            if (!is_device_a_mouse(tmp_d)) {
+            if (!uni_hid_device_is_mouse(tmp_d)) {
                 d = tmp_d;
                 break;
             }
@@ -1147,7 +1097,7 @@ static void set_gamepad_mode(int mode) {
         uni_hid_device_t* tmp_d = uni_hid_device_get_instance_for_idx(j);
         if (uni_bt_conn_is_connected(&tmp_d->conn)) {
             num_devices++;
-            if (!is_device_a_mouse(tmp_d)) {
+            if (!uni_hid_device_is_mouse(tmp_d)) {
                 d = tmp_d;
                 break;
             }
@@ -1219,6 +1169,17 @@ static void toggle_combo_enhanced_gamepad_cb(int button_idx) {
     btstack_run_loop_execute_on_main_thread(&cmd_callback_registration);
 }
 
+static void toggle_combo_mouse_gamepad_cb(int button_idx) {
+    ARG_UNUSED(button_idx);
+    static bool enabled = false;
+
+    enabled = !enabled;
+
+    cmd_callback_registration.callback = &cmd_callback;
+    cmd_callback_registration.context = (void*)(enabled ? CMD_SET_GAMEPAD_MODE_MOUSE : CMD_SET_GAMEPAD_MODE_NORMAL);
+    btstack_run_loop_execute_on_main_thread(&cmd_callback_registration);
+}
+
 static int cmd_set_gamepad_mode(int argc, char** argv) {
     int nerrors = arg_parse(argc, argv, (void**)&set_gamepad_mode_args);
     if (nerrors != 0) {
@@ -1244,17 +1205,6 @@ static int cmd_set_gamepad_mode(int argc, char** argv) {
     cmd_callback_registration.context = (void*)mode;
     btstack_run_loop_execute_on_main_thread(&cmd_callback_registration);
     return 0;
-}
-
-static void toggle_combo_mouse_gamepad_cb(int button_idx) {
-    ARG_UNUSED(button_idx);
-    static bool enabled = false;
-
-    enabled = !enabled;
-
-    cmd_callback_registration.callback = &cmd_callback;
-    cmd_callback_registration.context = (void*)(enabled ? CMD_SET_GAMEPAD_MODE_MOUSE : CMD_SET_GAMEPAD_MODE_NORMAL);
-    btstack_run_loop_execute_on_main_thread(&cmd_callback_registration);
 }
 
 static int cmd_get_gamepad_mode(int argc, char** argv) {
@@ -1410,10 +1360,10 @@ static void maybe_enable_mouse_timers(void) {
 // Public
 //
 void uni_platform_unijoysticle_register_cmds(void) {
-    set_gamepad_mode_args.value = arg_str1(NULL, NULL, "<mode>", "mode can be 'normal', 'enhanced' or 'mouse'");
+    set_gamepad_mode_args.value = arg_str1(NULL, NULL, "<mode>", "valid options: 'normal', 'enhanced' or 'mouse'");
     set_gamepad_mode_args.end = arg_end(2);
 
-    set_mouse_emulation_args.value = arg_str1(NULL, NULL, "<emulation>", "mode can be 'amiga', 'atarist' or 'auto'");
+    set_mouse_emulation_args.value = arg_str1(NULL, NULL, "<emulation>", "valid options: 'amiga', 'atarist' or 'auto'");
     set_mouse_emulation_args.end = arg_end(2);
 
     const esp_console_cmd_t swap_ports = {
@@ -1425,7 +1375,10 @@ void uni_platform_unijoysticle_register_cmds(void) {
 
     const esp_console_cmd_t set_gamepad_mode = {
         .command = "set_gamepad_mode",
-        .help = "Sets the gamepad mode. At least one gamepad must be connected.",
+        .help =
+            "Sets the gamepad mode.\n"
+            "  At least one gamepad must be connected.\n"
+            "  Default: normal",
         .hint = NULL,
         .func = &cmd_set_gamepad_mode,
         .argtable = &set_gamepad_mode_args,
@@ -1433,15 +1386,18 @@ void uni_platform_unijoysticle_register_cmds(void) {
 
     const esp_console_cmd_t get_gamepad_mode = {
         .command = "get_gamepad_mode",
-        .help = "Returns the gamepad mode. At least one gamepad must be connected.",
+        .help =
+            "Returns the gamepad mode.\n"
+            "  At least one gamepad must be connected",
         .hint = NULL,
         .func = &cmd_get_gamepad_mode,
     };
 
-#if CONFIG_BLUEPAD32_UNIJOYSTICLE_MOUSE_AUTO
     const esp_console_cmd_t set_mouse_emulation = {
         .command = "set_mouse_emulation",
-        .help = "Sets mouse emulation mode",
+        .help =
+            "Sets mouse emulation mode.\n"
+            "  Default: auto",
         .hint = NULL,
         .func = &cmd_set_mouse_emulation,
         .argtable = &set_mouse_emulation_args,
@@ -1453,16 +1409,13 @@ void uni_platform_unijoysticle_register_cmds(void) {
         .hint = NULL,
         .func = &cmd_get_mouse_emulation,
     };
-#endif  // CONFIG_BLUEPAD32_UNIJOYSTICLE_MOUSE_AUTO
 
     ESP_ERROR_CHECK(esp_console_cmd_register(&swap_ports));
     ESP_ERROR_CHECK(esp_console_cmd_register(&set_gamepad_mode));
     ESP_ERROR_CHECK(esp_console_cmd_register(&get_gamepad_mode));
 
-#if CONFIG_BLUEPAD32_UNIJOYSTICLE_MOUSE_AUTO
     ESP_ERROR_CHECK(esp_console_cmd_register(&set_mouse_emulation));
     ESP_ERROR_CHECK(esp_console_cmd_register(&get_mouse_emulation));
-#endif  // CONFIG_BLUEPAD32_UNIJOYSTICLE_MOUSE_AUTO
 }
 
 struct uni_platform* uni_platform_unijoysticle_create(void) {

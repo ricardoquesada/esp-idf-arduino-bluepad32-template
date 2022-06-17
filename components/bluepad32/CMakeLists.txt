@@ -24,6 +24,7 @@ set(srcs "uni_bluetooth.c"
          "uni_hid_parser_wii.c"
          "uni_hid_parser_xboxone.c"
          "uni_joystick.c"
+         "uni_log.c"
          "uni_main.c"
          "uni_mouse_quadrature.c"
          "uni_platform.c"
@@ -33,6 +34,8 @@ set(srcs "uni_bluetooth.c"
          "uni_platform_nina.c"
          "uni_platform_pc_debug.c"
          "uni_platform_unijoysticle.c"
+         "uni_property.c"
+         "uni_property_nvs.c"
          "uni_utils.c")
 
 set(requires "nvs_flash" "btstack" "cmd_nvs" "cmd_system")

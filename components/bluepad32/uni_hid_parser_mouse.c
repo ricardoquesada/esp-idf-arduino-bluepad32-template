@@ -63,6 +63,11 @@ static mouse_instance_t* get_mouse_instance(uni_hid_device_t* d) {
 static const struct mouse_resolution resolutions[] = {
     // Apple Magic Mouse 1st gen
     {0x05ac, 0x030d, NULL, 0.2},
+    // Apple Magic Mouse 2nd gen
+    {0x05ac, 0x0269, NULL, 0.2},
+    {0x004c, 0x0269, NULL, 0.2},  // VID 0x004c... did I get a fake one?
+    // Apple Magic Trackpad 1st gen
+    {0x05ac, 0x030e, NULL, 0.47},
     // TECKNET 2600DPI. Has a "DPI" button. The faster one is unusable. Make the faster usable.
     {0x0a5c, 0x4503, "BM30X mouse", 0.3334},
     // Adesso iMouse M300
@@ -71,8 +76,14 @@ static const struct mouse_resolution resolutions[] = {
     {0x0a5c, 0x0001, "BORND Bluetooth Mouse", 0.6667},
     // Logitech	M336 / M337 / M535
     {0x046d, 0xb016, "Bluetooth Mouse M336/M337/M535", 0.3334},
+    // Logitech M-RCL124 MX Revolution
+    {0x046d, 0xb007, "Logitech MX Revolution Mouse", 0.3334},
+    // Kensigton SureTrack Dual Wireless Mouse (K75351WW)
+    {0xae24, 0x8618, "BT3.0 Mouse", 0.2},
+    // TECKNET "3 Modes, 2400 DPI"
+    {0xae24, 0x8618, "BM20X-3.0", 0.2},
 
-    // No need to add entries where mult & div are both 1
+    // No need to add entries where scale is 1
 };
 
 static int32_t process_mouse_delta(uni_hid_device_t* d, int32_t value) {
@@ -122,7 +133,11 @@ void uni_hid_parser_mouse_setup(uni_hid_device_t* d) {
 }
 
 void uni_hid_parser_mouse_parse_input_report(struct uni_hid_device_s* d, const uint8_t* report, uint16_t len) {
-#if 0
+    ARG_UNUSED(d);
+#if 1
+    ARG_UNUSED(report);
+    ARG_UNUSED(len);
+#else
     time_t t = time(0);
     char buffer[32] = {0};
     strftime(buffer, 9, "%H:%M:%S", localtime(&t));
@@ -207,6 +222,15 @@ void uni_hid_parser_mouse_parse_usage(uni_hid_device_t* d,
                     if (value)
                         gp->buttons |= BUTTON_Y;
                     break;
+                case 0x09:  // Logitech M-RCL124
+                case 0x0a:
+                case 0x0b:
+                case 0x0c:
+                case 0x0d:
+                case 0x0e:
+                case 0x0f:
+                case 0x10:
+                    break;
                 default:
                     logi("Mouse: Unsupported page: 0x%04x, usage: 0x%04x, value=0x%x\n", usage_page, usage, value);
                     break;
@@ -234,6 +258,10 @@ void uni_hid_parser_mouse_parse_usage(uni_hid_device_t* d,
 
         case HID_USAGE_PAGE_CONSUMER: {
             switch (usage) {
+                case 0x00:  // Unassigned, Logitech M-RCL124
+                    break;
+                case HID_USAGE_AC_SEARCH:  // Logitech M-RCL124
+                    break;
                 case HID_USAGE_AC_PAN:  // Logitech M535
                     break;
                 default:
@@ -242,6 +270,9 @@ void uni_hid_parser_mouse_parse_usage(uni_hid_device_t* d,
             }
             break;
         }
+
+        case 0xff00:  // Logitech M-RCL124
+            break;
 
         // unknown usage page
         default:

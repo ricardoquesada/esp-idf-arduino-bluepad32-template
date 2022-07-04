@@ -775,9 +775,12 @@ static int hfp_handle_failed_sco_connection(uint8_t status){
 
     log_info("(e)SCO Connection failed 0x%02x", status);
     switch (status){
-        case ERROR_CODE_UNSUPPORTED_FEATURE_OR_PARAMETER_VALUE:
+        case ERROR_CODE_SCO_AIR_MODE_REJECTED:
+        case ERROR_CODE_SCO_INTERVAL_REJECTED:
+        case ERROR_CODE_SCO_OFFSET_REJECTED:
         case ERROR_CODE_UNSPECIFIED_ERROR:
-        case ERROR_CODE_CONNECTION_REJECTED_DUE_TO_LIMITED_RESOURCES:
+        case ERROR_CODE_UNSUPPORTED_FEATURE_OR_PARAMETER_VALUE:
+        case ERROR_CODE_UNSUPPORTED_REMOTE_FEATURE_UNSUPPORTED_LMP_FEATURE:
             break;
         default:
             return 0;

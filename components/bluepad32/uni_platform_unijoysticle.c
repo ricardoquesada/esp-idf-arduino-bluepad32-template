@@ -25,7 +25,11 @@ limitations under the License.
 
 #include <argtable3/argtable3.h>
 #include <driver/gpio.h>
+#include <esp_chip_info.h>
 #include <esp_console.h>
+#include <esp_idf_version.h>
+#include <esp_ota_ops.h>
+#include <esp_spi_flash.h>
 #include <esp_timer.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/event_groups.h>
@@ -41,7 +45,9 @@ limitations under the License.
 #include "uni_hid_device.h"
 #include "uni_joystick.h"
 #include "uni_mouse_quadrature.h"
+#include "uni_platform.h"
 #include "uni_property.h"
+#include "uni_version.h"
 
 // --- Defines / Enums
 
@@ -67,13 +73,15 @@ limitations under the License.
 //  Competition Pro:     62 cps
 // One "Click-per-second" means that there is one "click" +  "release" in one second
 // So the frequency must be doubled.
-#define AUTOFIRE_FREQ_QUICKGUN_MS (1000 / 7 / 2)          // ~71ms, ~4 frames
-#define AUTOFIRE_FREQ_ZIPSTICK_MS (1000 / 13 / 2)         // ~38ms, ~2 frames
-#define AUTOFIRE_FREQ_QUICKSHOT_MS (1000 / 29 / 2)        // ~17ms, ~1 frame
-#define AUTOFIRE_FREQ_COMPETITION_PRO_MS (1000 / 62 / 2)  // ~8ms, ~1/2 frame
+#define AUTOFIRE_CPS_QUICKGUN (7)          // ~71ms, ~4 frames
+#define AUTOFIRE_CPS_ZIPSTICK (13)         // ~38ms, ~2 frames
+#define AUTOFIRE_CPS_QUICKSHOT (29)        // ~17ms, ~1 frame
+#define AUTOFIRE_CPS_COMPETITION_PRO (62)  // ~8ms, ~1/2 frame
+#define AUTOFIRE_CPS_DEFAULT AUTOFIRE_CPS_QUICKGUN
 
 #define TASK_AUTOFIRE_PRIO (9)
 #define TASK_PUSH_BUTTON_PRIO (8)
+#define TASK_BLINK_LED_PRIO (7)
 
 // Data coming from gamepad axis is different from mouse deltas.
 // They need to be scaled down, otherwise the pointer moves too fast.
@@ -87,9 +95,11 @@ limitations under the License.
 #define ATARIST_MOUSE_DELTA_MAX (28)
 
 enum {
-    MOUSE_EMULATION_FROM_BOARD_MODEL,  // Used internally for NVS
+    MOUSE_EMULATION_FROM_BOARD_MODEL,  // Used internally for NVS (Deprecated)
     MOUSE_EMULATION_AMIGA,
     MOUSE_EMULATION_ATARIST,
+
+    MOUSE_EMULATION_COUNT,
 };
 
 enum {
@@ -111,7 +121,8 @@ enum {
     EVENT_BUTTON_1 = PUSH_BUTTON_1,
 
     // Autofire group
-    EVENT_AUTOFIRE = 0,
+    EVENT_AUTOFIRE_TRIGGER = 0,
+    EVENT_AUTOFIRE_CONFIG = 1,
 };
 
 typedef enum {
@@ -132,6 +143,8 @@ typedef enum {
 
     // Unijosyticle Single port, like Arananet's Unijoy2Amiga
     BOARD_MODEL_UNIJOYSTICLE2_SINGLE_PORT,
+
+    BOARD_MODEL_COUNT,
 } board_model_t;
 
 // Different emulation modes
@@ -151,7 +164,15 @@ enum {
     CMD_SET_GAMEPAD_MODE_MOUSE,     // Mouse mode
     CMD_GET_GAMEPAD_MODE,
 
-    CMD_ENHANCED_MODE_COUNT,
+    CMD_COUNT,
+};
+
+enum button_mode {
+    BUTTON_MODE_NORMAL = 0,  // No special mode
+    BUTTON_MODE_MOUSE,       // Gamepad
+    BUTTON_MODE_ENHANCED,    // Enhanced mode
+
+    BUTTON_MODE_COUNT
 };
 
 // --- Structs / Typedefs
@@ -204,7 +225,7 @@ _Static_assert(sizeof(unijoysticle_instance_t) < HID_DEVICE_MAX_PLATFORM_DATA, "
 
 // --- Function declaration
 
-static board_model_t get_board_model();
+static board_model_t get_uni_model_from_pins();
 
 static unijoysticle_instance_t* get_unijoysticle_instance(const uni_hid_device_t* d);
 static void set_gamepad_seat(uni_hid_device_t* d, uni_gamepad_seat_t seat);
@@ -215,7 +236,7 @@ static void process_mouse(uni_hid_device_t* d,
                           int32_t delta_y,
                           uint16_t buttons);
 static void joy_update_port(const uni_joystick_t* joy, const gpio_num_t* gpios);
-static int get_mouse_emulation();
+static int get_mouse_emulation_from_nvs(void);
 
 // Interrupt handlers
 static void handle_event_button(int button_idx);
@@ -223,22 +244,26 @@ static void handle_event_button(int button_idx);
 // GPIO Interrupt handlers
 static void IRAM_ATTR gpio_isr_handler_button(void* arg);
 
-static void pushbutton_event_loop(void* arg);
-static void auto_fire_loop(void* arg);
+static void pushbutton_event_task(void* arg);
+static void auto_fire_task(void* arg);
 
 static esp_err_t safe_gpio_set_level(gpio_num_t gpio, int value);
-static void enable_bluetooth(bool enabled);
 static void maybe_enable_mouse_timers(void);
 
 // Button callbacks, called from a task that is not BT main thread
 static void toggle_combo_enhanced_gamepad_cb(int button_idx);
-static void toggle_combo_mouse_gamepad_cb(int button_idx);
+static void cycle_gamepad_mode_cb(int button_idx);
 static void swap_ports_cb(int button_idx);
 
 // Commands
 static void swap_ports(void);
-static void set_gamepad_mode(int mode);
+static void set_gamepad_mode(emulation_mode_t mode);
 static void get_gamepad_mode(void);
+static void version(void);
+
+static void set_button_mode(enum button_mode mode);
+static void blink_bt_led(int times);
+static void maybe_enable_bluetooth(bool enabled);
 
 // --- Consts (ROM)
 
@@ -255,7 +280,6 @@ const struct gpio_config gpio_config_univ2 = {
                          .gpio = -1,
                          .callback = NULL,
                      }},
-    .autofire_freq_ms = AUTOFIRE_FREQ_QUICKGUN_MS,
 };
 
 // Unijoysticle v2+: SMD version
@@ -271,7 +295,6 @@ const struct gpio_config gpio_config_univ2plus = {
                          .gpio = -1,
                          .callback = NULL,
                      }},
-    .autofire_freq_ms = AUTOFIRE_FREQ_QUICKGUN_MS,
 };
 
 // Unijoysticle v2 A500
@@ -281,13 +304,12 @@ const struct gpio_config gpio_config_univ2a500 = {
     .leds = {GPIO_NUM_5, GPIO_NUM_12, GPIO_NUM_15},
     .push_buttons = {{
                          .gpio = GPIO_NUM_34,
-                         .callback = toggle_combo_mouse_gamepad_cb,
+                         .callback = cycle_gamepad_mode_cb,
                      },
                      {
                          .gpio = GPIO_NUM_35,
                          .callback = swap_ports_cb,
                      }},
-    .autofire_freq_ms = AUTOFIRE_FREQ_QUICKGUN_MS,
 };
 
 // Arananet's Unijoy2Amiga
@@ -306,23 +328,47 @@ const struct gpio_config gpio_config_univ2singleport = {
                          .gpio = -1,
                          .callback = NULL,
                      }},
-    .autofire_freq_ms = AUTOFIRE_FREQ_QUICKGUN_MS,
 };
 
 static const bd_addr_t zero_addr = {0, 0, 0, 0, 0, 0};
+
+// Keep them in the order of the defines
+static char* uni_models[] = {
+    "Unknown",        // BOARD_MODEL_UNK
+    "2",              // BOARD_MODEL_UNIJOYSTICLE2,
+    "2+",             // BOARD_MODEL_UNIJOYSTICLE2_PLUS,
+    "2 A500",         // BOARD_MODEL_UNIJOYSTICLE2_A500,
+    "2 ST520",        // BOARD_MODEL_UNIJOYSTICLE2_ST520,
+    "2 Single port",  // BOARD_MODEL_UNIJOYSTICLE2_SINGLE_PORT,
+};
+
+// Keep them in the order of the defines
+static char* mouse_modes[] = {
+    "unknown",  // MOUSE_EMULATION_FROM_BOARD_MODEL
+    "amiga",    // MOUSE_EMULATION_AMIGA
+    "atarist",  // MOUSE_EMULATION_ATARIST
+};
 
 // --- Globals (RAM)
 
 const struct gpio_config* g_gpio_config = NULL;
 
 static EventGroupHandle_t g_event_group;
-static EventGroupHandle_t g_auto_fire_group;
+static EventGroupHandle_t g_autofire_group;
 
 struct push_button_state g_push_buttons_state[PUSH_BUTTON_MAX] = {0};
 
 // Autofire
-static bool g_autofire_a_enabled = 0;
-static bool g_autofire_b_enabled = 0;
+static bool g_autofire_a_enabled;
+static bool g_autofire_b_enabled;
+
+// Button "mode". Used in Uni2 A500
+static enum button_mode s_button_mode = BUTTON_MODE_NORMAL;
+static int s_bluetooth_led_on;  // Used as a cache
+static bool s_auto_enable_bluetooth = true;
+// TODO: The Bluetooth Event should have an originator, instead of using this hack.
+// When True, it means the "Unijosyticle" generated the Bluetooth-Enable event.
+static bool s_skip_next_enable_bluetooth_event = false;
 
 // For the console
 static struct {
@@ -335,6 +381,11 @@ static struct {
     struct arg_end* end;
 } set_mouse_emulation_args;
 
+static struct {
+    struct arg_int* value;
+    struct arg_end* end;
+} set_autofire_cps_args;
+
 static btstack_context_callback_registration_t cmd_callback_registration;
 
 //
@@ -344,35 +395,30 @@ static void unijoysticle_init(int argc, const char** argv) {
     ARG_UNUSED(argc);
     ARG_UNUSED(argv);
 
-    board_model_t model = get_board_model();
+    board_model_t model = get_uni_model_from_pins();
 
     switch (model) {
         case BOARD_MODEL_UNIJOYSTICLE2:
-            logi("Hardware detected: Unijoysticle 2\n");
             g_gpio_config = &gpio_config_univ2;
             break;
         case BOARD_MODEL_UNIJOYSTICLE2_PLUS:
-            logi("Hardware detected: Unijoysticle 2+\n");
             g_gpio_config = &gpio_config_univ2plus;
             break;
         case BOARD_MODEL_UNIJOYSTICLE2_A500:
-            logi("Hardware detected: Unijoysticle 2 A500\n");
             g_gpio_config = &gpio_config_univ2a500;
             break;
         case BOARD_MODEL_UNIJOYSTICLE2_ST520:
-            logi("Hardware detected: Unijoysticle 2 ST520\n");
             // Shares the same GPIO pins as the A500 one
             g_gpio_config = &gpio_config_univ2a500;
             break;
         case BOARD_MODEL_UNIJOYSTICLE2_SINGLE_PORT:
-            logi("Hardware detected: Unijoysticle 2 single port\n");
             g_gpio_config = &gpio_config_univ2singleport;
             break;
         default:
-            logi("Hardware detected: ERROR! %d\n", model);
             g_gpio_config = &gpio_config_univ2;
             break;
     }
+    logi("Hardware detected: %s\n", uni_models[model]);
 
     gpio_config_t io_conf;
     io_conf.intr_type = GPIO_INTR_DISABLE;
@@ -424,10 +470,10 @@ static void unijoysticle_init(int argc, const char** argv) {
 
     // Split "events" from "auto_fire", since auto-fire is an on-going event.
     g_event_group = xEventGroupCreate();
-    xTaskCreate(pushbutton_event_loop, "bp.uni.button", 2048, NULL, TASK_PUSH_BUTTON_PRIO, NULL);
+    xTaskCreate(pushbutton_event_task, "bp.uni.button", 2048, NULL, TASK_PUSH_BUTTON_PRIO, NULL);
 
-    g_auto_fire_group = xEventGroupCreate();
-    xTaskCreate(auto_fire_loop, "bp.uni.autofire", 2048, NULL, TASK_AUTOFIRE_PRIO, NULL);
+    g_autofire_group = xEventGroupCreate();
+    xTaskCreate(auto_fire_task, "bp.uni.autofire", 2048, NULL, TASK_AUTOFIRE_PRIO, NULL);
     // xTaskCreatePinnedToCore(event_loop, "event_loop", 2048, NULL, portPRIVILEGE_BIT, NULL, 1);
 }
 
@@ -441,7 +487,7 @@ static void unijoysticle_on_init_complete(void) {
     // * https://www.waitingforfriday.com/?p=827#Commodore_Amiga
     // But they contradict on the Amiga pinout. Using "waitingforfriday" pinout.
     int x1, x2, y1, y2;
-    switch (get_mouse_emulation()) {
+    switch (get_mouse_emulation_from_nvs()) {
         case MOUSE_EMULATION_AMIGA:
             x1 = 1;
             x2 = 3;
@@ -485,8 +531,6 @@ static void unijoysticle_on_init_complete(void) {
     uni_mouse_quadrature_init(QUADRATURE_MOUSE_TASK_CPU);
     uni_mouse_quadrature_setup_port(UNI_MOUSE_QUADRATURE_PORT_0, port_a_x, port_a_y);
     uni_mouse_quadrature_setup_port(UNI_MOUSE_QUADRATURE_PORT_1, port_b_x, port_b_y);
-
-    enable_bluetooth(true);
 }
 
 static void unijoysticle_on_device_connected(uni_hid_device_t* d) {
@@ -502,7 +546,7 @@ static void unijoysticle_on_device_connected(uni_hid_device_t* d) {
     }
 
     if (connected == 2) {
-        enable_bluetooth(false);
+        maybe_enable_bluetooth(false);
     }
 }
 
@@ -525,7 +569,7 @@ static void unijoysticle_on_device_disconnected(uni_hid_device_t* d) {
     }
 
     // Regarless of how many connections are active, enable Bluetooth connections.
-    enable_bluetooth(true);
+    maybe_enable_bluetooth(true);
 
     maybe_enable_mouse_timers();
 }
@@ -555,7 +599,7 @@ static int unijoysticle_on_device_ready(uni_hid_device_t* d) {
         return -1;
 
     int wanted_seat = GAMEPAD_SEAT_A;
-    if (get_board_model() == BOARD_MODEL_UNIJOYSTICLE2_SINGLE_PORT) {
+    if (get_uni_model_from_pins() == BOARD_MODEL_UNIJOYSTICLE2_SINGLE_PORT) {
         // Single port boards only supports one port, so keep using SEAT A
         wanted_seat = GAMEPAD_SEAT_A;
         ins->emu_mode = EMULATION_MODE_SINGLE_JOY;
@@ -610,7 +654,7 @@ static void unijoysticle_on_gamepad_data(uni_hid_device_t* d, uni_gamepad_t* gp)
         case EMULATION_MODE_SINGLE_MOUSE:
             axis_x = gp->axis_x;
             axis_y = gp->axis_y;
-            if (get_mouse_emulation() == MOUSE_EMULATION_ATARIST) {
+            if (get_mouse_emulation_from_nvs() == MOUSE_EMULATION_ATARIST) {
                 if (axis_x < -ATARIST_MOUSE_DELTA_MAX)
                     axis_x = -ATARIST_MOUSE_DELTA_MAX;
                 if (axis_x > ATARIST_MOUSE_DELTA_MAX)
@@ -656,7 +700,31 @@ static int32_t unijoysticle_get_property(uni_platform_property_t key) {
     return !gpio_get_level(g_gpio_config->push_buttons[PUSH_BUTTON_0].gpio);
 }
 
-static void unijoysticle_on_device_oob_event(uni_hid_device_t* d, uni_platform_oob_event_t event) {
+static void unijoysticle_on_oob_event(uni_platform_oob_event_t event, void* data) {
+    if (event == UNI_PLATFORM_OOB_BLUETOOTH_ENABLED) {
+        // Turn on/off the BT led
+        bool enabled = (bool)data;
+        safe_gpio_set_level(g_gpio_config->leds[LED_BT], enabled);
+        s_bluetooth_led_on = enabled;
+
+        logi("unijoysticle: Bluetooth discovery mode is %s\n", enabled ? "enabled" : "disabled");
+
+        if (!enabled && !s_skip_next_enable_bluetooth_event) {
+            // Means that Bluetooth was disabled by user from the console.
+            // If so, leave it disabled. The only way to enable it, is again from the console.
+            s_auto_enable_bluetooth = false;
+        }
+        s_skip_next_enable_bluetooth_event = false;
+        return;
+    }
+
+    if (event != UNI_PLATFORM_OOB_GAMEPAD_SYSTEM_BUTTON) {
+        logi("unijoysticle: Unsupported OOB event: %d\n", event);
+        return;
+    }
+
+    uni_hid_device_t* d = data;
+
     if (d == NULL) {
         loge("ERROR: unijoysticle_on_device_gamepad_event: Invalid NULL device\n");
         return;
@@ -667,7 +735,7 @@ static void unijoysticle_on_device_oob_event(uni_hid_device_t* d, uni_platform_o
         return;
     }
 
-    if (get_board_model() == BOARD_MODEL_UNIJOYSTICLE2_SINGLE_PORT) {
+    if (get_uni_model_from_pins() == BOARD_MODEL_UNIJOYSTICLE2_SINGLE_PORT) {
         logi("INFO: unijoysticle_on_device_oob_event: No effect in single port boards\n");
         return;
     }
@@ -696,7 +764,7 @@ static void unijoysticle_on_device_oob_event(uni_hid_device_t* d, uni_platform_o
         if (uni_bt_conn_is_connected(&tmp_d->conn) && tmp_ins->gamepad_seat != GAMEPAD_SEAT_NONE &&
             tmp_ins->emu_mode == EMULATION_MODE_SINGLE_JOY &&
             ((tmp_d->gamepad.misc_buttons & MISC_BUTTON_SYSTEM) == 0)) {
-            logi("unijoysticle: two swap ports press 'system' button on both gamepads at the same time\n");
+            logi("unijoysticle: to swap ports press 'system' button on both gamepads at the same time\n");
             uni_hid_device_dump_all();
             return;
         }
@@ -729,11 +797,38 @@ static void unijoysticle_device_dump(uni_hid_device_t* d) {
 // Helpers
 //
 
+static const char* get_uni_model_from_nvs(void) {
+    uni_property_value_t def;
+    uni_property_value_t value;
+
+    def.str = "Unknown";
+    value = uni_property_get(UNI_PROPERTY_KEY_UNI_MODEL, UNI_PROPERTY_TYPE_STRING, def);
+    return value.str;
+}
+
+static const char* get_uni_vendor_from_nvs(void) {
+    uni_property_value_t def;
+    uni_property_value_t value;
+
+    def.str = "Unknown";
+    value = uni_property_get(UNI_PROPERTY_KEY_UNI_VENDOR, UNI_PROPERTY_TYPE_STRING, def);
+    return value.str;
+}
+
+static int get_uni_serial_number_from_nvs(void) {
+    uni_property_value_t def;
+    uni_property_value_t value;
+
+    def.u32 = 0;
+    value = uni_property_get(UNI_PROPERTY_KEY_UNI_SERIAL_NUMBER, UNI_PROPERTY_TYPE_U32, def);
+    return value.u32;
+}
+
 static void set_mouse_emulation_to_nvs(int mode) {
     uni_property_value_t value;
     value.u32 = mode;
 
-    uni_property_set(UNI_PROPERTY_KEY_MOUSE_EMULATION, UNI_PROPERTY_TYPE_U32, value);
+    uni_property_set(UNI_PROPERTY_KEY_UNI_MOUSE_EMULATION, UNI_PROPERTY_TYPE_U32, value);
     logi("Done. Restart required. Type 'restart' + Enter\n");
 }
 
@@ -741,23 +836,35 @@ static int get_mouse_emulation_from_nvs() {
     uni_property_value_t value;
     uni_property_value_t def;
 
-    def.u32 = MOUSE_EMULATION_FROM_BOARD_MODEL;
+    def.u32 = MOUSE_EMULATION_AMIGA;
 
-    value = uni_property_get(UNI_PROPERTY_KEY_MOUSE_EMULATION, UNI_PROPERTY_TYPE_U32, def);
+    value = uni_property_get(UNI_PROPERTY_KEY_UNI_MOUSE_EMULATION, UNI_PROPERTY_TYPE_U32, def);
+
+    // Validate return value.
+    if (value.u8 >= MOUSE_EMULATION_COUNT || value.u8 == MOUSE_EMULATION_FROM_BOARD_MODEL)
+        return MOUSE_EMULATION_AMIGA;
     return value.u8;
 }
 
-static int get_mouse_emulation() {
-    int ret;
-    int nvs_setting = get_mouse_emulation_from_nvs();
-    if (nvs_setting == MOUSE_EMULATION_FROM_BOARD_MODEL)
-        ret = (get_board_model() == BOARD_MODEL_UNIJOYSTICLE2_ST520) ? MOUSE_EMULATION_ATARIST : MOUSE_EMULATION_AMIGA;
-    else
-        ret = nvs_setting;
-    return ret;
+static void set_autofire_cps_to_nvs(int cps) {
+    uni_property_value_t value;
+    value.u8 = cps;
+
+    uni_property_set(UNI_PROPERTY_KEY_UNI_AUTOFIRE_CPS, UNI_PROPERTY_TYPE_U8, value);
+    logi("Done\n");
 }
 
-static board_model_t get_board_model() {
+static int get_autofire_cps_from_nvs() {
+    uni_property_value_t value;
+    uni_property_value_t def;
+
+    def.u8 = AUTOFIRE_CPS_DEFAULT;
+
+    value = uni_property_get(UNI_PROPERTY_KEY_UNI_AUTOFIRE_CPS, UNI_PROPERTY_TYPE_U8, def);
+    return value.u8;
+}
+
+static board_model_t get_uni_model_from_pins() {
 #if PLAT_UNIJOYSTICLE_SINGLE_PORT
     // Legacy: Only needed for Arananet's Unijoy2Amiga.
     // Single-port boards should ground GPIO 5. It will be detected in runtime.
@@ -861,7 +968,7 @@ static void process_joystick(uni_hid_device_t* d, uni_gamepad_seat_t seat, const
     }
 
     if (g_autofire_a_enabled || g_autofire_b_enabled) {
-        xEventGroupSetBits(g_auto_fire_group, BIT(EVENT_AUTOFIRE));
+        xEventGroupSetBits(g_autofire_group, BIT(EVENT_AUTOFIRE_TRIGGER));
     }
 }
 
@@ -926,50 +1033,59 @@ static void joy_update_port(const uni_joystick_t* joy, const gpio_num_t* gpios) 
     safe_gpio_set_level(gpios[6], !!joy->button3);
 }
 
-static void pushbutton_event_loop(void* arg) {
-    // timeout of 10s
-    const TickType_t xTicksToWait = 10000 / portTICK_PERIOD_MS;
+static void pushbutton_event_task(void* arg) {
+    // timeout of 100s
+    const TickType_t xTicksToWait = pdMS_TO_TICKS(100000);
     while (1) {
-        EventBits_t uxBits = xEventGroupWaitBits(g_event_group, BIT(EVENT_BUTTON_0) | BIT(EVENT_BUTTON_1), pdTRUE,
-                                                 pdFALSE, xTicksToWait);
+        EventBits_t bits = xEventGroupWaitBits(g_event_group, BIT(EVENT_BUTTON_0) | BIT(EVENT_BUTTON_1), pdTRUE,
+                                               pdFALSE, xTicksToWait);
 
         // timeout ?
-        if (uxBits == 0)
+        if (bits == 0)
             continue;
 
-        if (uxBits & BIT(EVENT_BUTTON_0))
+        if (bits & BIT(EVENT_BUTTON_0))
             handle_event_button(EVENT_BUTTON_0);
 
-        if (uxBits & BIT(EVENT_BUTTON_1))
+        if (bits & BIT(EVENT_BUTTON_1))
             handle_event_button(EVENT_BUTTON_1);
     }
 }
 
-static void auto_fire_loop(void* arg) {
-    // timeout of 10s
-    const TickType_t xTicksToWait = 10000 / portTICK_PERIOD_MS;
-    const TickType_t delayTicks = g_gpio_config->autofire_freq_ms / portTICK_PERIOD_MS;
+static void auto_fire_task(void* arg) {
+    // timeout of 100s
+    const TickType_t timeout = pdMS_TO_TICKS(100000);
+    int ms = 1000 / get_autofire_cps_from_nvs() / 2;
+    TickType_t delay_ticks = pdMS_TO_TICKS(ms);
     while (1) {
-        EventBits_t uxBits = xEventGroupWaitBits(g_auto_fire_group, BIT(EVENT_AUTOFIRE), pdTRUE, pdFALSE, xTicksToWait);
+        EventBits_t bits = xEventGroupWaitBits(
+            g_autofire_group, BIT(EVENT_AUTOFIRE_TRIGGER) | BIT(EVENT_AUTOFIRE_CONFIG), pdTRUE, pdFALSE, timeout);
 
         // timeout ?
-        if (uxBits == 0)
+        if (bits == 0)
             continue;
 
-        while (g_autofire_a_enabled || g_autofire_b_enabled) {
-            if (g_autofire_a_enabled)
-                safe_gpio_set_level(g_gpio_config->port_a[JOY_FIRE], 1);
-            if (g_autofire_b_enabled)
-                safe_gpio_set_level(g_gpio_config->port_b[JOY_FIRE], 1);
+        if (bits & BIT(EVENT_AUTOFIRE_CONFIG)) {
+            ms = 1000 / get_autofire_cps_from_nvs() / 2;
+            delay_ticks = pdMS_TO_TICKS(ms);
+        }
 
-            vTaskDelay(delayTicks);
+        if (bits & BIT(EVENT_AUTOFIRE_TRIGGER)) {
+            while (g_autofire_a_enabled || g_autofire_b_enabled) {
+                if (g_autofire_a_enabled)
+                    safe_gpio_set_level(g_gpio_config->port_a[JOY_FIRE], 1);
+                if (g_autofire_b_enabled)
+                    safe_gpio_set_level(g_gpio_config->port_b[JOY_FIRE], 1);
 
-            if (g_autofire_a_enabled)
-                safe_gpio_set_level(g_gpio_config->port_a[JOY_FIRE], 0);
-            if (g_autofire_b_enabled)
-                safe_gpio_set_level(g_gpio_config->port_b[JOY_FIRE], 0);
+                vTaskDelay(delay_ticks);
 
-            vTaskDelay(delayTicks);
+                if (g_autofire_a_enabled)
+                    safe_gpio_set_level(g_gpio_config->port_a[JOY_FIRE], 0);
+                if (g_autofire_b_enabled)
+                    safe_gpio_set_level(g_gpio_config->port_b[JOY_FIRE], 0);
+
+                vTaskDelay(delay_ticks);
+            }
         }
     }
 }
@@ -1048,6 +1164,34 @@ static void cmd_callback(void* context) {
     }
 }
 
+static void version(void) {
+    esp_chip_info_t info;
+    esp_chip_info(&info);
+
+    const esp_app_desc_t* app_desc = esp_ota_get_app_description();
+
+    logi("Unijoysticle info:\n");
+    logi("\tModel: %s\n", get_uni_model_from_nvs());
+    logi("\tVendor: %s\n", get_uni_vendor_from_nvs());
+    logi("\tSerial Number: %04d\n", get_uni_serial_number_from_nvs());
+    logi("\tDetected Model: Unijoysticle %s\n", uni_models[get_uni_model_from_pins()]);
+    logi("\tMouse Emulation: %s\n", mouse_modes[get_mouse_emulation_from_nvs()]);
+
+    logi("\nFirmware info:\n");
+    logi("\tBluepad32 Version: v%s (%s)\n", UNI_VERSION, app_desc->version);
+    logi("\tIDF Version: %s\n", app_desc->idf_ver);
+    logi("\tCompile Time: %s %s\n", app_desc->date, app_desc->time);
+
+    logi("\nChip info:\n");
+    logi("\tModel: %s\n", info.model == CHIP_ESP32 ? "ESP32" : "Unknown");
+    logi("\tCores: %d\n", info.cores);
+    logi("\tFeature: %s%s%s%s%d%s\n", info.features & CHIP_FEATURE_WIFI_BGN ? "/802.11bgn" : "",
+         info.features & CHIP_FEATURE_BLE ? "/BLE" : "", info.features & CHIP_FEATURE_BT ? "/BT" : "",
+         info.features & CHIP_FEATURE_EMB_FLASH ? "/Embedded-Flash:" : "/External-Flash:",
+         spi_flash_get_chip_size() / (1024 * 1024), " MB");
+    logi("\tRevision Number: %d\n", info.revision);
+}
+
 static void get_gamepad_mode() {
     // Change emulation mode
     int num_devices = 0;
@@ -1089,7 +1233,7 @@ static void get_gamepad_mode() {
     }
 }
 
-static void set_gamepad_mode(int mode) {
+static void set_gamepad_mode(emulation_mode_t mode) {
     // Change emulation mode
     int num_devices = 0;
     uni_hid_device_t* d = NULL;
@@ -1106,6 +1250,7 @@ static void set_gamepad_mode(int mode) {
 
     if (d == NULL) {
         loge("unijoysticle: Cannot find a connected gamepad\n");
+        set_button_mode(BUTTON_MODE_NORMAL);
         return;
     }
 
@@ -1130,25 +1275,31 @@ static void set_gamepad_mode(int mode) {
             set_gamepad_seat(d, GAMEPAD_SEAT_A | GAMEPAD_SEAT_B);
             logi("unijoysticle: Gamepad mode = enhanced\n");
 
-            enable_bluetooth(false);
+            maybe_enable_bluetooth(false);
+
+            set_button_mode(BUTTON_MODE_ENHANCED);
             break;
 
         case EMULATION_MODE_COMBO_JOY_MOUSE:
             if (ins->emu_mode == EMULATION_MODE_COMBO_JOY_JOY) {
                 set_gamepad_seat(d, ins->prev_gamepad_seat);
-                enable_bluetooth(true);
+                maybe_enable_bluetooth(true);
             }
             ins->emu_mode = EMULATION_MODE_COMBO_JOY_MOUSE;
             logi("unijoysticle: Gamepad mode = mouse\n");
+
+            set_button_mode(BUTTON_MODE_MOUSE);
             break;
 
         case EMULATION_MODE_SINGLE_JOY:
             if (ins->emu_mode == EMULATION_MODE_COMBO_JOY_JOY) {
                 set_gamepad_seat(d, ins->prev_gamepad_seat);
-                enable_bluetooth(true);
+                maybe_enable_bluetooth(true);
             }
             ins->emu_mode = EMULATION_MODE_SINGLE_JOY;
             logi("unijoysticle: Gamepad mode = normal\n");
+
+            set_button_mode(BUTTON_MODE_NORMAL);
             break;
 
         default:
@@ -1169,14 +1320,30 @@ static void toggle_combo_enhanced_gamepad_cb(int button_idx) {
     btstack_run_loop_execute_on_main_thread(&cmd_callback_registration);
 }
 
-static void toggle_combo_mouse_gamepad_cb(int button_idx) {
+// Cycles between different gamepad modes: normal -> mouse -> enhanced -> normal -> ...
+static void cycle_gamepad_mode_cb(int button_idx) {
     ARG_UNUSED(button_idx);
-    static bool enabled = false;
 
-    enabled = !enabled;
+    int cmd;
+    int desired_mode = (s_button_mode + 1) % BUTTON_MODE_COUNT;
+
+    switch (desired_mode) {
+        case BUTTON_MODE_NORMAL:
+            cmd = CMD_SET_GAMEPAD_MODE_NORMAL;
+            break;
+        case BUTTON_MODE_MOUSE:
+            cmd = CMD_SET_GAMEPAD_MODE_MOUSE;
+            break;
+        case BUTTON_MODE_ENHANCED:
+            cmd = CMD_SET_GAMEPAD_MODE_ENHANCED;
+            break;
+        default:
+            loge("Unijoysticle: Invalid desired button mode %d\n", desired_mode);
+            return;
+    }
 
     cmd_callback_registration.callback = &cmd_callback;
-    cmd_callback_registration.context = (void*)(enabled ? CMD_SET_GAMEPAD_MODE_MOUSE : CMD_SET_GAMEPAD_MODE_NORMAL);
+    cmd_callback_registration.context = (void*)cmd;
     btstack_run_loop_execute_on_main_thread(&cmd_callback_registration);
 }
 
@@ -1207,6 +1374,14 @@ static int cmd_set_gamepad_mode(int argc, char** argv) {
     return 0;
 }
 
+static int cmd_version(int argc, char** argv) {
+    ARG_UNUSED(argc);
+    ARG_UNUSED(argv);
+
+    version();
+    return 0;
+}
+
 static int cmd_get_gamepad_mode(int argc, char** argv) {
     ARG_UNUSED(argc);
     ARG_UNUSED(argv);
@@ -1227,6 +1402,12 @@ static void swap_ports(void) {
         if (uni_bt_conn_is_connected(&d->conn)) {
             ins = get_unijoysticle_instance(d);
 
+            // Don't swap if gamepad is in Enahnced mode
+            if (ins->emu_mode == EMULATION_MODE_COMBO_JOY_JOY) {
+                // Should it blink oncea on error?
+                return;
+            }
+
             prev_seat = ins->gamepad_seat;
             new_seat = ~prev_seat & GAMEPAD_SEAT_AB_MASK;
             logi("unijoysticle: swap seat for %s: %d -> %d\n", bd_addr_to_str(d->conn.btaddr), prev_seat, new_seat);
@@ -1241,6 +1422,8 @@ static void swap_ports(void) {
     process_joystick(d, GAMEPAD_SEAT_B, &joy);
 
     maybe_enable_mouse_timers();
+
+    blink_bt_led(1);
 }
 
 static void swap_ports_cb(int button_idx) {
@@ -1268,15 +1451,13 @@ static int cmd_set_mouse_emulation(int argc, char** argv) {
         return 1;
     }
 
-    if (strcmp(set_mouse_emulation_args.value->sval[0], "auto") == 0) {
-        set_mouse_emulation_to_nvs(MOUSE_EMULATION_FROM_BOARD_MODEL);
-    } else if (strcmp(set_mouse_emulation_args.value->sval[0], "amiga") == 0) {
+    if (strcmp(set_mouse_emulation_args.value->sval[0], "amiga") == 0) {
         set_mouse_emulation_to_nvs(MOUSE_EMULATION_AMIGA);
     } else if (strcmp(set_mouse_emulation_args.value->sval[0], "atarist") == 0) {
         set_mouse_emulation_to_nvs(MOUSE_EMULATION_ATARIST);
     } else {
         loge("Invalid mouse emulation: %s\n", set_mouse_emulation_args.value->sval[0]);
-        loge("Valid values: 'auto', 'amiga' or 'atarist'\n");
+        loge("Valid values: 'amiga' or 'atarist'\n");
         return 1;
     }
 
@@ -1284,27 +1465,36 @@ static int cmd_set_mouse_emulation(int argc, char** argv) {
 }
 
 static int cmd_get_mouse_emulation(int argc, char** argv) {
-    int nvs = get_mouse_emulation_from_nvs();
-    int real = get_mouse_emulation();
+    int mode = get_mouse_emulation_from_nvs();
 
-    logi("Mouse emulation: ");
-    switch (nvs) {
-        case MOUSE_EMULATION_AMIGA:
-            logi("amiga\n");
-            break;
-        case MOUSE_EMULATION_ATARIST:
-            logi("atarist\n");
-            break;
-        case MOUSE_EMULATION_FROM_BOARD_MODEL:
-            logi("auto (");
-            if (real == MOUSE_EMULATION_AMIGA)
-                logi("amiga)\n");
-            else if (real == MOUSE_EMULATION_ATARIST)
-                logi("atarist)\n");
-            else
-                logi("error)\n");
-            break;
+    if (mode >= MOUSE_EMULATION_COUNT) {
+        logi("Invalid mouse emulation: %d\n", mode);
+        return 1;
     }
+
+    logi("Mouse emulation: %s\n", mouse_modes[mode]);
+    return 0;
+}
+
+static int cmd_set_autofire_cps(int argc, char** argv) {
+    int nerrors = arg_parse(argc, argv, (void**)&set_autofire_cps_args);
+    if (nerrors != 0) {
+        arg_print_errors(stderr, set_autofire_cps_args.end, argv[0]);
+        return 1;
+    }
+    int cps = set_autofire_cps_args.value->ival[0];
+    set_autofire_cps_to_nvs(cps);
+
+    logi("New autofire cps: %d\n", cps);
+
+    xEventGroupSetBits(g_autofire_group, BIT(EVENT_AUTOFIRE_CONFIG));
+    return 0;
+}
+
+static int cmd_get_autofire_cps(int argc, char** argv) {
+    int cps = get_autofire_cps_from_nvs();
+
+    logi("%d\n", cps);
     return 0;
 }
 
@@ -1313,13 +1503,6 @@ static esp_err_t safe_gpio_set_level(gpio_num_t gpio, int value) {
     if (gpio == -1)
         return ESP_OK;
     return gpio_set_level(gpio, value);
-}
-
-static void enable_bluetooth(bool enabled) {
-    safe_gpio_set_level(g_gpio_config->leds[LED_BT], enabled);
-    uni_bluetooth_enable_new_connections_safe(enabled);
-
-    logi("unijoysticle: New gamepad connections %s\n", enabled ? "enabled" : "disabled");
 }
 
 static void maybe_enable_mouse_timers(void) {
@@ -1356,6 +1539,41 @@ static void maybe_enable_mouse_timers(void) {
         uni_mouse_quadrature_pause(UNI_MOUSE_QUADRATURE_PORT_1);
 }
 
+static void task_blink_bt_led(void* arg) {
+    int times = (int)arg;
+
+    while (times--) {
+        safe_gpio_set_level(g_gpio_config->leds[LED_BT], 0);
+        vTaskDelay(pdMS_TO_TICKS(100));
+        safe_gpio_set_level(g_gpio_config->leds[LED_BT], 1);
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+    safe_gpio_set_level(g_gpio_config->leds[LED_BT], s_bluetooth_led_on);
+
+    // Kill itself
+    vTaskDelete(NULL);
+}
+
+static void blink_bt_led(int times) {
+    xTaskCreate(task_blink_bt_led, "bp.uni.blink", 512, (void*)times, TASK_BLINK_LED_PRIO, NULL);
+}
+
+static void set_button_mode(enum button_mode mode) {
+    s_button_mode = mode;
+    int times = mode + 1;
+
+    blink_bt_led(times);
+}
+
+static void maybe_enable_bluetooth(bool enabled) {
+    // Only enable/disable Bluetooth if automatic is on
+    if (!s_auto_enable_bluetooth)
+        return;
+    // We are going to receive a "enable BT" event generated by us. Skip it.
+    s_skip_next_enable_bluetooth_event = true;
+    uni_bluetooth_enable_new_connections_safe(enabled);
+}
+
 //
 // Public
 //
@@ -1365,6 +1583,9 @@ void uni_platform_unijoysticle_register_cmds(void) {
 
     set_mouse_emulation_args.value = arg_str1(NULL, NULL, "<emulation>", "valid options: 'amiga', 'atarist' or 'auto'");
     set_mouse_emulation_args.end = arg_end(2);
+
+    set_autofire_cps_args.value = arg_int1(NULL, NULL, "<cps>", "clicks per second (cps)");
+    set_autofire_cps_args.end = arg_end(2);
 
     const esp_console_cmd_t swap_ports = {
         .command = "swap_ports",
@@ -1410,12 +1631,41 @@ void uni_platform_unijoysticle_register_cmds(void) {
         .func = &cmd_get_mouse_emulation,
     };
 
+    const esp_console_cmd_t set_autofire_cps = {
+        .command = "set_autofire_cps",
+        .help =
+            "Sets the autofire 'clicks per second' (cps)\n"
+            "Default: 7",
+        .hint = NULL,
+        .func = &cmd_set_autofire_cps,
+        .argtable = &set_autofire_cps_args,
+    };
+
+    const esp_console_cmd_t get_autofire_cps = {
+        .command = "get_autofire_cps",
+        .help = "Returns the autofire 'clicks per second' (cps)",
+        .hint = NULL,
+        .func = &cmd_get_autofire_cps,
+    };
+
+    const esp_console_cmd_t version = {
+        .command = "version",
+        .help = "Gets the Unijoysticle version info",
+        .hint = NULL,
+        .func = &cmd_version,
+    };
+
     ESP_ERROR_CHECK(esp_console_cmd_register(&swap_ports));
     ESP_ERROR_CHECK(esp_console_cmd_register(&set_gamepad_mode));
     ESP_ERROR_CHECK(esp_console_cmd_register(&get_gamepad_mode));
 
     ESP_ERROR_CHECK(esp_console_cmd_register(&set_mouse_emulation));
     ESP_ERROR_CHECK(esp_console_cmd_register(&get_mouse_emulation));
+
+    ESP_ERROR_CHECK(esp_console_cmd_register(&set_autofire_cps));
+    ESP_ERROR_CHECK(esp_console_cmd_register(&get_autofire_cps));
+
+    ESP_ERROR_CHECK(esp_console_cmd_register(&version));
 }
 
 struct uni_platform* uni_platform_unijoysticle_create(void) {
@@ -1426,7 +1676,7 @@ struct uni_platform* uni_platform_unijoysticle_create(void) {
         .on_device_connected = unijoysticle_on_device_connected,
         .on_device_disconnected = unijoysticle_on_device_disconnected,
         .on_device_ready = unijoysticle_on_device_ready,
-        .on_device_oob_event = unijoysticle_on_device_oob_event,
+        .on_oob_event = unijoysticle_on_oob_event,
         .on_gamepad_data = unijoysticle_on_gamepad_data,
         .get_property = unijoysticle_get_property,
         .device_dump = unijoysticle_device_dump,

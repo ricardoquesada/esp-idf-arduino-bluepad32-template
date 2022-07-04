@@ -20,6 +20,7 @@ limitations under the License.
 
 #include <nvs.h>
 #include <nvs_flash.h>
+#include <string.h>
 
 #include "uni_debug.h"
 
@@ -34,7 +35,7 @@ void uni_property_nvs_set(const char* key, uni_property_type_t type, uni_propert
 
     err = nvs_open(STORAGE_NAMESPACE, NVS_READWRITE, &nvs_handle);
     if (err != ESP_OK) {
-        loge("Could not open readwrite NVS storage, key: %s\n", key);
+        loge("Could not open readwrite NVS storage, key: %s, err=%#x\n", key, err);
         return;
     }
 
@@ -49,17 +50,19 @@ void uni_property_nvs_set(const char* key, uni_property_type_t type, uni_propert
             float_alias = (uint32_t*)&value.f32;
             err = nvs_set_u32(nvs_handle, key, *float_alias);
             break;
+        case UNI_PROPERTY_TYPE_STRING:
+            err = nvs_set_str(nvs_handle, key, value.str);
+            break;
     }
 
-    err = nvs_set_u32(nvs_handle, key, *float_alias);
     if (err != ESP_OK) {
-        loge("Could not store '%s' in NVS\n", key);
+        loge("Could not store '%s' in NVS, err=%#x\n", key, err);
         goto out;
     }
 
     err = nvs_commit(nvs_handle);
     if (err != ESP_OK) {
-        loge("Could not commit '%s' in NVS\n", key);
+        loge("Could not commit '%s' in NVS, err=%#x\n", key, err);
     }
 
 out:
@@ -70,6 +73,8 @@ uni_property_value_t uni_property_nvs_get(const char* key, uni_property_type_t t
     nvs_handle_t nvs_handle;
     esp_err_t err;
     uni_property_value_t ret;
+    size_t str_len;
+    static char str_ret[64];
 
     err = nvs_open(STORAGE_NAMESPACE, NVS_READONLY, &nvs_handle);
     if (err != ESP_OK) {
@@ -88,11 +93,16 @@ uni_property_value_t uni_property_nvs_get(const char* key, uni_property_type_t t
         case UNI_PROPERTY_TYPE_FLOAT:
             err = nvs_get_u32(nvs_handle, key, (uint32_t*)&ret.f32);
             break;
+        case UNI_PROPERTY_TYPE_STRING:
+            ret.str = str_ret;
+            memset(str_ret, 0, sizeof(str_ret));
+            err = nvs_get_str(nvs_handle, key, str_ret, &str_len);
+            break;
     }
 
     if (err != ESP_OK) {
         // Might be valid if the key was not previously stored
-        logd("could not read property '%s' from NVS\n", key);
+        logd("could not read property '%s' from NVS, err=%#x\n", key, err);
         ret = def;
         /* falltrhough */
     }

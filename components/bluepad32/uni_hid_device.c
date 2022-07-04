@@ -508,6 +508,7 @@ void uni_hid_device_guess_controller_type_from_pid_vid(uni_hid_device_t* d) {
             d->report_parser.parse_feature_report = uni_hid_parser_ds4_parse_feature_report;
             d->report_parser.set_lightbar_color = uni_hid_parser_ds4_set_lightbar_color;
             d->report_parser.set_rumble = uni_hid_parser_ds4_set_rumble;
+            d->report_parser.device_dump = uni_hid_parser_ds4_device_dump;
             logi("Device detected as DUALSHOCK4: 0x%02x\n", type);
             break;
         case CONTROLLER_TYPE_PS5Controller:
@@ -518,6 +519,7 @@ void uni_hid_device_guess_controller_type_from_pid_vid(uni_hid_device_t* d) {
             d->report_parser.set_player_leds = uni_hid_parser_ds5_set_player_leds;
             d->report_parser.set_lightbar_color = uni_hid_parser_ds5_set_lightbar_color;
             d->report_parser.set_rumble = uni_hid_parser_ds5_set_rumble;
+            d->report_parser.device_dump = uni_hid_parser_ds5_device_dump;
             logi("Device detected as DualSense: 0x%02x\n", type);
             break;
         case CONTROLLER_TYPE_8BitdoController:
@@ -536,6 +538,7 @@ void uni_hid_device_guess_controller_type_from_pid_vid(uni_hid_device_t* d) {
             d->report_parser.parse_input_report = uni_hid_parser_wii_parse_input_report;
             d->report_parser.set_player_leds = uni_hid_parser_wii_set_player_leds;
             d->report_parser.set_rumble = uni_hid_parser_wii_set_rumble;
+            d->report_parser.device_dump = uni_hid_parser_wii_device_dump;
             logi("Device detected as Wii controller: 0x%02x\n", type);
             break;
         case CONTROLLER_TYPE_SwitchProController:
@@ -546,6 +549,7 @@ void uni_hid_device_guess_controller_type_from_pid_vid(uni_hid_device_t* d) {
             d->report_parser.parse_input_report = uni_hid_parser_switch_parse_input_report;
             d->report_parser.set_player_leds = uni_hid_parser_switch_set_player_leds;
             d->report_parser.set_rumble = uni_hid_parser_switch_set_rumble;
+            d->report_parser.device_dump = uni_hid_parser_switch_device_dump;
             logi("Device detected as Nintendo Switch Pro controller: 0x%02x\n", type);
             break;
         case CONTROLLER_TYPE_GenericMouse:
@@ -748,7 +752,7 @@ static void process_misc_button_system(uni_hid_device_t* d) {
 
     d->misc_button_wait_release |= MISC_BUTTON_SYSTEM;
 
-    uni_get_platform()->on_device_oob_event(d, UNI_PLATFORM_OOB_GAMEPAD_SYSTEM_BUTTON);
+    uni_get_platform()->on_oob_event(UNI_PLATFORM_OOB_GAMEPAD_SYSTEM_BUTTON, d);
 
     if (requires_delay) {
         d->misc_button_wait_delay |= MISC_BUTTON_SYSTEM;

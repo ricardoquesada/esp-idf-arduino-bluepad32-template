@@ -1216,19 +1216,19 @@ static void get_gamepad_mode() {
 
     switch (ins->emu_mode) {
         case EMULATION_MODE_COMBO_JOY_JOY:
-            logi("Gamepad mode = enhanced\n");
+            logi("enhanced\n");
             break;
 
         case EMULATION_MODE_COMBO_JOY_MOUSE:
-            logi("Gamepad mode = mouse\n");
+            logi("mouse\n");
             break;
 
         case EMULATION_MODE_SINGLE_JOY:
-            logi("Gamepad mode = normal\n");
+            logi("normal\n");
             break;
 
         default:
-            logi("Gamepad mode = unknown\n");
+            logi("unknown\n");
             break;
     }
 }
@@ -1241,9 +1241,8 @@ static void set_gamepad_mode(emulation_mode_t mode) {
         uni_hid_device_t* tmp_d = uni_hid_device_get_instance_for_idx(j);
         if (uni_bt_conn_is_connected(&tmp_d->conn)) {
             num_devices++;
-            if (!uni_hid_device_is_mouse(tmp_d)) {
+            if (!uni_hid_device_is_mouse(tmp_d) && d == NULL) {
                 d = tmp_d;
-                break;
             }
         }
     }
@@ -1267,6 +1266,7 @@ static void set_gamepad_mode(emulation_mode_t mode) {
         case EMULATION_MODE_COMBO_JOY_JOY:
             if (num_devices != 1) {
                 loge("unijoysticle: cannot change mode. Expected num_devices=1, actual=%d\n", num_devices);
+                set_button_mode(BUTTON_MODE_NORMAL);
                 return;
             }
 
@@ -1283,7 +1283,7 @@ static void set_gamepad_mode(emulation_mode_t mode) {
         case EMULATION_MODE_COMBO_JOY_MOUSE:
             if (ins->emu_mode == EMULATION_MODE_COMBO_JOY_JOY) {
                 set_gamepad_seat(d, ins->prev_gamepad_seat);
-                maybe_enable_bluetooth(true);
+                maybe_enable_bluetooth(num_devices < 2);
             }
             ins->emu_mode = EMULATION_MODE_COMBO_JOY_MOUSE;
             logi("unijoysticle: Gamepad mode = mouse\n");
@@ -1294,7 +1294,7 @@ static void set_gamepad_mode(emulation_mode_t mode) {
         case EMULATION_MODE_SINGLE_JOY:
             if (ins->emu_mode == EMULATION_MODE_COMBO_JOY_JOY) {
                 set_gamepad_seat(d, ins->prev_gamepad_seat);
-                maybe_enable_bluetooth(true);
+                maybe_enable_bluetooth(num_devices < 2);
             }
             ins->emu_mode = EMULATION_MODE_SINGLE_JOY;
             logi("unijoysticle: Gamepad mode = normal\n");
@@ -1472,7 +1472,7 @@ static int cmd_get_mouse_emulation(int argc, char** argv) {
         return 1;
     }
 
-    logi("Mouse emulation: %s\n", mouse_modes[mode]);
+    logi("%s\n", mouse_modes[mode]);
     return 0;
 }
 
@@ -1581,7 +1581,7 @@ void uni_platform_unijoysticle_register_cmds(void) {
     set_gamepad_mode_args.value = arg_str1(NULL, NULL, "<mode>", "valid options: 'normal', 'enhanced' or 'mouse'");
     set_gamepad_mode_args.end = arg_end(2);
 
-    set_mouse_emulation_args.value = arg_str1(NULL, NULL, "<emulation>", "valid options: 'amiga', 'atarist' or 'auto'");
+    set_mouse_emulation_args.value = arg_str1(NULL, NULL, "<emulation>", "valid options: 'amiga' or 'atarist'");
     set_mouse_emulation_args.end = arg_end(2);
 
     set_autofire_cps_args.value = arg_int1(NULL, NULL, "<cps>", "clicks per second (cps)");
@@ -1618,7 +1618,7 @@ void uni_platform_unijoysticle_register_cmds(void) {
         .command = "set_mouse_emulation",
         .help =
             "Sets mouse emulation mode.\n"
-            "  Default: auto",
+            "  Default: amiga",
         .hint = NULL,
         .func = &cmd_set_mouse_emulation,
         .argtable = &set_mouse_emulation_args,

@@ -27,6 +27,7 @@ limitations under the License.
 #include "uni_bt_defines.h"
 #include "uni_bt_sdp.h"
 #include "uni_common.h"
+#include "uni_config.h"
 #include "uni_debug.h"
 #include "uni_hci_cmd.h"
 #include "uni_platform.h"
@@ -52,6 +53,7 @@ static fn_t setup_fns[] = {
 };
 static setup_state_t setup_state = SETUP_STATE_BTSTACK_IN_PROGRESS;
 static btstack_packet_callback_registration_t hci_event_callback_registration;
+static btstack_packet_callback_registration_t sm_event_callback_registration;
 
 static void maybe_delete_or_list_link_keys(void) {
     bd_addr_t addr;
@@ -152,6 +154,9 @@ void uni_bt_setup_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t*
                 setup_call_next_fn();
             }
             break;
+        case BTSTACK_EVENT_POWERON_FAILED:
+            loge("Failed to initialize HCI. Please file a Bluepad32 bug\n");
+            break;
         default:
             break;
     }
@@ -233,20 +238,21 @@ int uni_bt_setup_get_gap_min_periodic_lenght(void) {
 }
 
 int uni_bt_setup(void) {
-    // Initialize L2CAP
-    l2cap_init();
-
     int gap = uni_bt_setup_get_gap_security_level();
     gap_set_security_level(gap);
 
     gap_connectable_control(1);
-    // Enable discoverability once we our "BP32 BLE service"
+
+    // Enable once we add support for "BP32 BT Service"
     gap_discoverable_control(0);
 
     gap_set_page_scan_type(PAGE_SCAN_MODE_INTERLACED);
     // gap_set_page_timeout(0x2000);
     // gap_set_page_scan_activity(0x50, 0x12);
     // gap_inquiry_set_scan_activity(0x50, 0x12);
+
+    // Initialize L2CAP
+    l2cap_init();
 
     // Needed for some incoming connections
     uni_bt_sdp_server_init();
@@ -256,6 +262,9 @@ int uni_bt_setup(void) {
     logi("Periodic Inquiry: max=%d, min=%d, len=%d\n", uni_bt_setup_get_gap_max_periodic_lenght(),
          uni_bt_setup_get_gap_min_periodic_lenght(), uni_bt_setup_get_gap_inquiry_lenght());
     logi("Max connected gamepads: %d\n", CONFIG_BLUEPAD32_MAX_DEVICES);
+#ifdef CONFIG_BLUEPAD32_ENABLE_BLE
+    logi("BLE support: enabled\n");
+#endif  // CONFIG_BLUEPAD32_ENABLE_BLE
 
     l2cap_register_service(uni_bluetooth_packet_handler, BLUETOOTH_PSM_HID_INTERRUPT, UNI_BT_L2CAP_CHANNEL_MTU,
                            security_level);
@@ -276,16 +285,16 @@ int uni_bt_setup(void) {
     // btstack_stdin_setup(stdin_process);
     hci_set_master_slave_policy(HCI_ROLE_MASTER);
 
-#ifdef UNI_ENABLE_BLE
+#ifdef CONFIG_BLUEPAD32_ENABLE_BLE
     // register for events from Security Manager
-    sm_event_callback_registration.callback = &sm_packet_handler;
+    sm_event_callback_registration.callback = &uni_bluetooth_sm_packet_handler;
     sm_add_event_handler(&sm_event_callback_registration);
 
     // setup LE device db
     le_device_db_init();
     sm_init();
     gatt_client_init();
-#endif  // UNI_ENABLE_BLE
+#endif  // CONFIG_BLUEPAD32_ENABLE_BLE
 
     // Disable stdout buffering
     setbuf(stdout, NULL);

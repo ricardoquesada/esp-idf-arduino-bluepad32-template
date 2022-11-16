@@ -42,11 +42,14 @@ void uni_bluetooth_dump_devices_safe(void);
 // When enabled, the device enters into "discovery" mode, and new un-paired devices are accepted.
 // When disabled, only devices that have paired before can connect.
 void uni_bluetooth_enable_new_connections_safe(bool enabled);
+// Disconnects a device
+void uni_bluetooth_disconnect_device_safe(int device_idx);
 
 // Private functions.
 // TODO: Should be moved to a new file: uni_bt_state.c
 void uni_bluetooth_process_fsm(uni_hid_device_t* d);
 void uni_bluetooth_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t* packet, uint16_t size);
+void uni_bluetooth_sm_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t* packet, uint16_t size);
 
 #ifdef __cplusplus
 }

@@ -33,9 +33,10 @@ limitations under the License.
 #include "uni_bt_setup.h"
 #include "uni_common.h"
 #include "uni_debug.h"
+#include "uni_gpio.h"
 #include "uni_hid_device.h"
 #include "uni_mouse_quadrature.h"
-#include "uni_platform_unijoysticle.h"
+#include "uni_platform.h"
 
 #ifdef CONFIG_ESP_CONSOLE_USB_CDC
 #error This example is incompatible with USB CDC console. Please try "console_usb" example instead.
@@ -43,6 +44,8 @@ limitations under the License.
 
 static const char* TAG = "console";
 #define PROMPT_STR "bp32"
+
+static char buf_disconnect[16];
 
 static struct {
     struct arg_dbl* value;
@@ -65,6 +68,11 @@ static struct {
     struct arg_int* enabled;
     struct arg_end* end;
 } set_bluetooth_enabled_args;
+
+static struct {
+    struct arg_int* idx;
+    struct arg_end* end;
+} disconnect_device_args;
 
 static int list_devices(int argc, char** argv) {
     // FIXME: Should not belong to "bluetooth"
@@ -192,6 +200,22 @@ static int del_bluetooth_keys(int argc, char** argv) {
     return 0;
 }
 
+static int disconnect_device(int argc, char** argv) {
+    int idx;
+    int nerrors = arg_parse(argc, argv, (void**)&disconnect_device_args);
+    if (nerrors != 0) {
+        arg_print_errors(stderr, disconnect_device_args.end, argv[0]);
+        return 1;
+    }
+
+    idx = disconnect_device_args.idx->ival[0];
+    if (idx < 0 || idx >= CONFIG_BLUEPAD32_MAX_DEVICES)
+        return 1;
+
+    uni_bluetooth_disconnect_device_safe(idx);
+    return 0;
+}
+
 static void register_bluepad32() {
     mouse_set_args.value = arg_dbl1(NULL, NULL, "<value>", "Global mouse scale factor. Higher means faster");
     mouse_set_args.end = arg_end(2);
@@ -207,6 +231,10 @@ static void register_bluepad32() {
     set_bluetooth_enabled_args.enabled =
         arg_int1(NULL, NULL, "<0 | 1>", "Whether to enable Bluetooth incoming connections");
     set_bluetooth_enabled_args.end = arg_end(2);
+
+    snprintf(buf_disconnect, sizeof(buf_disconnect) - 1, "<0 - %d>", CONFIG_BLUEPAD32_MAX_DEVICES - 1);
+    disconnect_device_args.idx = arg_int1(NULL, NULL, buf_disconnect, "Device index to disconnect");
+    disconnect_device_args.end = arg_end(2);
 
     const esp_console_cmd_t cmd_list_devices = {
         .command = "list_devices",
@@ -290,6 +318,14 @@ static void register_bluepad32() {
         .func = &del_bluetooth_keys,
     };
 
+    const esp_console_cmd_t cmd_disconnect_device = {
+        .command = "disconnect",
+        .help = "Disconnects a gamepad/mouse/etc.",
+        .hint = NULL,
+        .func = &disconnect_device,
+        .argtable = &disconnect_device_args,
+    };
+
     ESP_ERROR_CHECK(esp_console_cmd_register(&cmd_set_gap_security_level));
     ESP_ERROR_CHECK(esp_console_cmd_register(&cmd_get_gap_security_level));
     ESP_ERROR_CHECK(esp_console_cmd_register(&cmd_set_gap_periodic_inquiry));
@@ -300,6 +336,7 @@ static void register_bluepad32() {
     ESP_ERROR_CHECK(esp_console_cmd_register(&cmd_list_bluetooth_keys));
     ESP_ERROR_CHECK(esp_console_cmd_register(&cmd_del_bluetooth_keys));
     ESP_ERROR_CHECK(esp_console_cmd_register(&cmd_set_bluetooth_enabled));
+    ESP_ERROR_CHECK(esp_console_cmd_register(&cmd_disconnect_device));
 }
 
 void uni_console_init(void) {
@@ -328,9 +365,10 @@ void uni_console_init(void) {
 #endif  // CONFIG_BLUEPAD32_CONSOLE_NVS_COMMAND_ENABLE
 
     register_bluepad32();
-#if CONFIG_BLUEPAD32_PLATFORM_UNIJOYSTICLE
-    uni_platform_unijoysticle_register_cmds();
-#endif  // CONFIG_BLUEPAD32_PLATFORM_UNIJOYSTICLE
+    uni_gpio_register_cmds();
+
+    if (uni_get_platform()->register_console_cmds)
+        uni_get_platform()->register_console_cmds();
 
     ESP_ERROR_CHECK(esp_console_new_repl_uart(&uart_config, &repl_config, &repl));
 

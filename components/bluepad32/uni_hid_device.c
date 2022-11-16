@@ -125,12 +125,6 @@ uni_hid_device_t* uni_hid_device_get_instance_for_connection_handle(hci_con_hand
     return NULL;
 }
 
-uni_hid_device_t* uni_hid_device_get_instance_for_idx(int idx) {
-    if (idx < 0 || idx >= CONFIG_BLUEPAD32_MAX_DEVICES)
-        return NULL;
-    return &g_devices[idx];
-}
-
 uni_hid_device_t* uni_hid_device_get_instance_with_predicate(uni_hid_device_predicate_t predicate, void* data) {
     for (int i = 0; i < CONFIG_BLUEPAD32_MAX_DEVICES; i++) {
         // Only "ready" devices are propagated
@@ -140,6 +134,20 @@ uni_hid_device_t* uni_hid_device_get_instance_with_predicate(uni_hid_device_pred
             return &g_devices[i];
     }
     return NULL;
+}
+
+uni_hid_device_t* uni_hid_device_get_instance_for_idx(int idx) {
+    if (idx < 0 || idx >= CONFIG_BLUEPAD32_MAX_DEVICES)
+        return NULL;
+    return &g_devices[idx];
+}
+
+int uni_hid_device_get_idx_for_instance(uni_hid_device_t* d) {
+    int idx = (d - &g_devices[0]) / sizeof(g_devices[0]);
+
+    if (idx < 0 || idx >= CONFIG_BLUEPAD32_MAX_DEVICES)
+        return -1;
+    return idx;
 }
 
 uni_hid_device_t* uni_hid_device_get_first_device_with_state(uni_bt_conn_state_t state) {
@@ -397,7 +405,7 @@ void uni_hid_device_delete(uni_hid_device_t* d) {
 }
 
 void uni_hid_device_dump_device(uni_hid_device_t* d) {
-    logi("%s\n", bd_addr_to_str(d->conn.btaddr));
+    logi("\tbtaddr: %s\n", bd_addr_to_str(d->conn.btaddr));
     logi("\tbt: handle=%d, ctrl_cid=0x%04x, intr_cid=0x%04x, cod=0x%08x, flags=0x%08x, incoming=%d\n", d->conn.handle,
          d->conn.control_cid, d->conn.interrupt_cid, d->cod, d->flags, d->conn.incoming);
     logi("\tmodel: vid=0x%04x, pid=0x%04x, model='%s', name='%s'\n", d->vendor_id, d->product_id,
@@ -413,6 +421,7 @@ void uni_hid_device_dump_all(void) {
     for (int i = 0; i < CONFIG_BLUEPAD32_MAX_DEVICES; i++) {
         if (bd_addr_cmp(g_devices[i].conn.btaddr, zero_addr) == 0)
             continue;
+        logi("idx=%d:\n", i);
         uni_hid_device_dump_device(&g_devices[i]);
         logi("\n");
     }

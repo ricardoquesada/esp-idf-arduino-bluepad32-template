@@ -146,7 +146,12 @@ class Controller {
     // 0 = Unknown Battery state
     // 1 = Battery Empty
     // 255 = Battery full
-    uint8_t getBattery() const { return _data.battery; }
+    uint8_t battery() const { return _data.battery; }
+
+    bool isGamepad() const { return _data.klass == UNI_CONTROLLER_CLASS_GAMEPAD; }
+    bool isMouse() const { return _data.klass == UNI_CONTROLLER_CLASS_MOUSE; }
+    bool isBalanceBoard() const { return _data.klass == UNI_CONTROLLER_CLASS_BALANCE_BOARD; }
+    int8_t index() const { return _idx; }
 
     bool isConnected() const;
 

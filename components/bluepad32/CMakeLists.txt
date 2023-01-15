@@ -1,9 +1,11 @@
-set(srcs "uni_bluetooth.c"
+set(srcs "uni_balance_board.c"
+         "uni_bluetooth.c"
          "uni_bt_conn.c"
          "uni_bt_sdp.c"
          "uni_bt_setup.c"
          "uni_circular_buffer.c"
          "uni_console.c"
+         "uni_controller.c"
          "uni_esp32.c"
          "uni_gamepad.c"
          "uni_gpio.c"
@@ -27,6 +29,7 @@ set(srcs "uni_bluetooth.c"
          "uni_joystick.c"
          "uni_log.c"
          "uni_main.c"
+         "uni_mouse.c"
          "uni_mouse_quadrature.c"
          "uni_platform.c"
          "uni_platform_arduino.c"
@@ -41,7 +44,15 @@ set(srcs "uni_bluetooth.c"
          "uni_property_nvs.c"
          "uni_utils.c")
 
-set(requires "nvs_flash" "btstack" "cmd_nvs" "cmd_system" "app_update")
+set(requires "nvs_flash" "btstack" "app_update" "esp_timer")
+
+if("${IDF_VERSION_MAJOR}" GREATER_EQUAL 5)
+    # When using ESP-IDF v5+, use "normal" components
+    list(APPEND requires "cmd_nvs" "cmd_system")
+else()
+    # Use legacy components when compiled using ESP-IDF v4.4
+    list(APPEND requires "cmd_nvs_4.4" "cmd_system_4.4")
+endif()
 
 # See: https://gitlab.com/ricardoquesada/bluepad32/-/issues/9
 if(DEFINED ENV{BLUEPAD32_ARDUINO})

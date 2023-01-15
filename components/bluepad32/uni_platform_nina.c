@@ -32,7 +32,6 @@ limitations under the License.
 
 #include "uni_platform_nina.h"
 
-#include <driver/gpio.h>
 #include <driver/spi_slave.h>
 #include <driver/uart.h>
 #include <esp_timer.h>
@@ -40,18 +39,19 @@ limitations under the License.
 #include <freertos/event_groups.h>
 #include <freertos/queue.h>
 #include <freertos/semphr.h>
+#include <hal/gpio_ll.h>
 #include <math.h>
 
 #include "sdkconfig.h"
 #include "uni_bluetooth.h"
 #include "uni_common.h"
 #include "uni_config.h"
-#include "uni_debug.h"
 #include "uni_esp32.h"
 #include "uni_gamepad.h"
 #include "uni_gpio.h"
 #include "uni_hid_device.h"
 #include "uni_hid_parser.h"
+#include "uni_log.h"
 #include "uni_platform.h"
 #include "uni_version.h"
 
@@ -78,17 +78,13 @@ limitations under the License.
 #define DMA_CHANNEL 1
 
 enum {
-    NINA_GAMEPAD_INVALID = -1,
+    NINA_CONTROLLER_INVALID = -1,
 };
 
 // Instead of using the uni_gamepad, we create one.
 // This is because this "struct" is sent via the wire and the format, padding,
 // etc. must not change.
 typedef struct __attribute__((packed)) {
-    // Used to tell "master" who is the owner of this data. 4 gamepads can be
-    // connected, this value indicates which gamepad it is. Goes from 0 to 3.
-    uint8_t idx;
-
     // Usage Page: 0x01 (Generic Desktop Controls)
     uint8_t dpad;
     int32_t axis_x;
@@ -105,17 +101,49 @@ typedef struct __attribute__((packed)) {
 
     // Misc buttons (from 0x0c (Consumer) and others)
     uint8_t misc_buttons;
-
-    // Not related to the state:
-    uint8_t type;  // model: PS4, PS3, Xbox, etc..?
-                   // Should be moved to nina_gamepad_properties_t
 } nina_gamepad_t;
+
+typedef struct __attribute__((packed)) {
+    int32_t delta_x;
+    int32_t delta_y;
+    uint8_t buttons;
+    uint8_t misc_buttons;
+} nina_mouse_t;
+
+typedef struct __attribute__((packed)) {
+    uint16_t tr;      // Top right
+    uint16_t br;      // Bottom right
+    uint16_t tl;      // Top left
+    uint16_t bl;      // Bottom left
+    int temperature;  // Temperature
+} nina_balance_board_t;
+
+enum {
+    CONTROLLER_CLASS_NONE,
+    CONTROLLER_CLASS_GAMEPAD,
+    CONTROLLER_CLASS_MOUSE,
+    CONTROLLER_CLASS_KEYBOARD,
+    CONTROLLER_CLASS_BALANCE_BOARD,
+};
+
+typedef struct __attribute__((packed)) {
+    int8_t idx;
+    // Class of controller: gamepad, mouse, balance, etc.
+    uint8_t klass;
+    union {
+        nina_gamepad_t gamepad;
+        nina_mouse_t mouse;
+        nina_balance_board_t balance;
+    };
+    uint8_t battery;
+} nina_controller_t;
 
 enum {
     PROPERTY_FLAG_RUMBLE = BIT(0),
     PROPERTY_FLAG_PLAYER_LEDS = BIT(1),
     PROPERTY_FLAG_PLAYER_LIGHTBAR = BIT(2),
 
+    PROPERTY_FLAG_BALANCE_BOARD = BIT(12),
     PROPERTY_FLAG_GAMEPAD = BIT(13),
     PROPERTY_FLAG_MOUSE = BIT(14),
     PROPERTY_FLAG_KEYBOARD = BIT(15),
@@ -131,7 +159,7 @@ typedef struct __attribute__((packed)) {
     uint16_t vendor_id;   // VID
     uint16_t product_id;  // PID
     uint16_t flags;       // Features like Rumble, LEDs, etc.
-} nina_gamepad_properties_t;
+} nina_controller_properties_t;
 
 //
 // Globals
@@ -148,16 +176,16 @@ static const char FIRMWARE_VERSION[] = "";
 // NINA device "instance"
 typedef struct nina_instance_s {
     // Gamepad index, from 0 to CONFIG_BLUEPAD32_MAX_DEVICES
-    // NINA_GAMEPAD_INVALID means gamepad was not assigned yet.
-    int8_t gamepad_idx;
+    // NINA_CONTROLLER_INVALID means gamepad was not assigned yet.
+    int8_t controller_idx;
 } nina_instance_t;
 _Static_assert(sizeof(nina_instance_t) < HID_DEVICE_MAX_PLATFORM_DATA, "NINA intance too big");
 
 static SemaphoreHandle_t _ready_semaphore = NULL;
 static QueueHandle_t _pending_queue = NULL;
-static SemaphoreHandle_t _gamepad_mutex = NULL;
-static nina_gamepad_t _gamepads[CONFIG_BLUEPAD32_MAX_DEVICES];
-static nina_gamepad_properties_t _gamepads_properties[CONFIG_BLUEPAD32_MAX_DEVICES];
+static SemaphoreHandle_t controller_mutex = NULL;
+static nina_controller_t _controllers[CONFIG_BLUEPAD32_MAX_DEVICES];
+static nina_controller_properties_t _controllers_properties[CONFIG_BLUEPAD32_MAX_DEVICES];
 static volatile uni_gamepad_seat_t _gamepad_seats;
 
 static nina_instance_t* get_nina_instance(uni_hid_device_t* d);
@@ -182,7 +210,7 @@ enum {
 };
 
 typedef struct {
-    uint8_t gamepad_idx;
+    uint8_t controller_idx;
     uint8_t cmd;
     uint8_t args[8];
 } pending_request_t;
@@ -234,7 +262,7 @@ enum {
 // Command 0x00
 static int request_protocol_version(const uint8_t command[], uint8_t response[]) {
 #define PROTOCOL_VERSION_HI 0x01
-#define PROTOCOL_VERSION_LO 0x02
+#define PROTOCOL_VERSION_LO 0x03
 
     response[2] = 1;  // Number of parameters
     response[3] = 2;  // Param len
@@ -252,24 +280,28 @@ static int request_gamepads_data(const uint8_t command[], uint8_t response[]) {
     //      3: param len (sizeof(_gamepads[0])
     //      4: gamepad N data
 
-    xSemaphoreTake(_gamepad_mutex, portMAX_DELAY);
+    xSemaphoreTake(controller_mutex, portMAX_DELAY);
 
-    int total_gamepads = 0;
+    int total_controllers = 0;
     int offset = 3;
     for (int i = 0; i < CONFIG_BLUEPAD32_MAX_DEVICES; i++) {
-        if (_gamepad_seats & (1 << i)) {
-            total_gamepads++;
+        if (_gamepad_seats & BIT(i)) {
+            total_controllers++;
             // Update param len
-            response[offset] = sizeof(_gamepads[0]);
+            // +1 is for the "idx" field
+            response[offset] = sizeof(_controllers[0].gamepad) + 1;
             // Update param (data)
-            memcpy(&response[offset + 1], &_gamepads[i], sizeof(_gamepads[0]));
-            offset += sizeof(_gamepads[0]) + 1;
+            response[offset + 1] = _controllers[i].idx;
+            memcpy(&response[offset + 2], &_controllers[i].gamepad, sizeof(_controllers[0].gamepad));
+            // +1 for len
+            // +1 for idx
+            offset += sizeof(_controllers[0].gamepad) + 1 + 1;
         }
     }
 
-    response[2] = total_gamepads;  // total params
+    response[2] = total_controllers;  // total params
 
-    xSemaphoreGive(_gamepad_mutex);
+    xSemaphoreGive(controller_mutex);
 
     // "offset" has the total length
     return offset;
@@ -292,7 +324,7 @@ static int request_set_gamepad_player_leds(const uint8_t command[], uint8_t resp
     }
 
     pending_request_t request = (pending_request_t){
-        .gamepad_idx = idx,
+        .controller_idx = idx,
         .cmd = PENDING_REQUEST_CMD_PLAYER_LEDS,
         .args[0] = command[6],
     };
@@ -323,7 +355,7 @@ static int request_set_gamepad_color_led(const uint8_t command[], uint8_t respon
     }
 
     pending_request_t request = (pending_request_t){
-        .gamepad_idx = idx,
+        .controller_idx = idx,
         .cmd = PENDING_REQUEST_CMD_LIGHTBAR_COLOR,
         .args[0] = command[6],
         .args[1] = command[7],
@@ -356,7 +388,7 @@ static int request_set_gamepad_rumble(const uint8_t command[], uint8_t response[
     }
 
     pending_request_t request = (pending_request_t){
-        .gamepad_idx = idx,
+        .controller_idx = idx,
         .cmd = PENDING_REQUEST_CMD_RUMBLE,
         .args[0] = command[6],
         .args[1] = command[7],
@@ -397,21 +429,21 @@ static int request_get_gamepad_properties(const uint8_t command[], uint8_t respo
         return 7;
     };
 
-    response[2] = 2;                                // Number of parameters
-    response[3] = 1;                                // Param len
-    response[4] = RESPONSE_OK;                      // Ok
-    response[5] = sizeof(_gamepads_properties[0]);  // Param len
+    response[2] = 2;                                   // Number of parameters
+    response[3] = 1;                                   // Param len
+    response[4] = RESPONSE_OK;                         // Ok
+    response[5] = sizeof(_controllers_properties[0]);  // Param len
 
-    xSemaphoreTake(_gamepad_mutex, portMAX_DELAY);
+    xSemaphoreTake(controller_mutex, portMAX_DELAY);
     for (int i = 0; i < CONFIG_BLUEPAD32_MAX_DEVICES; i++) {
-        if (_gamepads_properties[i].idx == idx) {
-            memcpy(&response[6], &_gamepads_properties[i], sizeof(_gamepads_properties[0]));
+        if (_controllers_properties[i].idx == idx) {
+            memcpy(&response[6], &_controllers_properties[i], sizeof(_controllers_properties[0]));
             break;
         }
     }
-    xSemaphoreGive(_gamepad_mutex);
+    xSemaphoreGive(controller_mutex);
 
-    return 6 + sizeof(nina_gamepad_properties_t);
+    return 6 + sizeof(nina_controller_properties_t);
 }
 
 // Command 0x07
@@ -439,7 +471,7 @@ static int request_disconnect_gamepad(const uint8_t command[], uint8_t response[
     }
 
     pending_request_t request = (pending_request_t){
-        .gamepad_idx = idx,
+        .controller_idx = idx,
         .cmd = PENDING_REQUEST_CMD_DISCONNECT,
     };
     xQueueSendToBack(_pending_queue, &request, (TickType_t)0);
@@ -449,6 +481,37 @@ exit:
     response[3] = 1;  // param len
     response[4] = ret;
     return 5;
+}
+
+// Command 0x09
+static int request_controllers_data(const uint8_t command[], uint8_t response[]) {
+    // Returned struct:
+    // --- generic to all requests
+    // byte 2: number of parameters (contains the number of controllers)
+    //      3: param len (sizeof(_controllers[0])
+    //      4: gamepad N data
+
+    xSemaphoreTake(controller_mutex, portMAX_DELAY);
+
+    int total_controllers = 0;
+    int offset = 3;
+    for (int i = 0; i < CONFIG_BLUEPAD32_MAX_DEVICES; i++) {
+        if (_gamepad_seats & BIT(i)) {
+            total_controllers++;
+            // Update param len
+            response[offset] = sizeof(_controllers[0]);
+            // Update param (data)
+            memcpy(&response[offset + 1], &_controllers[i], sizeof(_controllers[0]));
+            offset += sizeof(_controllers[0]) + 1;
+        }
+    }
+
+    response[2] = total_controllers;  // total params
+
+    xSemaphoreGive(controller_mutex);
+
+    // "offset" has the total length
+    return offset;
 }
 
 // Command 0x1a
@@ -620,7 +683,7 @@ const command_handler_t command_handlers[] = {
     request_get_gamepad_properties,        // get gamepad properties like BTAddr, VID/PID, etc.
     request_enable_bluetooth_connections,  // Enable/Disable bluetooth connection
     request_disconnect_gamepad,            // Disconnect gamepad
-    NULL,
+    request_controllers_data,              // Gamepad, Mouse, Balance. Deprecates request_gamepads_data
     NULL,
     NULL,
     NULL,
@@ -746,7 +809,7 @@ static int process_request(const uint8_t command[], int command_len, uint8_t res
         CMD_START = 0xe0,
         CMD_END = 0xee,
         CMD_ERR = 0xef,
-        CMD_REPLY_FLAG = 1 << 7,
+        CMD_REPLY_FLAG = BIT(7),
     };
 
     int response_len = 0;
@@ -791,12 +854,12 @@ static int process_request(const uint8_t command[], int command_len, uint8_t res
 }
 
 // Called after a transaction is queued and ready for pickup by master.
-static void IRAM_ATTR spi_post_setup_cb(spi_slave_transaction_t* trans) {
+static void spi_post_setup_cb(spi_slave_transaction_t* trans) {
     ARG_UNUSED(trans);
     xSemaphoreGiveFromISR(_ready_semaphore, NULL);
 }
 
-static void IRAM_ATTR isr_handler_on_chip_select(void* arg) {
+static void isr_handler_on_chip_select(void* arg) {
     gpio_set_level(GPIO_READY, 1);
 }
 
@@ -874,7 +937,7 @@ static void process_pending_requests(void) {
     pending_request_t request;
 
     while (xQueueReceive(_pending_queue, &request, (TickType_t)0) == pdTRUE) {
-        int idx = request.gamepad_idx;
+        int idx = request.controller_idx;
         uni_hid_device_t* d = uni_hid_device_get_instance_with_predicate(predicate_nina_index, (void*)idx);
         if (d == NULL) {
             loge("NINA: device cannot be found while processing pending request\n");
@@ -931,8 +994,8 @@ static void nina_init(int argc, const char** argv) {
 }
 
 static void nina_on_init_complete(void) {
-    _gamepad_mutex = xSemaphoreCreateMutex();
-    assert(_gamepad_mutex != NULL);
+    controller_mutex = xSemaphoreCreateMutex();
+    assert(controller_mutex != NULL);
 
     _pending_queue = xQueueCreate(MAX_PENDING_REQUESTS, sizeof(pending_request_t));
     assert(_pending_queue != NULL);
@@ -946,24 +1009,27 @@ static void nina_on_init_complete(void) {
 static void nina_on_device_connected(uni_hid_device_t* d) {
     nina_instance_t* ins = get_nina_instance(d);
     memset(ins, 0, sizeof(*ins));
-    ins->gamepad_idx = NINA_GAMEPAD_INVALID;
+    ins->controller_idx = NINA_CONTROLLER_INVALID;
 }
 
 static void nina_on_device_disconnected(uni_hid_device_t* d) {
     nina_instance_t* ins = get_nina_instance(d);
-    // Only process it if the gamepad has been assigned before
-    if (ins->gamepad_idx != NINA_GAMEPAD_INVALID) {
-        if (ins->gamepad_idx < 0 || ins->gamepad_idx >= CONFIG_BLUEPAD32_MAX_DEVICES) {
-            loge("NINA: unexpected gamepad idx, got: %d, want: [0-%d]\n", ins->gamepad_idx,
+    // Only process it if the controller has been assigned before
+    if (ins->controller_idx != NINA_CONTROLLER_INVALID) {
+        if (ins->controller_idx < 0 || ins->controller_idx >= CONFIG_BLUEPAD32_MAX_DEVICES) {
+            loge("NINA: unexpected controller idx, got: %d, want: [0-%d]\n", ins->controller_idx,
                  CONFIG_BLUEPAD32_MAX_DEVICES);
             return;
         }
-        _gamepad_seats &= ~(1 << ins->gamepad_idx);
-        memset(&_gamepads[ins->gamepad_idx], 0, sizeof(_gamepads[ins->gamepad_idx]));
-        _gamepads[ins->gamepad_idx].idx = NINA_GAMEPAD_INVALID;
-        memset(&_gamepads_properties[ins->gamepad_idx], 0, sizeof(_gamepads_properties[ins->gamepad_idx]));
-        _gamepads_properties[ins->gamepad_idx].idx = NINA_GAMEPAD_INVALID;
-        ins->gamepad_idx = NINA_GAMEPAD_INVALID;
+        _gamepad_seats &= ~BIT(ins->controller_idx);
+
+        memset(&_controllers[ins->controller_idx], 0, sizeof(_controllers[0]));
+        _controllers[ins->controller_idx].idx = NINA_CONTROLLER_INVALID;
+
+        memset(&_controllers_properties[ins->controller_idx], 0, sizeof(_controllers_properties[0]));
+        _controllers_properties[ins->controller_idx].idx = NINA_CONTROLLER_INVALID;
+
+        ins->controller_idx = NINA_CONTROLLER_INVALID;
     }
 }
 
@@ -975,53 +1041,57 @@ static int nina_on_device_ready(uni_hid_device_t* d) {
     }
 
     nina_instance_t* ins = get_nina_instance(d);
-    if (ins->gamepad_idx != -1) {
-        loge("NINA: unexpected value for on_device_ready; got: %d, want: -1\n", ins->gamepad_idx);
+    if (ins->controller_idx != NINA_CONTROLLER_INVALID) {
+        loge("NINA: unexpected value for on_device_ready; got: %d, want: -1\n", ins->controller_idx);
         return -1;
     }
 
     // Find first available gamepad
     for (int i = 0; i < CONFIG_BLUEPAD32_MAX_DEVICES; i++) {
-        if ((_gamepad_seats & (1 << i)) == 0) {
-            ins->gamepad_idx = i;
-            _gamepad_seats |= (1 << i);
+        if ((_gamepad_seats & BIT(i)) == 0) {
+            ins->controller_idx = i;
+            _gamepad_seats |= BIT(i);
             break;
         }
     }
 
+    if (ins->controller_idx == NINA_CONTROLLER_INVALID) {
+        loge("NINA: could not found valid seat for gamepad\n");
+        return -1;
+    }
+
     // This is how "client" knows which gamepad emitted the events.
-    int idx = ins->gamepad_idx;
-    _gamepads[idx].idx = ins->gamepad_idx;
-    _gamepads[idx].type = d->controller_type;
+    int idx = ins->controller_idx;
+    _controllers[idx].idx = idx;
 
     // FIXME: To save RAM gamepad_properties should be updated at "request time".
     // It requires to add a mutex in uni_hid_device, and that has its own issues.
     // As a quick hack, it is easier to copy them now.
-    _gamepads_properties[idx].idx = ins->gamepad_idx;
-    _gamepads_properties[idx].type = d->controller_type;
-    _gamepads_properties[idx].subtype = d->controller_subtype;
-    _gamepads_properties[idx].vendor_id = d->vendor_id;
-    _gamepads_properties[idx].product_id = d->product_id;
-    _gamepads_properties[idx].flags = (d->report_parser.set_player_leds ? PROPERTY_FLAG_PLAYER_LEDS : 0) |
-                                      (d->report_parser.set_rumble ? PROPERTY_FLAG_RUMBLE : 0) |
-                                      (d->report_parser.set_lightbar_color ? PROPERTY_FLAG_PLAYER_LIGHTBAR : 0);
+    _controllers_properties[idx].idx = idx;
+    _controllers_properties[idx].type = d->controller_type;
+    _controllers_properties[idx].subtype = d->controller_subtype;
+    _controllers_properties[idx].vendor_id = d->vendor_id;
+    _controllers_properties[idx].product_id = d->product_id;
+    _controllers_properties[idx].flags = (d->report_parser.set_player_leds ? PROPERTY_FLAG_PLAYER_LEDS : 0) |
+                                         (d->report_parser.set_rumble ? PROPERTY_FLAG_RUMBLE : 0) |
+                                         (d->report_parser.set_lightbar_color ? PROPERTY_FLAG_PLAYER_LIGHTBAR : 0);
 
     // TODO: Most probably a device cannot be a mouse a keyboard and a gamepad at the same time,
     // and 2 bits should be more than enough.
     // But for simplicity, let's use one bit for each category.
     if (uni_hid_device_is_mouse(d))
-        _gamepads_properties[idx].flags |= PROPERTY_FLAG_MOUSE;
+        _controllers_properties[idx].flags |= PROPERTY_FLAG_MOUSE;
 
     if (uni_hid_device_is_keyboard(d))
-        _gamepads_properties[idx].flags |= PROPERTY_FLAG_KEYBOARD;
+        _controllers_properties[idx].flags |= PROPERTY_FLAG_KEYBOARD;
 
     if (uni_hid_device_is_gamepad(d))
-        _gamepads_properties[idx].flags |= PROPERTY_FLAG_GAMEPAD;
+        _controllers_properties[idx].flags |= PROPERTY_FLAG_GAMEPAD;
 
-    memcpy(_gamepads_properties[ins->gamepad_idx].btaddr, d->conn.btaddr, sizeof(_gamepads_properties[0].btaddr));
+    memcpy(_controllers_properties[idx].btaddr, d->conn.btaddr, sizeof(_controllers_properties[0].btaddr));
 
     if (d->report_parser.set_player_leds != NULL) {
-        d->report_parser.set_player_leds(d, (1 << ins->gamepad_idx));
+        d->report_parser.set_player_leds(d, BIT(idx));
     }
     return 0;
 }
@@ -1029,12 +1099,12 @@ static int nina_on_device_ready(uni_hid_device_t* d) {
 static uint8_t predicate_nina_index(uni_hid_device_t* d, void* data) {
     int wanted_idx = (int)data;
     nina_instance_t* ins = get_nina_instance(d);
-    if (ins->gamepad_idx != wanted_idx)
+    if (ins->controller_idx != wanted_idx)
         return 0;
     return 1;
 }
 
-static void nina_on_gamepad_data(uni_hid_device_t* d, uni_gamepad_t* gp) {
+static void nina_on_controller_data(uni_hid_device_t* d, uni_controller_t* ctl) {
     // FIXME:
     // When SPI-slave (CPU1) receives a request that cannot be fulfilled
     // immediately (e.g: the ones that needs to run on CPU0), it is processed from
@@ -1044,23 +1114,42 @@ static void nina_on_gamepad_data(uni_hid_device_t* d, uni_gamepad_t* gp) {
     process_pending_requests();
 
     nina_instance_t* ins = get_nina_instance(d);
-    if (ins->gamepad_idx < 0 || ins->gamepad_idx >= CONFIG_BLUEPAD32_MAX_DEVICES) {
-        loge("NINA: unexpected gamepad idx, got: %d, want: [0-%d]\n", ins->gamepad_idx, CONFIG_BLUEPAD32_MAX_DEVICES);
+    if (ins->controller_idx < 0 || ins->controller_idx >= CONFIG_BLUEPAD32_MAX_DEVICES) {
+        loge("NINA: unexpected controller idx, got: %d, want: [0-%d]\n", ins->controller_idx,
+             CONFIG_BLUEPAD32_MAX_DEVICES);
         return;
     }
 
     // Populate gamepad data on shared struct.
-    xSemaphoreTake(_gamepad_mutex, portMAX_DELAY);
-    _gamepads[ins->gamepad_idx].dpad = gp->dpad;
-    _gamepads[ins->gamepad_idx].axis_x = gp->axis_x;
-    _gamepads[ins->gamepad_idx].axis_y = gp->axis_y;
-    _gamepads[ins->gamepad_idx].axis_rx = gp->axis_rx;
-    _gamepads[ins->gamepad_idx].axis_ry = gp->axis_ry;
-    _gamepads[ins->gamepad_idx].brake = gp->brake;
-    _gamepads[ins->gamepad_idx].throttle = gp->throttle;
-    _gamepads[ins->gamepad_idx].buttons = gp->buttons;
-    _gamepads[ins->gamepad_idx].misc_buttons = gp->misc_buttons;
-    xSemaphoreGive(_gamepad_mutex);
+    xSemaphoreTake(controller_mutex, portMAX_DELAY);
+    switch (ctl->klass) {
+        case UNI_CONTROLLER_CLASS_GAMEPAD:
+            _controllers[ins->controller_idx].gamepad.dpad = ctl->gamepad.dpad;
+            _controllers[ins->controller_idx].gamepad.axis_x = ctl->gamepad.axis_x;
+            _controllers[ins->controller_idx].gamepad.axis_y = ctl->gamepad.axis_y;
+            _controllers[ins->controller_idx].gamepad.axis_rx = ctl->gamepad.axis_rx;
+            _controllers[ins->controller_idx].gamepad.axis_ry = ctl->gamepad.axis_ry;
+            _controllers[ins->controller_idx].gamepad.brake = ctl->gamepad.brake;
+            _controllers[ins->controller_idx].gamepad.throttle = ctl->gamepad.throttle;
+            _controllers[ins->controller_idx].gamepad.buttons = ctl->gamepad.buttons;
+            _controllers[ins->controller_idx].gamepad.misc_buttons = ctl->gamepad.misc_buttons;
+            break;
+        case UNI_CONTROLLER_CLASS_MOUSE:
+            _controllers[ins->controller_idx].mouse.delta_x = ctl->mouse.delta_x;
+            _controllers[ins->controller_idx].mouse.delta_y = ctl->mouse.delta_y;
+            _controllers[ins->controller_idx].mouse.buttons = ctl->mouse.buttons;
+            _controllers[ins->controller_idx].mouse.misc_buttons = ctl->mouse.misc_buttons;
+            break;
+        case UNI_CONTROLLER_CLASS_BALANCE_BOARD:
+            break;
+        default:
+            break;
+    }
+
+    _controllers[ins->controller_idx].klass = ctl->klass;
+    _controllers[ins->controller_idx].battery = ctl->battery;
+
+    xSemaphoreGive(controller_mutex);
 }
 
 static void nina_on_oob_event(uni_platform_oob_event_t event, void* data) {
@@ -1093,7 +1182,7 @@ struct uni_platform* uni_platform_nina_create(void) {
         .on_device_disconnected = nina_on_device_disconnected,
         .on_device_ready = nina_on_device_ready,
         .on_oob_event = nina_on_oob_event,
-        .on_gamepad_data = nina_on_gamepad_data,
+        .on_controller_data = nina_on_controller_data,
         .get_property = nina_get_property,
     };
 
@@ -1110,7 +1199,7 @@ struct uni_platform* uni_platform_airlift_create(void) {
         .on_device_disconnected = nina_on_device_disconnected,
         .on_device_ready = nina_on_device_ready,
         .on_oob_event = nina_on_oob_event,
-        .on_gamepad_data = nina_on_gamepad_data,
+        .on_controller_data = nina_on_controller_data,
         .get_property = nina_get_property,
     };
 

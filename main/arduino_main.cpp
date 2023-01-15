@@ -31,7 +31,7 @@ limitations under the License.
 // By default it is enabled (hey, this is a great feature!).
 // But it is incompatible with Arduino "Serial" class.
 //
-// Instead of using "Serial" you can use Bluepad32 "Console" class instead.
+// Instead of using "Serial" you can use Bluepad32 "Console" class.
 // It is somewhat similar to Serial but not exactly the same.
 //
 // Should you want to still use "Serial", you have to disable the Bluepad32's console

@@ -20,31 +20,34 @@ limitations under the License.
 
 #include "uni_platform_unijoysticle.h"
 
+#include <inttypes.h>
 #include <math.h>
 #include <stdbool.h>
 
 #include <argtable3/argtable3.h>
 #include <driver/gpio.h>
-#include <driver/timer.h>
 #include <esp_chip_info.h>
 #include <esp_console.h>
+#include <esp_flash.h>
 #include <esp_idf_version.h>
 #include <esp_ota_ops.h>
-#include <esp_spi_flash.h>
 #include <esp_timer.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/event_groups.h>
 #include <freertos/queue.h>
 #include <hal/gpio_types.h>
 
+#include "cmd_system.h"
 #include "sdkconfig.h"
+#include "uni_balance_board.h"
 #include "uni_bluetooth.h"
 #include "uni_common.h"
 #include "uni_config.h"
-#include "uni_debug.h"
+#include "uni_controller.h"
 #include "uni_gamepad.h"
 #include "uni_hid_device.h"
 #include "uni_joystick.h"
+#include "uni_log.h"
 #include "uni_platform.h"
 #include "uni_platform_unijoysticle_amiga.h"
 #include "uni_platform_unijoysticle_c64.h"
@@ -175,13 +178,15 @@ static void process_mouse(uni_hid_device_t* d,
                           int32_t delta_x,
                           int32_t delta_y,
                           uint16_t buttons);
+static void process_gamepad(uni_hid_device_t* d, uni_gamepad_t* gp);
+static void process_balance_board(uni_hid_device_t* d, uni_balance_board_t* bb);
 static void joy_update_port(const uni_joystick_t* joy, const gpio_num_t* gpios);
 
 // Interrupt handlers
 static void handle_event_button(int button_idx);
 
 // GPIO Interrupt handlers
-static void IRAM_ATTR gpio_isr_handler_button(void* arg);
+static void gpio_isr_handler_button(void* arg);
 
 static void pushbutton_event_task(void* arg);
 static void auto_fire_task(void* arg);
@@ -471,17 +476,15 @@ static void unijoysticle_on_device_disconnected(uni_hid_device_t* d) {
     }
     uni_platform_unijoysticle_instance_t* ins = uni_platform_unijoysticle_get_instance(d);
 
-    if (ins->gamepad_seat != GAMEPAD_SEAT_NONE) {
+    if (ins->seat != GAMEPAD_SEAT_NONE) {
         // Turn off the LEDs
-        if (ins->gamepad_seat == GAMEPAD_SEAT_A ||
-            ins->emu_mode == UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_COMBO_JOY_JOY)
+        if (ins->seat == GAMEPAD_SEAT_A || ins->gamepad_mode == UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_COMBO_JOY_JOY)
             safe_gpio_set_level(g_gpio_config->leds[LED_J1], 0);
-        if (ins->gamepad_seat == GAMEPAD_SEAT_B ||
-            ins->emu_mode == UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_COMBO_JOY_JOY)
+        if (ins->seat == GAMEPAD_SEAT_B || ins->gamepad_mode == UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_COMBO_JOY_JOY)
             safe_gpio_set_level(g_gpio_config->leds[LED_J2], 0);
 
-        ins->gamepad_seat = GAMEPAD_SEAT_NONE;
-        ins->emu_mode = UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_SINGLE_JOY;
+        ins->seat = GAMEPAD_SEAT_NONE;
+        ins->gamepad_mode = UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_SINGLE_JOY;
     }
 
     // Regarless of how many connections are active, enable Bluetooth connections.
@@ -498,7 +501,7 @@ static int unijoysticle_on_device_ready(uni_hid_device_t* d) {
     uni_platform_unijoysticle_instance_t* ins = uni_platform_unijoysticle_get_instance(d);
 
     // Some safety checks. These conditions should not happen
-    if ((ins->gamepad_seat != GAMEPAD_SEAT_NONE) || (!uni_hid_device_has_controller_type(d))) {
+    if ((ins->seat != GAMEPAD_SEAT_NONE) || (!uni_hid_device_has_controller_type(d))) {
         loge("ERROR: unijoysticle_on_device_ready: pre-condition not met\n");
         return -1;
     }
@@ -506,7 +509,7 @@ static int unijoysticle_on_device_ready(uni_hid_device_t* d) {
     uint32_t used_joystick_ports = 0;
     for (int i = 0; i < CONFIG_BLUEPAD32_MAX_DEVICES; i++) {
         uni_hid_device_t* tmp_d = uni_hid_device_get_instance_for_idx(i);
-        used_joystick_ports |= uni_platform_unijoysticle_get_instance(tmp_d)->gamepad_seat;
+        used_joystick_ports |= uni_platform_unijoysticle_get_instance(tmp_d)->seat;
     }
 
     // Either two gamepads are connected, or one is in Enhanced mode.
@@ -518,19 +521,18 @@ static int unijoysticle_on_device_ready(uni_hid_device_t* d) {
     if (get_uni_model_from_pins() == BOARD_MODEL_UNIJOYSTICLE2_SINGLE_PORT) {
         // Single port boards only supports one port, so keep using SEAT A
         wanted_seat = GAMEPAD_SEAT_A;
-        ins->emu_mode = UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_SINGLE_JOY;
+        ins->gamepad_mode = UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_SINGLE_JOY;
 
     } else {
         // Try with Port B, assume it is a joystick
         wanted_seat = GAMEPAD_SEAT_B;
-        ins->emu_mode = UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_SINGLE_JOY;
+        ins->gamepad_mode = UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_SINGLE_JOY;
 
         // ... unless it is a mouse which should try with PORT A.
         // Amiga/Atari ST use mice in PORT A. Undefined on the C64, but
         // most apps use it in PORT A as well.
         if (uni_hid_device_is_mouse(d)) {
             wanted_seat = GAMEPAD_SEAT_A;
-            ins->emu_mode = UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_SINGLE_MOUSE;
         }
 
         // If wanted port is already assigned, try with the next one.
@@ -561,47 +563,23 @@ static void test_select_button(uni_hid_device_t* d, uni_gamepad_t* gp) {
     }
 }
 
-static void unijoysticle_on_gamepad_data(uni_hid_device_t* d, uni_gamepad_t* gp) {
+static void unijoysticle_on_controller_data(uni_hid_device_t* d, uni_controller_t* ctl) {
     if (d == NULL) {
         loge("ERROR: unijoysticle_on_device_gamepad_data: Invalid NULL device\n");
         return;
     }
 
-    test_select_button(d, gp);
-
     uni_platform_unijoysticle_instance_t* ins = uni_platform_unijoysticle_get_instance(d);
-
-    uni_joystick_t joy, joy_ext;
-    memset(&joy, 0, sizeof(joy));
-    memset(&joy_ext, 0, sizeof(joy_ext));
-
-    switch (ins->emu_mode) {
-        case UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_SINGLE_JOY:
-            uni_joy_to_single_joy_from_gamepad(gp, &joy);
-            process_joystick(d, ins->gamepad_seat, &joy);
+    switch (ctl->klass) {
+        case UNI_CONTROLLER_CLASS_GAMEPAD:
+            process_gamepad(d, &ctl->gamepad);
             break;
-        case UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_SINGLE_MOUSE:
-            process_mouse(d, ins->gamepad_seat, gp->axis_x, gp->axis_y, gp->buttons);
+        case UNI_CONTROLLER_CLASS_MOUSE:
+            process_mouse(d, ins->seat, ctl->mouse.delta_x, ctl->mouse.delta_y, ctl->mouse.buttons);
             break;
-        case UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_COMBO_JOY_JOY:
-            uni_joy_to_combo_joy_joy_from_gamepad(gp, &joy, &joy_ext);
-            process_joystick(d, GAMEPAD_SEAT_A, &joy);
-            process_joystick(d, GAMEPAD_SEAT_B, &joy_ext);
-            break;
-        case UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_COMBO_JOY_MOUSE:
-            // Allow to control the mouse with both axis. Use case:
-            // - Right axis: easier to control with the right thumb (for right handed people)
-            // - Left axis: easier to drag a window (move + button pressed)
-            // ... but only if the axis have the same sign
-            // Do: (x/ratio) + (rx/ratio), instead of "(x+rx)/ratio". We want to lose precision.
-            process_mouse(
-                d, ins->gamepad_seat,
-                (gp->axis_x / GAMEPAD_AXIS_TO_MOUSE_DELTA_RATIO) + (gp->axis_rx / GAMEPAD_AXIS_TO_MOUSE_DELTA_RATIO),
-                (gp->axis_y / GAMEPAD_AXIS_TO_MOUSE_DELTA_RATIO) + (gp->axis_ry / GAMEPAD_AXIS_TO_MOUSE_DELTA_RATIO),
-                gp->buttons);
-            break;
+        case UNI_CONTROLLER_CLASS_BALANCE_BOARD:
+            process_balance_board(d, &ctl->balance_board);
         default:
-            loge("unijoysticle: Unsupported emulation mode: %d\n", ins->emu_mode);
             break;
     }
 }
@@ -658,16 +636,16 @@ static void unijoysticle_device_dump(uni_hid_device_t* d) {
         logi("type=mouse, ");
     } else {
         logi("type=gamepad, mode=");
-        if (ins->emu_mode == UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_COMBO_JOY_JOY)
+        if (ins->gamepad_mode == UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_COMBO_JOY_JOY)
             logi("enhanced, ");
-        else if (ins->emu_mode == UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_COMBO_JOY_MOUSE)
+        else if (ins->gamepad_mode == UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_COMBO_JOY_MOUSE)
             logi("mouse, ");
-        else if (ins->emu_mode == UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_SINGLE_JOY)
+        else if (ins->gamepad_mode == UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_SINGLE_JOY)
             logi("normal, ");
         else
             logi("unk, ");
     }
-    logi("seat=0x%02x\n", ins->gamepad_seat);
+    logi("seat=0x%02x\n", ins->seat);
 }
 
 static void unijoysticle_register_cmds(void) {
@@ -878,9 +856,50 @@ static void process_joystick(uni_hid_device_t* d, uni_gamepad_seat_t seat, const
     }
 }
 
+static void process_gamepad(uni_hid_device_t* d, uni_gamepad_t* gp) {
+    uni_platform_unijoysticle_instance_t* ins = uni_platform_unijoysticle_get_instance(d);
+
+    test_select_button(d, gp);
+
+    uni_joystick_t joy, joy_ext;
+    memset(&joy, 0, sizeof(joy));
+    memset(&joy_ext, 0, sizeof(joy_ext));
+
+    switch (ins->gamepad_mode) {
+        case UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_SINGLE_JOY:
+            uni_joy_to_single_joy_from_gamepad(gp, &joy);
+            process_joystick(d, ins->seat, &joy);
+            break;
+        case UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_COMBO_JOY_JOY:
+            uni_joy_to_combo_joy_joy_from_gamepad(gp, &joy, &joy_ext);
+            process_joystick(d, GAMEPAD_SEAT_A, &joy);
+            process_joystick(d, GAMEPAD_SEAT_B, &joy_ext);
+            break;
+        case UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_COMBO_JOY_MOUSE:
+            // Allow to control the mouse with both axis. Use case:
+            // - Right axis: easier to control with the right thumb (for right handed people)
+            // - Left axis: easier to drag a window (move + button pressed)
+            // ... but only if the axis have the same sign
+            // Do: (x/ratio) + (rx/ratio), instead of "(x+rx)/ratio". We want to lose precision.
+            process_mouse(
+                d, ins->seat,
+                (gp->axis_x / GAMEPAD_AXIS_TO_MOUSE_DELTA_RATIO) + (gp->axis_rx / GAMEPAD_AXIS_TO_MOUSE_DELTA_RATIO),
+                (gp->axis_y / GAMEPAD_AXIS_TO_MOUSE_DELTA_RATIO) + (gp->axis_ry / GAMEPAD_AXIS_TO_MOUSE_DELTA_RATIO),
+                gp->buttons);
+            break;
+        default:
+            loge("unijoysticle: Unsupported emulation mode: %d\n", ins->gamepad_mode);
+            break;
+    }
+}
+
+static void process_balance_board(uni_hid_device_t* d, uni_balance_board_t* bb) {
+    logd("bb tl=%d, tr=%d, bl=%d, br=%d, temperature=%d\n", bb->tl, bb->tr, bb->bl, bb->br, bb->temperature);
+}
+
 static void set_gamepad_seat(uni_hid_device_t* d, uni_gamepad_seat_t seat) {
     uni_platform_unijoysticle_instance_t* ins = uni_platform_unijoysticle_get_instance(d);
-    ins->gamepad_seat = seat;
+    ins->seat = seat;
 
     logi("unijoysticle: device %s has new gamepad seat: %d\n", bd_addr_to_str(d->conn.btaddr), seat);
 
@@ -891,7 +910,7 @@ static void set_gamepad_seat(uni_hid_device_t* d, uni_gamepad_seat_t seat) {
         if (tmp_d == NULL)
             continue;
         if (bd_addr_cmp(tmp_d->conn.btaddr, zero_addr) != 0) {
-            all_seats |= uni_platform_unijoysticle_get_instance(tmp_d)->gamepad_seat;
+            all_seats |= uni_platform_unijoysticle_get_instance(tmp_d)->seat;
         }
     }
 
@@ -996,7 +1015,7 @@ static void auto_fire_task(void* arg) {
     }
 }
 
-static void IRAM_ATTR gpio_isr_handler_button(void* arg) {
+static void gpio_isr_handler_button(void* arg) {
     int button_idx = (int)arg;
 
     // Stored din ROM
@@ -1078,9 +1097,14 @@ static void cmd_callback(void* context) {
 
 static void version(void) {
     esp_chip_info_t info;
+    uint32_t flash_size;
     esp_chip_info(&info);
 
+#if ESP_IDF_VERSION_MAJOR == 4
     const esp_app_desc_t* app_desc = esp_ota_get_app_description();
+#else
+    const esp_app_desc_t* app_desc = esp_app_get_description();
+#endif
 
     logi("Unijoysticle info:\n");
     logi("\tModel: %s\n", get_uni_model_from_nvs());
@@ -1092,19 +1116,17 @@ static void version(void) {
     else
         uni_platform_unijoysticle_amiga_version();
 
+    if (esp_flash_get_size(NULL, &flash_size) != ESP_OK) {
+        loge("Flash size failed\n");
+        flash_size = 0;
+    }
+
     logi("\nFirmware info:\n");
     logi("\tBluepad32 Version: v%s (%s)\n", UNI_VERSION, app_desc->version);
-    logi("\tIDF Version: %s\n", app_desc->idf_ver);
     logi("\tCompile Time: %s %s\n", app_desc->date, app_desc->time);
 
-    logi("\nChip info:\n");
-    logi("\tModel: %s\n", info.model == CHIP_ESP32 ? "ESP32" : "Unknown");
-    logi("\tCores: %d\n", info.cores);
-    logi("\tFeature: %s%s%s%s%d%s\n", info.features & CHIP_FEATURE_WIFI_BGN ? "/802.11bgn" : "",
-         info.features & CHIP_FEATURE_BLE ? "/BLE" : "", info.features & CHIP_FEATURE_BT ? "/BT" : "",
-         info.features & CHIP_FEATURE_EMB_FLASH ? "/Embedded-Flash:" : "/External-Flash:",
-         spi_flash_get_chip_size() / (1024 * 1024), " MB");
-    logi("\tRevision Number: %d\n", info.revision);
+    logi("\n");
+    cmd_system_version();
 }
 
 static void get_gamepad_mode() {
@@ -1129,7 +1151,7 @@ static void get_gamepad_mode() {
 
     uni_platform_unijoysticle_instance_t* ins = uni_platform_unijoysticle_get_instance(d);
 
-    switch (ins->emu_mode) {
+    switch (ins->gamepad_mode) {
         case UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_COMBO_JOY_JOY:
             logi("enhanced\n");
             break;
@@ -1156,7 +1178,8 @@ static void set_gamepad_mode(uni_platform_unijoysticle_emulation_mode_t mode) {
         uni_hid_device_t* tmp_d = uni_hid_device_get_instance_for_idx(j);
         if (uni_bt_conn_is_connected(&tmp_d->conn)) {
             num_devices++;
-            if (!uni_hid_device_is_mouse(tmp_d) && d == NULL) {
+            if (uni_hid_device_is_gamepad(tmp_d) && d == NULL) {
+                // Get the first valid gamepad device
                 d = tmp_d;
             }
         }
@@ -1170,24 +1193,30 @@ static void set_gamepad_mode(uni_platform_unijoysticle_emulation_mode_t mode) {
 
     uni_platform_unijoysticle_instance_t* ins = uni_platform_unijoysticle_get_instance(d);
 
-    if (ins->emu_mode == mode)
+    if (ins->gamepad_mode == mode) {
+        logi("unijoysticle: Already in gamepad mode %d\n", mode);
         return;
+    }
 
-    if (ins->emu_mode != UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_COMBO_JOY_JOY &&
-        ins->emu_mode != UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_COMBO_JOY_MOUSE &&
-        ins->emu_mode != UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_SINGLE_JOY)
+    if (ins->gamepad_mode == UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_NONE ||
+        ins->gamepad_mode >= UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_COUNT) {
+        logi("unijoysticle: Unexpected gamepad mode: %d\n", ins->gamepad_mode);
         return;
+    }
 
     switch (mode) {
         case UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_COMBO_JOY_JOY:
             if (num_devices != 1) {
                 loge("unijoysticle: cannot change mode. Expected num_devices=1, actual=%d\n", num_devices);
+
+                // Reset to "normal" mode
+                ins->gamepad_mode = UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_SINGLE_JOY;
                 set_button_mode(BUTTON_MODE_NORMAL);
                 return;
             }
 
-            ins->emu_mode = UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_COMBO_JOY_JOY;
-            ins->prev_gamepad_seat = ins->gamepad_seat;
+            ins->gamepad_mode = UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_COMBO_JOY_JOY;
+            ins->prev_seat = ins->seat;
             set_gamepad_seat(d, GAMEPAD_SEAT_A | GAMEPAD_SEAT_B);
             logi("unijoysticle: Gamepad mode = enhanced\n");
 
@@ -1197,22 +1226,22 @@ static void set_gamepad_mode(uni_platform_unijoysticle_emulation_mode_t mode) {
             break;
 
         case UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_COMBO_JOY_MOUSE:
-            if (ins->emu_mode == UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_COMBO_JOY_JOY) {
-                set_gamepad_seat(d, ins->prev_gamepad_seat);
+            if (ins->gamepad_mode == UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_COMBO_JOY_JOY) {
+                set_gamepad_seat(d, ins->prev_seat);
                 maybe_enable_bluetooth(num_devices < 2);
             }
-            ins->emu_mode = UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_COMBO_JOY_MOUSE;
+            ins->gamepad_mode = UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_COMBO_JOY_MOUSE;
             logi("unijoysticle: Gamepad mode = mouse\n");
 
             set_button_mode(BUTTON_MODE_MOUSE);
             break;
 
         case UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_SINGLE_JOY:
-            if (ins->emu_mode == UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_COMBO_JOY_JOY) {
-                set_gamepad_seat(d, ins->prev_gamepad_seat);
+            if (ins->gamepad_mode == UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_COMBO_JOY_JOY) {
+                set_gamepad_seat(d, ins->prev_seat);
                 maybe_enable_bluetooth(num_devices < 2);
             }
-            ins->emu_mode = UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_SINGLE_JOY;
+            ins->gamepad_mode = UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_SINGLE_JOY;
             logi("unijoysticle: Gamepad mode = normal\n");
 
             set_button_mode(BUTTON_MODE_NORMAL);
@@ -1312,12 +1341,12 @@ static void swap_ports(void) {
             ins = uni_platform_unijoysticle_get_instance(d);
 
             // Don't swap if gamepad is in Enahnced mode
-            if (ins->emu_mode == UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_COMBO_JOY_JOY) {
+            if (ins->gamepad_mode == UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_COMBO_JOY_JOY) {
                 // Should it blink oncea on error?
                 return;
             }
 
-            prev_seat = ins->gamepad_seat;
+            prev_seat = ins->seat;
             new_seat = ~prev_seat & GAMEPAD_SEAT_AB_MASK;
             logi("unijoysticle: swap seat for %s: %d -> %d\n", bd_addr_to_str(d->conn.btaddr), prev_seat, new_seat);
             set_gamepad_seat(d, new_seat);
@@ -1345,13 +1374,13 @@ static void try_swap_ports(uni_hid_device_t* d) {
 
     uni_platform_unijoysticle_instance_t* ins = uni_platform_unijoysticle_get_instance(d);
 
-    if (ins->gamepad_seat == GAMEPAD_SEAT_NONE) {
+    if (ins->seat == GAMEPAD_SEAT_NONE) {
         logi("unijoysticle: cannot swap port since device has joystick_port = GAMEPAD_SEAT_NONE\n");
         return;
     }
 
     // This could happen if device is any Combo emu mode.
-    if (ins->gamepad_seat == (GAMEPAD_SEAT_A | GAMEPAD_SEAT_B)) {
+    if (ins->seat == (GAMEPAD_SEAT_A | GAMEPAD_SEAT_B)) {
         logi(
             "unijoysticle: cannot swap port since has more than one port associated with. Leave emu mode and try "
             "again.\n");
@@ -1365,9 +1394,9 @@ static void try_swap_ports(uni_hid_device_t* d) {
     for (int j = 0; j < CONFIG_BLUEPAD32_MAX_DEVICES; j++) {
         uni_hid_device_t* tmp_d = uni_hid_device_get_instance_for_idx(j);
         uni_platform_unijoysticle_instance_t* tmp_ins = uni_platform_unijoysticle_get_instance(tmp_d);
-        if (uni_bt_conn_is_connected(&tmp_d->conn) && tmp_ins->gamepad_seat != GAMEPAD_SEAT_NONE &&
-            tmp_ins->emu_mode == UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_SINGLE_JOY &&
-            ((tmp_d->gamepad.misc_buttons & (MISC_BUTTON_SYSTEM | MISC_BUTTON_BACK)) == 0)) {
+        if (uni_bt_conn_is_connected(&tmp_d->conn) && tmp_ins->seat != GAMEPAD_SEAT_NONE &&
+            tmp_ins->gamepad_mode == UNI_PLATFORM_UNIJOYSTICLE_EMULATION_MODE_SINGLE_JOY &&
+            ((tmp_d->controller.gamepad.misc_buttons & (MISC_BUTTON_SYSTEM | MISC_BUTTON_BACK)) == 0)) {
             logi("unijoysticle: to swap ports press 'system' button on both gamepads at the same time\n");
             uni_hid_device_dump_all();
             return;
@@ -1478,7 +1507,7 @@ struct uni_platform* uni_platform_unijoysticle_create(void) {
         .on_device_disconnected = unijoysticle_on_device_disconnected,
         .on_device_ready = unijoysticle_on_device_ready,
         .on_oob_event = unijoysticle_on_oob_event,
-        .on_gamepad_data = unijoysticle_on_gamepad_data,
+        .on_controller_data = unijoysticle_on_controller_data,
         .get_property = unijoysticle_get_property,
         .device_dump = unijoysticle_device_dump,
         .register_console_cmds = unijoysticle_register_cmds,

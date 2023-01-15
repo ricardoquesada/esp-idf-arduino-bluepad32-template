@@ -67,25 +67,11 @@ class Controller {
 
     Controller();
 
+    //
+    // Gamepad Related
+    //
+
     uint8_t dpad() const { return _data.gamepad.dpad; }
-
-    // To test one button at the time.
-    bool a() const { return _data.gamepad.buttons & BUTTON_A; }
-    bool b() const { return _data.gamepad.buttons & BUTTON_B; }
-    bool x() const { return _data.gamepad.buttons & BUTTON_X; }
-    bool y() const { return _data.gamepad.buttons & BUTTON_Y; }
-    bool l1() const { return _data.gamepad.buttons & BUTTON_SHOULDER_L; }
-    bool l2() const { return _data.gamepad.buttons & BUTTON_TRIGGER_L; }
-    bool r1() const { return _data.gamepad.buttons & BUTTON_SHOULDER_R; }
-    bool r2() const { return _data.gamepad.buttons & BUTTON_TRIGGER_R; }
-    bool thumbL() const { return _data.gamepad.buttons & BUTTON_THUMB_L; }
-    bool thumbR() const { return _data.gamepad.buttons & BUTTON_THUMB_R; }
-
-    // Returns the state of all buttons.
-    uint16_t buttons() const { return _data.gamepad.buttons; }
-
-    // Returns the state of all misc buttons.
-    uint16_t miscButtons() const { return _data.gamepad.misc_buttons; }
 
     // Axis
     int32_t axisX() const { return _data.gamepad.axis_x; }
@@ -97,13 +83,74 @@ class Controller {
     int32_t brake() const { return _data.gamepad.brake; }
     int32_t throttle() const { return _data.gamepad.throttle; }
 
+    //
+    // Shared between Mouse & Gamepad
+    //
+
+    // Returns the state of all buttons.
+    uint16_t buttons() const {
+        if (_data.klass == UNI_CONTROLLER_CLASS_GAMEPAD)
+            return _data.gamepad.buttons;
+        if (_data.klass == UNI_CONTROLLER_CLASS_MOUSE)
+            return _data.mouse.buttons;
+        // Not supported in other controllers
+        return 0;
+    }
+
+    // Returns the state of all misc buttons.
+    uint16_t miscButtons() const {
+        if (_data.klass == UNI_CONTROLLER_CLASS_GAMEPAD)
+            return _data.gamepad.misc_buttons;
+        if (_data.klass == UNI_CONTROLLER_CLASS_MOUSE)
+            return _data.mouse.misc_buttons;
+        // Not supported in other controllers
+        return 0;
+    }
+
+    // To test one button at the time.
+    bool a() const { return buttons() & BUTTON_A; }
+    bool b() const { return buttons() & BUTTON_B; }
+    bool x() const { return buttons() & BUTTON_X; }
+    bool y() const { return buttons() & BUTTON_Y; }
+    bool l1() const { return buttons() & BUTTON_SHOULDER_L; }
+    bool l2() const { return buttons() & BUTTON_TRIGGER_L; }
+    bool r1() const { return buttons() & BUTTON_SHOULDER_R; }
+    bool r2() const { return buttons() & BUTTON_TRIGGER_R; }
+    bool thumbL() const { return buttons() & BUTTON_THUMB_L; }
+    bool thumbR() const { return buttons() & BUTTON_THUMB_R; }
+
     // Misc buttons
-    bool miscSystem() const { return _data.gamepad.misc_buttons & MISC_BUTTON_SYSTEM; }
-    bool miscBack() const { return _data.gamepad.misc_buttons & MISC_BUTTON_BACK; }
-    bool miscHome() const { return _data.gamepad.misc_buttons & MISC_BUTTON_HOME; }
+    bool miscSystem() const { return miscButtons() & MISC_BUTTON_SYSTEM; }
+    bool miscBack() const { return miscButtons() & MISC_BUTTON_BACK; }
+    bool miscHome() const { return miscButtons() & MISC_BUTTON_HOME; }
+
+    //
+    // Mouse related
+    //
+    int32_t deltaX() const { return _data.mouse.delta_x; }
+    int32_t deltaY() const { return _data.mouse.delta_y; }
+
+    //
+    // Wii Balance Board related
+    //
+    uint16_t topLeft() const { return _data.balance_board.tl; }
+    uint16_t topRight() const { return _data.balance_board.tr; }
+    uint16_t bottomLeft() const { return _data.balance_board.bl; }
+    uint16_t bottomRight() const { return _data.balance_board.br; }
+    int temperature() const { return _data.balance_board.temperature; }
+
+    //
+    // Shared among all
+    //
+
+    // 0 = Unknown Battery state
+    // 1 = Battery Empty
+    // 255 = Battery full
+    uint8_t getBattery() const { return _data.battery; }
 
     bool isConnected() const;
 
+    uni_controller_class_t getClass() const { return _data.klass; }
     // Returns the controller model.
     int getModel() const { return _properties.type; }
     String getModelName() const;

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014 BlueKitchen GmbH
+ * Copyright (C) 2022 BlueKitchen GmbH
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -35,27 +35,34 @@
  *
  */
 
-/*
- *  hal_tick.h
- *
- *  Hardware abstraction layer for periodic ticks
- *
+/**
+ * @title LE Audio Util
+ * 
  */
 
-#ifndef HAL_TICK_H
-#define HAL_TICK_H
+#ifndef LE_AUDIO_UTIL_H
+#define LE_AUDIO_UTIL_H
 
 #include <stdint.h>
+#include "le_audio.h"
 
 #if defined __cplusplus
 extern "C" {
 #endif
 
-void hal_tick_init(void);
-void hal_tick_set_handler(void (*tick_handler)(void));
-int  hal_tick_get_tick_period_in_ms(void);
+uint16_t le_audio_util_virtual_memcpy_helper(
+    const uint8_t * field_data, uint16_t field_len, uint16_t field_offset,
+    uint8_t * buffer, uint16_t buffer_size, uint16_t buffer_offset);
+
+uint16_t le_audio_util_metadata_virtual_memcpy(const le_audio_metadata_t * metadata, uint8_t metadata_length, uint16_t * records_offset, uint8_t * buffer, uint16_t buffer_size, uint16_t buffer_offset);
+
+uint16_t le_audio_util_metadata_parse(uint8_t * buffer, uint8_t buffer_size, le_audio_metadata_t * metadata);
+
+uint16_t le_audio_util_metadata_serialize(le_audio_metadata_t * metadata, uint8_t * event, uint16_t event_size);
 
 #if defined __cplusplus
 }
 #endif
-#endif // HAL_TICK_H
+
+#endif
+

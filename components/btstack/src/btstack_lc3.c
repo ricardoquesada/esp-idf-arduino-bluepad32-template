@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014 BlueKitchen GmbH
+ * Copyright (C) 2022 BlueKitchen GmbH
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -20,8 +20,8 @@
  * THIS SOFTWARE IS PROVIDED BY BLUEKITCHEN GMBH AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
  * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL BLUEKITCHEN
- * GMBH OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL MATTHIAS
+ * RINGWALD OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
  * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
  * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
  * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
@@ -30,30 +30,38 @@
  * THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * Please inquire about commercial licensing options at 
+ * Please inquire about commercial licensing options at
  * contact@bluekitchen-gmbh.com
  *
  */
 
-/*
- *  hal_cpu.h
- *
- *  Low power mode for MCU requires that IRQs can be first blocked 
- *  and then unblocked while entering low power mode atomically
- */
+// *****************************************************************************
+//
+// LC3 Interface
+//
+// *****************************************************************************
 
-#ifndef HAL_CPU_H
-#define HAL_CPU_H
+#define BTSTACK_FILE__ "btstack_lc3.c"
 
-#if defined __cplusplus
-extern "C" {
-#endif
- 
-void hal_cpu_disable_irqs(void);
-void hal_cpu_enable_irqs(void);
-void hal_cpu_enable_irqs_and_sleep(void);
+#include "btstack_lc3.h"
+#include "btstack_debug.h"
 
-#if defined __cplusplus
+uint16_t btstack_lc3_frame_duration_in_us(btstack_lc3_frame_duration_t frame_duration){
+    switch (frame_duration){
+        case BTSTACK_LC3_FRAME_DURATION_7500US:
+            return 7500;
+        case BTSTACK_LC3_FRAME_DURATION_10000US:
+            return 10000;
+        default:
+            return 0;
+    }
 }
-#endif
- #endif // HAL_CPU_H
+
+uint16_t btstack_lc3_samples_per_frame(uint32_t sample_rate, btstack_lc3_frame_duration_t frame_duration){
+    // 44.1 kHz uses longer iso interval and same number of samples as 48 khz
+    if (sample_rate == 44100){
+        sample_rate = 48000;
+    }
+    // assume sample rate is x 1000 hz
+    return (sample_rate / 1000) * (btstack_lc3_frame_duration_in_us(frame_duration) / 100) / 10;
+}

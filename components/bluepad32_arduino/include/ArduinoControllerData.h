@@ -13,5 +13,4 @@
 
 using ControllerData = arduino_controller_data_t;
 
-
-#endif // BP32_ARDUINO_CONTROLLER_DATA_H
+#endif  // BP32_ARDUINO_CONTROLLER_DATA_H

@@ -159,7 +159,7 @@ class Controller {
     // Returns the controller model.
     int getModel() const { return _properties.type; }
     String getModelName() const;
-    ControllerProperties getProperties() const;
+    ControllerProperties getProperties() const { return _properties; }
 
     // "Output" functions.
     void setPlayerLEDs(uint8_t led) const;

@@ -14,6 +14,7 @@
 
 #include <Arduino.h>
 
+#include "ArduinoControllerData.h"
 #include "ArduinoControllerProperties.h"
 
 class Controller {
@@ -173,8 +174,8 @@ class Controller {
     bool _connected;
     // Controller index, from 0 to 3.
     int8_t _idx;
-    arduino_controller_data_t _data;
-    arduino_controller_properties_t _properties;
+    ControllerData _data;
+    ControllerProperties _properties;
 
     // Delete copy constructor to avoid copying the state by mistake. If so,
     // chances are that the controller won't get updated automatically.

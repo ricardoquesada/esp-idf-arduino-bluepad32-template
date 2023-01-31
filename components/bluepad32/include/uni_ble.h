@@ -1,7 +1,7 @@
 /****************************************************************************
 http://retro.moe/unijoysticle2
 
-Copyright 2022 Ricardo Quesada
+Copyright 2023 Ricardo Quesada
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,42 +16,37 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ****************************************************************************/
 
-#ifndef UNI_MOUSE_H
-#define UNI_MOUSE_H
+#ifndef UNI_BLE_H
+#define UNI_BLE_H
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#include <stdint.h>
+#include <inttypes.h>
+#include <stdbool.h>
 
-#include "uni_common.h"
+#include <btstack.h>
+#include <btstack_config.h>
 
-enum {
-    MOUSE_BUTTON_LEFT = BIT(0),
-    MOUSE_BUTTON_RIGHT = BIT(1),
-    MOUSE_BUTTON_MIDDLE = BIT(2),
+void uni_ble_on_hci_event_le_meta(const uint8_t* packet, uint16_t size);
+void uni_ble_on_hci_event_encryption_change(const uint8_t* packet, uint16_t size);
+void uni_ble_on_gap_event_advertising_report(const uint8_t* packet, uint16_t size);
 
-    MOUSE_BUTTON_AUX_0 = BIT(3),
-    MOUSE_BUTTON_AUX_1 = BIT(4),
-    MOUSE_BUTTON_AUX_2 = BIT(5),
-    MOUSE_BUTTON_AUX_3 = BIT(6),
-    MOUSE_BUTTON_AUX_4 = BIT(7),
-    MOUSE_BUTTON_AUX_5 = BIT(8),
-};
+void uni_ble_scan_start(void);
+void uni_ble_scan_stop(void);
 
-typedef struct {
-    int32_t delta_x;
-    int32_t delta_y;
-    uint16_t buttons;
-    int8_t scroll_wheel;
-    uint8_t misc_buttons;
-} uni_mouse_t;
+// Called from uni_hid_device_disconnect()
+void uni_ble_disconnect(hci_con_handle_t conn_handle);
 
-void uni_mouse_dump(const uni_mouse_t* ms);
+void uni_ble_delete_bonded_keys(void);
+void uni_ble_setup(void);
+
+void uni_ble_set_enabled(bool enabled);
+bool uni_ble_is_enabled(void);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif  // UNI_MOUSE_H
+#endif  // UNI_BLE_H

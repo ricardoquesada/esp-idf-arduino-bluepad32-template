@@ -22,6 +22,7 @@ limitations under the License.
 #include <sys/time.h>
 
 #include "sdkconfig.h"
+#include "uni_ble.h"
 #include "uni_bt_defines.h"
 #include "uni_circular_buffer.h"
 #include "uni_config.h"
@@ -65,8 +66,9 @@ static void misc_button_enable_callback(btstack_timer_source_t* ts);
 static void device_connection_timeout(btstack_timer_source_t* ts);
 static void start_connection_timeout(uni_hid_device_t* d);
 
-void uni_hid_device_init(void) {
-    memset(g_devices, 0, sizeof(g_devices));
+void uni_hid_device_setup(void) {
+    for (int i = 0; i < CONFIG_BLUEPAD32_MAX_DEVICES; i++)
+        uni_hid_device_init(&g_devices[i]);
 }
 
 uni_hid_device_t* uni_hid_device_create(bd_addr_t address) {
@@ -76,7 +78,6 @@ uni_hid_device_t* uni_hid_device_create(bd_addr_t address) {
 
             memset(&g_devices[i], 0, sizeof(g_devices[i]));
             memcpy(g_devices[i].conn.btaddr, address, 6);
-            g_devices[i].hids_cid = -1;
 
             // Delete device if it doesn't have a connection
             start_connection_timeout(&g_devices[i]);
@@ -84,6 +85,17 @@ uni_hid_device_t* uni_hid_device_create(bd_addr_t address) {
         }
     }
     return NULL;
+}
+
+void uni_hid_device_init(uni_hid_device_t* d) {
+    if (d == NULL) {
+        loge("Invalid device\n");
+        return;
+    }
+    memset(d, 0, sizeof(*d));
+    d->hids_cid = 0xffff;
+
+    uni_bt_conn_init(&d->conn);
 }
 
 uni_hid_device_t* uni_hid_device_get_instance_for_address(bd_addr_t addr) {
@@ -116,7 +128,7 @@ uni_hid_device_t* uni_hid_device_get_instance_for_hids_cid(uint16_t cid) {
 }
 
 uni_hid_device_t* uni_hid_device_get_instance_for_connection_handle(hci_con_handle_t handle) {
-    if (handle == 0)
+    if (handle == UNI_BT_CONN_HANDLE_INVALID)
         return NULL;
     for (int i = 0; i < CONFIG_BLUEPAD32_MAX_DEVICES; i++) {
         if (g_devices[i].conn.handle == handle) {
@@ -367,29 +379,32 @@ void uni_hid_device_connect(uni_hid_device_t* d) {
 }
 
 void uni_hid_device_disconnect(uni_hid_device_t* d) {
+    // Might be called from different states... perhaps the device was already connected.
+    // Or perhaps it got disconnected in the middle of a connection.
+    bool connected = false;
+
     if (d == NULL) {
         loge("uni_hid_device_disconnect: invalid hid device: NULL\n");
         return;
     }
 
     logi("Disconnecting device: %s\n", bd_addr_to_str(d->conn.btaddr));
-    if (!d->conn.connected) {
-        logi("Device %s already disconnected, ignoring\n", bd_addr_to_str(d->conn.btaddr));
-        return;
-    }
+
+    connected = d->conn.connected;
+
+    // Cleanup BLE
+    uni_ble_disconnect(d->conn.handle);
 
     // Close possible open connections
     uni_bt_conn_disconnect(&d->conn);
-
-    // Tell platforms
-    uni_hid_device_on_connected(d, false);
 
     // Disconnected, so no longer needs the timers
     btstack_run_loop_remove_timer(&d->connection_timer);
     btstack_run_loop_remove_timer(&d->inquiry_remote_name_timer);
 
-    // TODO: If the inquiry_remote_name_timeout_callback is associated with this device,
-    // then it should be removed as well.
+    // If it was already connected, tell platforms
+    if (connected)
+        uni_hid_device_on_connected(d, false);
 }
 
 void uni_hid_device_delete(uni_hid_device_t* d) {
@@ -402,13 +417,32 @@ void uni_hid_device_delete(uni_hid_device_t* d) {
     // Remove the timer. If it was still running, it will crash if the handler gets called.
     btstack_run_loop_remove_timer(&d->connection_timer);
 
-    memset(d, 0, sizeof(*d));
+    uni_hid_device_init(d);
 }
 
 void uni_hid_device_dump_device(uni_hid_device_t* d) {
+    char* conn_type;
+    gap_connection_type_t type;
+
+    type = gap_get_connection_type(d->conn.handle);
+    switch (type) {
+        case GAP_CONNECTION_ACL:
+            conn_type = "ACL";
+            break;
+        case GAP_CONNECTION_SCO:
+            conn_type = "SCO";
+            break;
+        case GAP_CONNECTION_LE:
+            conn_type = "BLE";
+            break;
+        default:
+            conn_type = "Invalid";
+            break;
+    }
+
     logi("\tbtaddr: %s\n", bd_addr_to_str(d->conn.btaddr));
-    logi("\tbt: handle=%d, ctrl_cid=0x%04x, intr_cid=0x%04x, cod=0x%08x, flags=0x%08x, incoming=%d\n", d->conn.handle,
-         d->conn.control_cid, d->conn.interrupt_cid, d->cod, d->flags, d->conn.incoming);
+    logi("\tbt: handle=%d (%s), ctrl_cid=0x%04x, intr_cid=0x%04x, cod=0x%08x, flags=0x%08x, incoming=%d\n",
+         d->conn.handle, conn_type, d->conn.control_cid, d->conn.interrupt_cid, d->cod, d->flags, d->conn.incoming);
     logi("\tmodel: vid=0x%04x, pid=0x%04x, model='%s', name='%s'\n", d->vendor_id, d->product_id,
          uni_gamepad_get_model_name(d->controller_type), d->name);
     if (uni_get_platform()->device_dump)
@@ -485,7 +519,7 @@ void uni_hid_device_guess_controller_type_from_pid_vid(uni_hid_device_t* d) {
             d->report_parser.init_report = uni_hid_parser_xboxone_init_report;
             d->report_parser.parse_usage = uni_hid_parser_xboxone_parse_usage;
             d->report_parser.set_rumble = uni_hid_parser_xboxone_set_rumble;
-            logi("Device detected as Xbox One: 0x%02x\n", type);
+            logi("Device detected as Xbox Wireless: 0x%02x\n", type);
             break;
         case CONTROLLER_TYPE_AndroidController:
             d->report_parser.init_report = uni_hid_parser_android_init_report;

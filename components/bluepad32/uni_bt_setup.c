@@ -23,6 +23,7 @@ limitations under the License.
 #include <btstack.h>
 
 #include "sdkconfig.h"
+#include "uni_ble.h"
 #include "uni_bluetooth.h"
 #include "uni_bt_defines.h"
 #include "uni_bt_sdp.h"
@@ -53,9 +54,6 @@ static fn_t setup_fns[] = {
 };
 static setup_state_t setup_state = SETUP_STATE_BTSTACK_IN_PROGRESS;
 static btstack_packet_callback_registration_t hci_event_callback_registration;
-#ifdef CONFIG_BLUEPAD32_ENABLE_BLE
-static btstack_packet_callback_registration_t sm_event_callback_registration;
-#endif
 
 static void maybe_delete_or_list_link_keys(void) {
     bd_addr_t addr;
@@ -63,22 +61,28 @@ static void maybe_delete_or_list_link_keys(void) {
     link_key_type_t type;
     btstack_link_key_iterator_t it;
 
+    int32_t delete_keys = uni_get_platform()->get_property(UNI_PLATFORM_PROPERTY_DELETE_STORED_KEYS);
+    if (delete_keys != 1)
+        return;
+
+    // BR/EDR
     int ok = gap_link_key_iterator_init(&it);
     if (!ok) {
         loge("Link key iterator not implemented\n");
         return;
     }
-    int32_t delete_keys = uni_get_platform()->get_property(UNI_PLATFORM_PROPERTY_DELETE_STORED_KEYS);
-    if (delete_keys == 1) {
-        logi("Deleting stored link keys:\n");
-        while (gap_link_key_iterator_get_next(&it, addr, link_key, &type)) {
-            logi("%s - type %u, key: ", bd_addr_to_str(addr), (int)type);
-            printf_hexdump(link_key, 16);
-            gap_drop_link_key_for_bd_addr(addr);
-        }
+
+    logi("Deleting stored BR/ERD link keys:\n");
+    while (gap_link_key_iterator_get_next(&it, addr, link_key, &type)) {
+        logi("%s - type %u, key: ", bd_addr_to_str(addr), (int)type);
+        printf_hexdump(link_key, 16);
+        gap_drop_link_key_for_bd_addr(addr);
     }
+
     logi(".\n");
     gap_link_key_iterator_done(&it);
+
+    uni_ble_delete_bonded_keys();
 }
 
 static uint8_t setup_set_event_filter(void) {
@@ -124,6 +128,8 @@ static void setup_call_next_fn(void) {
             gap_inquiry_periodic_start(UNI_BT_INQUIRY_LENGTH, UNI_BT_MAX_PERIODIC_LENGTH, UNI_BT_MIN_PERIODIC_LENGTH);
         if (status)
             loge("Failed to start period inquiry, error=0x%02x\n", status);
+
+        uni_ble_scan_start();
 
         uni_get_platform()->on_init_complete();
         uni_get_platform()->on_oob_event(UNI_PLATFORM_OOB_BLUETOOTH_ENABLED, (void*)true);
@@ -264,9 +270,9 @@ int uni_bt_setup(void) {
     logi("Periodic Inquiry: max=%d, min=%d, len=%d\n", uni_bt_setup_get_gap_max_periodic_lenght(),
          uni_bt_setup_get_gap_min_periodic_lenght(), uni_bt_setup_get_gap_inquiry_lenght());
     logi("Max connected gamepads: %d\n", CONFIG_BLUEPAD32_MAX_DEVICES);
-#ifdef CONFIG_BLUEPAD32_ENABLE_BLE
-    logi("BLE support: enabled\n");
-#endif  // CONFIG_BLUEPAD32_ENABLE_BLE
+
+    logi("BR/EDR support: enabled\n");
+    logi("BLE support: %s\n", uni_ble_is_enabled() ? "enabled" : "disabled");
 
     l2cap_register_service(uni_bluetooth_packet_handler, BLUETOOTH_PSM_HID_INTERRUPT, UNI_BT_L2CAP_CHANNEL_MTU,
                            security_level);
@@ -287,16 +293,8 @@ int uni_bt_setup(void) {
     // btstack_stdin_setup(stdin_process);
     hci_set_master_slave_policy(HCI_ROLE_MASTER);
 
-#ifdef CONFIG_BLUEPAD32_ENABLE_BLE
-    // register for events from Security Manager
-    sm_event_callback_registration.callback = &uni_bluetooth_sm_packet_handler;
-    sm_add_event_handler(&sm_event_callback_registration);
-
-    // setup LE device db
-    le_device_db_init();
-    sm_init();
-    gatt_client_init();
-#endif  // CONFIG_BLUEPAD32_ENABLE_BLE
+    if (uni_ble_is_enabled())
+        uni_ble_setup();
 
     // Disable stdout buffering
     setbuf(stdout, NULL);

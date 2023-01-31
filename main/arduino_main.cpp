@@ -170,6 +170,7 @@ void processMouse(ControllerPtr mouse) {
                    mouse->deltaY(),       // Mouse delta Y
                    mouse->buttons(),      // bitmask of pressed buttons
                    mouse->miscButtons(),  // bitmak of pressed "misc" buttons
+                   mouse->scrollWheel(),  // Direction: 1=up, -1=down, 0=no movement
                    mouse->battery()       // 0=Unk, 1=Empty, 255=full
     );
 }

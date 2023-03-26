@@ -35,6 +35,7 @@ limitations under the License.
 #include "uni_bluetooth.h"
 #include "uni_common.h"
 #include "uni_config.h"
+#include "uni_esp32.h"
 #include "uni_gamepad.h"
 #include "uni_hid_device.h"
 #include "uni_log.h"
@@ -407,6 +408,13 @@ struct uni_platform* uni_platform_arduino_create(void) {
     };
 
     return &plat;
+}
+
+//
+// Autostart
+//
+int app_main(void) {
+    return uni_esp32_main();
 }
 
 #endif  // CONFIG_BLUEPAD32_PLATFORM_ARDUINO

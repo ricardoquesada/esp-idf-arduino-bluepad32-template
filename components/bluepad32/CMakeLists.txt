@@ -1,7 +1,8 @@
 set(srcs "uni_balance_board.c"
-         "uni_ble.c"
          "uni_bluetooth.c"
+         "uni_bt_bredr.c"
          "uni_bt_conn.c"
+         "uni_bt_le.c"
          "uni_bt_sdp.c"
          "uni_bt_setup.c"
          "uni_circular_buffer.c"
@@ -36,15 +37,19 @@ set(srcs "uni_balance_board.c"
          "uni_platform.c"
          "uni_platform_arduino.c"
          "uni_platform_arduino_bootstrap.cpp"
-         "uni_platform_mightymiggy.c"
-         "uni_platform_nina.c"
          "uni_platform_pc_debug.c"
-         "uni_platform_unijoysticle.c"
-         "uni_platform_unijoysticle_amiga.c"
-         "uni_platform_unijoysticle_c64.c"
          "uni_property.c"
          "uni_property_nvs.c"
          "uni_utils.c")
+
+if(CONFIG_IDF_TARGET_ESP32)
+    list(APPEND srcs
+         "uni_platform_mightymiggy.c"
+         "uni_platform_nina.c"
+         "uni_platform_unijoysticle.c"
+         "uni_platform_unijoysticle_amiga.c"
+         "uni_platform_unijoysticle_c64.c")
+endif()
 
 set(requires "nvs_flash" "btstack" "app_update" "esp_timer")
 

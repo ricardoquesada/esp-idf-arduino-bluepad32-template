@@ -3,7 +3,6 @@ set(srcs "uni_balance_board.c"
          "uni_bt_bredr.c"
          "uni_bt_conn.c"
          "uni_bt_le.c"
-         "uni_bt_sdp.c"
          "uni_bt_setup.c"
          "uni_circular_buffer.c"
          "uni_console.c"
@@ -44,6 +43,10 @@ set(srcs "uni_balance_board.c"
 
 if(CONFIG_IDF_TARGET_ESP32)
     list(APPEND srcs
+	 # BR/ERD only code only gets compiled on ESP32
+         "uni_bt_sdp.c"
+
+	 # Place here that are ESP32-only
          "uni_platform_mightymiggy.c"
          "uni_platform_nina.c"
          "uni_platform_unijoysticle.c"

@@ -22,7 +22,7 @@ limitations under the License.
 
 #ifdef CONFIG_IDF_TARGET_ESP32
 #include <esp32/rom/uart.h>
-#endif // CONFIG_IDF_TARGET_ESP32
+#endif  // CONFIG_IDF_TARGET_ESP32
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -35,12 +35,12 @@ limitations under the License.
 #include <hci_dump.h>
 #include <hci_dump_embedded_stdout.h>
 
-#include "uni_main.h"
 #include "uni_config.h"
+#include "uni_main.h"
 
 #ifdef UNI_ENABLE_BREDR
 _Static_assert(CONFIG_BTDM_CTRL_BR_EDR_MAX_ACL_CONN >= 2, "Max ACL must be >= 2");
-#endif // UNI_ENABLE_BREDR
+#endif  // UNI_ENABLE_BREDR
 
 // This function should be called from "app_main"
 int uni_esp32_main(void) {
@@ -98,5 +98,5 @@ void uni_esp32_enable_uart_output(int enabled) {
         ets_install_putc1(NULL);
         ets_install_putc2(NULL);
     }
-#endif // CONFIG_IDF_TARGET_ESP32
+#endif  // CONFIG_IDF_TARGET_ESP32
 }

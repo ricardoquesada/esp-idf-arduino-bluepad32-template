@@ -51,7 +51,6 @@ extern "C" {
 #define ARG_UNUSED(x) (void)(sizeof(x))
 #endif  // ARG_UNUSED
 
-
 /* From here to end of file: Copied from Zephyr project */
 /**
  * @brief Check for macro definition in compiler-visible expressions
@@ -131,8 +130,7 @@ extern "C" {
  * @param _if_1_code result if @p _flag expands to 1; must be in parentheses
  * @param _else_code result otherwise; must be in parentheses
  */
-#define COND_CODE_1(_flag, _if_1_code, _else_code) \
-	Z_COND_CODE_1(_flag, _if_1_code, _else_code)
+#define COND_CODE_1(_flag, _if_1_code, _else_code) Z_COND_CODE_1(_flag, _if_1_code, _else_code)
 
 /**
  * @brief Like COND_CODE_1() except tests if @p _flag is 0.
@@ -147,8 +145,7 @@ extern "C" {
  * @param _else_code result otherwise; must be in parentheses
  * @see COND_CODE_1()
  */
-#define COND_CODE_0(_flag, _if_0_code, _else_code) \
-	Z_COND_CODE_0(_flag, _if_0_code, _else_code)
+#define COND_CODE_0(_flag, _if_0_code, _else_code) Z_COND_CODE_0(_flag, _if_0_code, _else_code)
 
 /**
  * @brief Insert code if @p _flag is defined and equals 1.
@@ -175,9 +172,7 @@ extern "C" {
  * @param _flag evaluated flag
  * @param _code result if @p _flag expands to 1; must be in parentheses
  */
-#define IF_ENABLED(_flag, _code) \
-	COND_CODE_1(_flag, _code, ())
-
+#define IF_ENABLED(_flag, _code) COND_CODE_1(_flag, _code, ())
 
 /* IS_ENABLED() helpers */
 
@@ -212,13 +207,10 @@ extern "C" {
 #define Z_IS_ENABLED3(ignore_this, val, ...) val
 
 /* Used internally by COND_CODE_1 and COND_CODE_0. */
-#define Z_COND_CODE_1(_flag, _if_1_code, _else_code) \
-	__COND_CODE(_XXXX##_flag, _if_1_code, _else_code)
-#define Z_COND_CODE_0(_flag, _if_0_code, _else_code) \
-	__COND_CODE(_ZZZZ##_flag, _if_0_code, _else_code)
+#define Z_COND_CODE_1(_flag, _if_1_code, _else_code) __COND_CODE(_XXXX##_flag, _if_1_code, _else_code)
+#define Z_COND_CODE_0(_flag, _if_0_code, _else_code) __COND_CODE(_ZZZZ##_flag, _if_0_code, _else_code)
 #define _ZZZZ0 _YYYY,
-#define __COND_CODE(one_or_two_args, _if_code, _else_code) \
-	__GET_ARG2_DEBRACKET(one_or_two_args _if_code, _else_code)
+#define __COND_CODE(one_or_two_args, _if_code, _else_code) __GET_ARG2_DEBRACKET(one_or_two_args _if_code, _else_code)
 
 /* Gets second argument and removes brackets around that argument. It
  * is expected that the parameter is provided in brackets/parentheses.

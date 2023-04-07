@@ -63,21 +63,19 @@
 #define SDP_QUERY_TIMEOUT_MS 13000
 _Static_assert(SDP_QUERY_TIMEOUT_MS < HID_DEVICE_CONNECTION_TIMEOUT_MS, "Timeout too big");
 
-static uint8_t sdp_attribute_value[MAX_ATTRIBUTE_VALUE_SIZE];
-static const unsigned int sdp_attribute_value_buffer_size = MAX_ATTRIBUTE_VALUE_SIZE;
+IF_ENABLED(UNI_ENABLE_BREDR, (static uint8_t sdp_attribute_value[MAX_ATTRIBUTE_VALUE_SIZE];))
+IF_ENABLED(UNI_ENABLE_BREDR, (static const unsigned int sdp_attribute_value_buffer_size = MAX_ATTRIBUTE_VALUE_SIZE;))
 static uni_hid_device_t* sdp_device = NULL;
 static btstack_timer_source_t sdp_query_timer;
 
-static void handle_sdp_hid_query_result(uint8_t packet_type, uint16_t channel, uint8_t* packet, uint16_t size);
-static void handle_sdp_pid_query_result(uint8_t packet_type, uint16_t channel, uint8_t* packet, uint16_t size);
 static void sdp_query_timeout(btstack_timer_source_t* ts);
 
 // SDP Server
-static uint8_t device_id_sdp_service_buffer[100];
+IF_ENABLED(UNI_ENABLE_BREDR, (static uint8_t device_id_sdp_service_buffer[100];))
 
 // HID results: HID descriptor, PSM interrupt, PSM control, etc.
-static void handle_sdp_hid_query_result(uint8_t packet_type, uint16_t channel, uint8_t* packet, uint16_t size) {
 #ifdef UNI_ENABLE_BREDR
+static void handle_sdp_hid_query_result(uint8_t packet_type, uint16_t channel, uint8_t* packet, uint16_t size) {
     ARG_UNUSED(packet_type);
     ARG_UNUSED(channel);
     ARG_UNUSED(size);
@@ -134,12 +132,12 @@ static void handle_sdp_hid_query_result(uint8_t packet_type, uint16_t channel, u
         default:
             break;
     }
-#endif  // UNI_ENABLE_BREDR
 }
+#endif  // UNI_ENABLE_BREDR
 
+#ifdef UNI_ENABLE_BREDR
 // Device ID results: Vendor ID, Product ID, Version, etc...
 static void handle_sdp_pid_query_result(uint8_t packet_type, uint16_t channel, uint8_t* packet, uint16_t size) {
-#ifdef UNI_ENABLE_BREDR
     ARG_UNUSED(packet_type);
     ARG_UNUSED(channel);
     ARG_UNUSED(size);
@@ -193,60 +191,60 @@ static void handle_sdp_pid_query_result(uint8_t packet_type, uint16_t channel, u
             logd("TODO: handle_sdp_pid_query_result. switch->default triggered\n");
             break;
     }
-#endif  // UNI_ENABLE_BREDR
 }
+#endif  // UNI_ENABLE_BREDR
 
 static void sdp_query_timeout(btstack_timer_source_t* ts) {
-#ifdef UNI_ENABLE_BREDR
-    loge("<------- sdp_query_timeout()\n");
-    uni_hid_device_t* d = btstack_run_loop_get_timer_context(ts);
-    if (!sdp_device) {
-        loge("sdp_query_timeout: unexpeced, sdp_device should not be NULL\n");
-        return;
-    }
-    if (d != sdp_device) {
-        loge("sdp_query_timeout: unexpected device values, they should be equal, got: %s != %s",
-             bd_addr_to_str(d->conn.btaddr), bd_addr_to_str(sdp_device->conn.btaddr));
-        return;
-    }
+    if (IS_ENABLED(UNI_ENABLE_BREDR)) {
+        loge("<------- sdp_query_timeout()\n");
+        uni_hid_device_t* d = btstack_run_loop_get_timer_context(ts);
+        if (!sdp_device) {
+            loge("sdp_query_timeout: unexpeced, sdp_device should not be NULL\n");
+            return;
+        }
+        if (d != sdp_device) {
+            loge("sdp_query_timeout: unexpected device values, they should be equal, got: %s != %s",
+                 bd_addr_to_str(d->conn.btaddr), bd_addr_to_str(sdp_device->conn.btaddr));
+            return;
+        }
 
-    logi("Failed to query SDP for %s, timeout\n", bd_addr_to_str(d->conn.btaddr));
-    sdp_device = NULL;
-#endif  // UNI_ENABLE_BREDR
+        logi("Failed to query SDP for %s, timeout\n", bd_addr_to_str(d->conn.btaddr));
+        sdp_device = NULL;
+    }
 }
 
 // Public functions
 
 void uni_bt_sdp_query_start(uni_hid_device_t* d) {
-#ifdef UNI_ENABLE_BREDR
-    loge("-----------> sdp_query_start()\n");
-    // Needed for the SDP query since it only supports one SDP query at the time.
-    if (sdp_device != NULL) {
-        logi("Another SDP query is in progress (%s), disconnecting...\n", bd_addr_to_str(sdp_device->conn.btaddr));
-        uni_hid_device_disconnect(d);
-        uni_hid_device_delete(d);
-        /* 'd'' is destroyed after this call, don't use it */
-        return;
+    if (IS_ENABLED(UNI_ENABLE_BREDR)) {
+        loge("-----------> sdp_query_start()\n");
+        // Needed for the SDP query since it only supports one SDP query at the time.
+        if (sdp_device != NULL) {
+            logi("Another SDP query is in progress (%s), disconnecting...\n", bd_addr_to_str(sdp_device->conn.btaddr));
+            uni_hid_device_disconnect(d);
+            uni_hid_device_delete(d);
+            /* 'd'' is destroyed after this call, don't use it */
+            return;
+        }
+
+        sdp_device = d;
+        btstack_run_loop_set_timer_context(&sdp_query_timer, d);
+        btstack_run_loop_set_timer_handler(&sdp_query_timer, &sdp_query_timeout);
+        btstack_run_loop_set_timer(&sdp_query_timer, SDP_QUERY_TIMEOUT_MS);
+        btstack_run_loop_add_timer(&sdp_query_timer);
+
+        uni_bt_sdp_query_start_vid_pid(d);
     }
-
-    sdp_device = d;
-    btstack_run_loop_set_timer_context(&sdp_query_timer, d);
-    btstack_run_loop_set_timer_handler(&sdp_query_timer, &sdp_query_timeout);
-    btstack_run_loop_set_timer(&sdp_query_timer, SDP_QUERY_TIMEOUT_MS);
-    btstack_run_loop_add_timer(&sdp_query_timer);
-
-    uni_bt_sdp_query_start_vid_pid(d);
-#endif  // UNI_ENABLE_BREDR
 }
 
 void uni_bt_sdp_query_end(uni_hid_device_t* d) {
-#ifdef UNI_ENABLE_BREDR
-    loge("<----------- sdp_query_end()\n");
-    uni_bt_conn_set_state(&d->conn, UNI_BT_CONN_STATE_SDP_HID_DESCRIPTOR_FETCHED);
-    sdp_device = NULL;
-    btstack_run_loop_remove_timer(&sdp_query_timer);
-    uni_bluetooth_process_fsm(d);
-#endif  // UNI_ENABLE_BREDR
+    if (IS_ENABLED(UNI_ENABLE_BREDR)) {
+        loge("<----------- sdp_query_end()\n");
+        uni_bt_conn_set_state(&d->conn, UNI_BT_CONN_STATE_SDP_HID_DESCRIPTOR_FETCHED);
+        sdp_device = NULL;
+        btstack_run_loop_remove_timer(&sdp_query_timer);
+        uni_bluetooth_process_fsm(d);
+    }
 }
 
 void uni_bt_sdp_query_start_vid_pid(uni_hid_device_t* d) {

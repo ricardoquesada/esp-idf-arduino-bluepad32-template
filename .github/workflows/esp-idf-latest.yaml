@@ -17,9 +17,21 @@ jobs:
       with:
         submodules: 'recursive'
 
-    - name: Arduino build
+    - name: Arduino build ESP32
       uses: espressif/esp-idf-ci-action@main
       with:
         esp_idf_version: release-v4.4
         target: esp32
+
+    - name: Arduino build ESP32-S3
+      uses: espressif/esp-idf-ci-action@main
+      with:
+        esp_idf_version: release-v4.4
+        target: esp32-s3
+
+    - name: Arduino build ESP32-C3
+      uses: espressif/esp-idf-ci-action@main
+      with:
+        esp_idf_version: release-v4.4
+        target: esp32-c3
 

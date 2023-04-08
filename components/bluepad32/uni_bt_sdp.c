@@ -56,7 +56,7 @@
 #include "uni_config.h"
 #include "uni_log.h"
 
-// These are the only two supported platforms with BR/ERD support.
+// These are the only two supported platforms with BR/EDR support.
 #if !(defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_TARGET_LIBUSB))
 #error "This file can only be compiled for ESP32 or LibUSB"
 #endif

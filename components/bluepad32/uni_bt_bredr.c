@@ -98,7 +98,7 @@ void uni_bt_bredr_delete_bonded_keys(void) {
         return;
     }
 
-    logi("Deleting stored BR/ERD link keys:\n");
+    logi("Deleting stored BR/EDR link keys:\n");
     while (gap_link_key_iterator_get_next(&it, addr, link_key, &type)) {
         logi("%s - type %u, key: ", bd_addr_to_str(addr), (int)type);
         printf_hexdump(link_key, 16);

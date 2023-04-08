@@ -43,7 +43,7 @@ set(srcs "uni_balance_board.c"
 
 if(CONFIG_IDF_TARGET_ESP32)
     list(APPEND srcs
-	 # BR/ERD only code only gets compiled on ESP32
+	 # BR/EDR only code only gets compiled on ESP32
          "uni_bt_sdp.c"
 
 	 # Place here that are ESP32-only

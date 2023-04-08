@@ -228,9 +228,9 @@ int uni_bt_setup(void) {
     // Initialize L2CAP
     l2cap_init();
 
-    if (IS_ENABLED(UNI_ENABLED_BREDR))
+    if (IS_ENABLED(UNI_ENABLE_BREDR))
         bredr_enabled = uni_bt_bredr_is_enabled();
-    if (IS_ENABLED(UNI_ENABLED_BLE))
+    if (IS_ENABLED(UNI_ENABLE_BLE))
         ble_enabled = uni_bt_le_is_enabled();
 
     logi("Max connected gamepads: %d\n", CONFIG_BLUEPAD32_MAX_DEVICES);

@@ -215,7 +215,6 @@ void uni_bt_disconnect_device_safe(int device_idx) {
 
 void uni_bt_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t* packet, uint16_t size) {
     uint8_t event;
-    bd_addr_t event_addr;
     uni_hid_device_t* device;
     uint8_t status;
     uint16_t handle;

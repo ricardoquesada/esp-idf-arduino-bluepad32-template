@@ -56,6 +56,11 @@
 #include "uni_config.h"
 #include "uni_log.h"
 
+// These are the only two supported platforms with BR/ERD support.
+#if !(defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_TARGET_LIBUSB))
+#error "This file can only be compiled for ESP32 or LibUSB"
+#endif
+
 #define MAX_ATTRIBUTE_VALUE_SIZE 512  // Apparently PS4 has a 470-bytes report
 
 // Some old devices like "ThinkGeek 8-bitty Game Controller" takes a lot of time to respond

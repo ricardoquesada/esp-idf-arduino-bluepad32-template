@@ -26,6 +26,7 @@ limitations under the License.
 #include "uni_bt_defines.h"
 #include "uni_bt_le.h"
 #include "uni_circular_buffer.h"
+#include "uni_common.h"
 #include "uni_config.h"
 #include "uni_controller.h"
 #include "uni_gamepad.h"

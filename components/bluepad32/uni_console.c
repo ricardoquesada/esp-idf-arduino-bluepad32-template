@@ -29,7 +29,7 @@ limitations under the License.
 #include <nvs_flash.h>
 
 #include "sdkconfig.h"
-#include "uni_bluetooth.h"
+#include "uni_bt.h"
 #include "uni_bt_le.h"
 #include "uni_bt_setup.h"
 #include "uni_common.h"
@@ -82,7 +82,7 @@ static struct {
 
 static int list_devices(int argc, char** argv) {
     // FIXME: Should not belong to "bluetooth"
-    uni_bluetooth_dump_devices_safe();
+    uni_bt_dump_devices_safe();
 
     // This function prints to console. print bp32> after a delay
     TickType_t ticks = pdMS_TO_TICKS(250);
@@ -179,7 +179,7 @@ static int set_incoming_connections_enabled(int argc, char** argv) {
     }
 
     enabled = set_incoming_connections_enabled_args.enabled->ival[0];
-    uni_bluetooth_enable_new_connections_safe(!!enabled);
+    uni_bt_enable_new_connections_safe(!!enabled);
     return 0;
 }
 
@@ -202,7 +202,7 @@ static int list_bluetooth_keys(int argc, char** argv) {
     ARG_UNUSED(argc);
     ARG_UNUSED(argv);
 
-    uni_bluetooth_list_keys_safe();
+    uni_bt_list_keys_safe();
 
     // This function prints to console. print bp32> after a delay
     TickType_t ticks = pdMS_TO_TICKS(250);
@@ -214,7 +214,7 @@ static int del_bluetooth_keys(int argc, char** argv) {
     ARG_UNUSED(argc);
     ARG_UNUSED(argv);
 
-    uni_bluetooth_del_keys_safe();
+    uni_bt_del_keys_safe();
     // This function prints to console. print bp32> after a delay
     TickType_t ticks = pdMS_TO_TICKS(250);
     vTaskDelay(ticks);
@@ -233,7 +233,7 @@ static int disconnect_device(int argc, char** argv) {
     if (idx < 0 || idx >= CONFIG_BLUEPAD32_MAX_DEVICES)
         return 1;
 
-    uni_bluetooth_disconnect_device_safe(idx);
+    uni_bt_disconnect_device_safe(idx);
     return 0;
 }
 

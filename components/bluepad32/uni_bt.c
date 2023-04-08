@@ -52,7 +52,7 @@
  * this file.
  */
 
-#include "uni_bluetooth.h"
+#include "uni_bt.h"
 
 #include <btstack.h>
 #include <btstack_config.h>
@@ -182,38 +182,38 @@ static void cmd_callback(void* context) {
 // Public functions
 //
 
-void uni_bluetooth_del_keys_safe(void) {
+void uni_bt_del_keys_safe(void) {
     cmd_callback_registration.callback = &cmd_callback;
     cmd_callback_registration.context = (void*)CMD_BT_DEL_KEYS;
     btstack_run_loop_execute_on_main_thread(&cmd_callback_registration);
 }
 
-void uni_bluetooth_list_keys_safe(void) {
+void uni_bt_list_keys_safe(void) {
     cmd_callback_registration.callback = &cmd_callback;
     cmd_callback_registration.context = (void*)CMD_BT_LIST_KEYS;
     btstack_run_loop_execute_on_main_thread(&cmd_callback_registration);
 }
 
-void uni_bluetooth_enable_new_connections_safe(bool enabled) {
+void uni_bt_enable_new_connections_safe(bool enabled) {
     cmd_callback_registration.callback = &cmd_callback;
     cmd_callback_registration.context = (void*)(enabled ? (intptr_t)CMD_BT_ENABLE : (intptr_t)CMD_BT_DISABLE);
     btstack_run_loop_execute_on_main_thread(&cmd_callback_registration);
 }
 
-void uni_bluetooth_dump_devices_safe(void) {
+void uni_bt_dump_devices_safe(void) {
     cmd_callback_registration.callback = &cmd_callback;
     cmd_callback_registration.context = (void*)CMD_DUMP_DEVICES;
     btstack_run_loop_execute_on_main_thread(&cmd_callback_registration);
 }
 
-void uni_bluetooth_disconnect_device_safe(int device_idx) {
+void uni_bt_disconnect_device_safe(int device_idx) {
     uint8_t idx = (uint8_t)device_idx;
     cmd_callback_registration.callback = &cmd_callback;
     cmd_callback_registration.context = (void*)(CMD_DISCONNECT_DEVICE | (idx << 16));
     btstack_run_loop_execute_on_main_thread(&cmd_callback_registration);
 }
 
-void uni_bluetooth_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t* packet, uint16_t size) {
+void uni_bt_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t* packet, uint16_t size) {
     uint8_t event;
     bd_addr_t event_addr;
     uni_hid_device_t* device;

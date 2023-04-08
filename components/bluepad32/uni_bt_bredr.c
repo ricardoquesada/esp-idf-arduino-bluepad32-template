@@ -24,7 +24,7 @@ limitations under the License.
 #include <btstack.h>
 
 #include "sdkconfig.h"
-#include "uni_bluetooth.h"
+#include "uni_bt.h"
 #include "uni_bt_defines.h"
 #include "uni_bt_sdp.h"
 #include "uni_bt_setup.h"
@@ -45,7 +45,7 @@ static bool bt_bredr_enabled = true;
 
 static void l2cap_create_control_connection(uni_hid_device_t* d) {
     uint8_t status;
-    status = l2cap_create_channel(uni_bluetooth_packet_handler, d->conn.btaddr, BLUETOOTH_PSM_HID_CONTROL,
+    status = l2cap_create_channel(uni_bt_packet_handler, d->conn.btaddr, BLUETOOTH_PSM_HID_CONTROL,
                                   UNI_BT_L2CAP_CHANNEL_MTU, &d->conn.control_cid);
     if (status) {
         loge("\nConnecting or Auth to HID Control failed: 0x%02x", status);
@@ -56,7 +56,7 @@ static void l2cap_create_control_connection(uni_hid_device_t* d) {
 
 static void l2cap_create_interrupt_connection(uni_hid_device_t* d) {
     uint8_t status;
-    status = l2cap_create_channel(uni_bluetooth_packet_handler, d->conn.btaddr, BLUETOOTH_PSM_HID_INTERRUPT,
+    status = l2cap_create_channel(uni_bt_packet_handler, d->conn.btaddr, BLUETOOTH_PSM_HID_INTERRUPT,
                                   UNI_BT_L2CAP_CHANNEL_MTU, &d->conn.interrupt_cid);
     if (status) {
         loge("\nConnecting or Auth to HID Interrupt failed: 0x%02x", status);
@@ -178,9 +178,9 @@ void uni_bt_bredr_setup(void) {
     // Needed for some incoming connections
     uni_bt_sdp_server_init();
 
-    l2cap_register_service(uni_bluetooth_packet_handler, BLUETOOTH_PSM_HID_INTERRUPT, UNI_BT_L2CAP_CHANNEL_MTU,
+    l2cap_register_service(uni_bt_packet_handler, BLUETOOTH_PSM_HID_INTERRUPT, UNI_BT_L2CAP_CHANNEL_MTU,
                            security_level);
-    l2cap_register_service(uni_bluetooth_packet_handler, BLUETOOTH_PSM_HID_CONTROL, UNI_BT_L2CAP_CHANNEL_MTU,
+    l2cap_register_service(uni_bt_packet_handler, BLUETOOTH_PSM_HID_CONTROL, UNI_BT_L2CAP_CHANNEL_MTU,
                            security_level);
 
     // Allow sniff mode requests by HID device and support role switch
@@ -219,9 +219,9 @@ void uni_bt_bredr_process_fsm(uni_hid_device_t* d) {
     // The order in which those states are executed vary from gamepad to gamepad
     uni_bt_conn_state_t state;
 
-    // logi("uni_bluetooth_process_fsm: %p = 0x%02x\n", d, d->state);
+    // logi("uni_bt_process_fsm: %p = 0x%02x\n", d, d->state);
     if (d == NULL) {
-        loge("uni_bluetooth_process_fsm: Invalid device\n");
+        loge("uni_bt_process_fsm: Invalid device\n");
     }
     // Two possible flows:
     // - Incoming (initiated by gamepad)
@@ -229,7 +229,7 @@ void uni_bt_bredr_process_fsm(uni_hid_device_t* d) {
 
     state = uni_bt_conn_get_state(&d->conn);
 
-    logi("uni_bluetooth_process_fsm, bd addr:%s,  state: %d, incoming:%d\n", bd_addr_to_str(d->conn.btaddr), state,
+    logi("uni_bt_process_fsm, bd addr:%s,  state: %d, incoming:%d\n", bd_addr_to_str(d->conn.btaddr), state,
          uni_hid_device_is_incoming(d));
 
     // Does it have a name?
@@ -237,7 +237,7 @@ void uni_bt_bredr_process_fsm(uni_hid_device_t* d) {
     // Or at the very end, when it is an incoming connection.
     if (!uni_hid_device_has_name(d) &&
         ((state == UNI_BT_CONN_STATE_DEVICE_DISCOVERED) || state == UNI_BT_CONN_STATE_L2CAP_INTERRUPT_CONNECTED)) {
-        logi("uni_bluetooth_process_fsm: requesting name\n");
+        logi("uni_bt_process_fsm: requesting name\n");
 
         if (d->conn.clock_offset & UNI_BT_CLOCK_OFFSET_VALID)
             gap_remote_name_request(d->conn.btaddr, d->conn.page_scan_repetition_mode, d->conn.clock_offset);
@@ -257,7 +257,7 @@ void uni_bt_bredr_process_fsm(uni_hid_device_t* d) {
     if (state == UNI_BT_CONN_STATE_REMOTE_NAME_FETCHED) {
         // TODO: Move comparison to DS4 code
         if (strcmp("Wireless Controller", d->name) == 0) {
-            logi("uni_bluetooth_process_fsm: gamepad is 'Wireless Controller', starting SDP query\n");
+            logi("uni_bt_process_fsm: gamepad is 'Wireless Controller', starting SDP query\n");
             d->sdp_query_type = SDP_QUERY_BEFORE_CONNECT;
             uni_bt_sdp_query_start(d);
             /* 'd' might be invalid */
@@ -265,30 +265,30 @@ void uni_bt_bredr_process_fsm(uni_hid_device_t* d) {
         }
 
         if (uni_hid_device_guess_controller_type_from_name(d, d->name)) {
-            logi("uni_bluetooth_process_fsm: Guess controller from name\n");
+            logi("uni_bt_process_fsm: Guess controller from name\n");
             d->sdp_query_type = SDP_QUERY_NOT_NEEDED;
             uni_bt_conn_set_state(&d->conn, UNI_BT_CONN_STATE_SDP_HID_DESCRIPTOR_FETCHED);
         }
 
         if (uni_hid_device_is_incoming(d)) {
             if (d->sdp_query_type == SDP_QUERY_NOT_NEEDED) {
-                logi("uni_bluetooth_process_fsm: Device is ready\n");
+                logi("uni_bt_process_fsm: Device is ready\n");
                 uni_hid_device_set_ready(d);
             } else {
-                logi("uni_bluetooth_process_fsm: starting SDP query\n");
+                logi("uni_bt_process_fsm: starting SDP query\n");
                 uni_bt_sdp_query_start(d);
                 /* 'd' might be invalid */
             }
             return;
         }
         // else, not an incoming connection
-        logi("uni_bluetooth_process_fsm: Starting L2CAP connection\n");
+        logi("uni_bt_process_fsm: Starting L2CAP connection\n");
         l2cap_create_control_connection(d);
         return;
     }
 
     if (state == UNI_BT_CONN_STATE_SDP_VENDOR_FETCHED) {
-        logi("uni_bluetooth_process_fsm: querying HID descriptor\n");
+        logi("uni_bt_process_fsm: querying HID descriptor\n");
         uni_bt_sdp_query_start_hid_descriptor(d);
         return;
     }
@@ -301,10 +301,10 @@ void uni_bt_bredr_process_fsm(uni_hid_device_t* d) {
 
         // Not incoming
         if (d->sdp_query_type == SDP_QUERY_BEFORE_CONNECT) {
-            logi("uni_bluetooth_process_fsm: Starting L2CAP connection\n");
+            logi("uni_bt_process_fsm: Starting L2CAP connection\n");
             l2cap_create_control_connection(d);
         } else {
-            logi("uni_bluetooth_process_fsm: Device is ready\n");
+            logi("uni_bt_process_fsm: Device is ready\n");
             uni_hid_device_set_ready(d);
         }
         return;
@@ -312,7 +312,7 @@ void uni_bt_bredr_process_fsm(uni_hid_device_t* d) {
 
     if (!uni_hid_device_is_incoming(d)) {
         if (state == UNI_BT_CONN_STATE_L2CAP_CONTROL_CONNECTED) {
-            logi("uni_bluetooth_process_fsm: Create L2CAP interrupt connection\n");
+            logi("uni_bt_process_fsm: Create L2CAP interrupt connection\n");
             l2cap_create_interrupt_connection(d);
             return;
         }
@@ -321,11 +321,11 @@ void uni_bt_bredr_process_fsm(uni_hid_device_t* d) {
             switch (d->sdp_query_type) {
                 case SDP_QUERY_BEFORE_CONNECT:
                 case SDP_QUERY_NOT_NEEDED:
-                    logi("uni_bluetooth_process_fsm: Device is ready\n");
+                    logi("uni_bt_process_fsm: Device is ready\n");
                     uni_hid_device_set_ready(d);
                     break;
                 case SDP_QUERY_AFTER_CONNECT:
-                    logi("uni_bluetooth_process_fsm: starting SDP query\n");
+                    logi("uni_bt_process_fsm: starting SDP query\n");
                     uni_bt_sdp_query_start(d);
                     /* 'd' might be invalid */
                     break;

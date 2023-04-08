@@ -23,7 +23,7 @@ limitations under the License.
 #include <btstack.h>
 
 #include "sdkconfig.h"
-#include "uni_bluetooth.h"
+#include "uni_bt.h"
 #include "uni_bt_bredr.h"
 #include "uni_bt_defines.h"
 #include "uni_bt_le.h"
@@ -239,7 +239,7 @@ int uni_bt_setup(void) {
     logi("BLE support: %s\n", ble_enabled ? "enabled" : "disabled");
 
     // register for HCI events
-    hci_event_callback_registration.callback = &uni_bluetooth_packet_handler;
+    hci_event_callback_registration.callback = &uni_bt_packet_handler;
     hci_add_event_handler(&hci_event_callback_registration);
 
     if (IS_ENABLED(UNI_ENABLE_BREDR) && bredr_enabled)

@@ -51,7 +51,7 @@
 #include <inttypes.h>
 
 #include "sdkconfig.h"
-#include "uni_bluetooth.h"
+#include "uni_bt.h"
 #include "uni_bt_bredr.h"
 #include "uni_common.h"
 #include "uni_config.h"

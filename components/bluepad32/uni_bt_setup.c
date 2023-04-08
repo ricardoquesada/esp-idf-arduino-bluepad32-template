@@ -57,8 +57,10 @@ static setup_state_t setup_state = SETUP_STATE_BTSTACK_IN_PROGRESS;
 static btstack_packet_callback_registration_t hci_event_callback_registration;
 
 static void maybe_delete_or_list_link_keys(void) {
-    uni_bt_bredr_delete_bonded_keys();
-    uni_bt_le_delete_bonded_keys();
+    if (IS_ENABLED(UNI_ENABLE_BREDR))
+        uni_bt_bredr_delete_bonded_keys();
+    if (IS_ENABLED(UNI_ENABLE_BLE))
+        uni_bt_le_delete_bonded_keys();
 }
 
 static uint8_t setup_set_event_filter(void) {
@@ -100,8 +102,10 @@ static void setup_call_next_fn(void) {
         maybe_delete_or_list_link_keys();
 
         // Start inquiry now, once we know that HCI is running.
-        uni_bt_bredr_scan_start();
-        uni_bt_le_scan_start();
+        if (IS_ENABLED(UNI_ENABLE_BREDR))
+            uni_bt_bredr_scan_start();
+        if (IS_ENABLED(UNI_ENABLE_BLE))
+            uni_bt_le_scan_start();
 
         uni_get_platform()->on_init_complete();
         uni_get_platform()->on_oob_event(UNI_PLATFORM_OOB_BLUETOOTH_ENABLED, (void*)true);
@@ -218,22 +222,30 @@ int uni_bt_setup_get_gap_min_periodic_lenght(void) {
 }
 
 int uni_bt_setup(void) {
+    bool bredr_enabled = false;
+    bool ble_enabled = false;
+
     // Initialize L2CAP
     l2cap_init();
 
+    if(IS_ENABLED(UNI_ENABLED_BREDR))
+        bredr_enabled = uni_bt_bredr_is_enabled();
+    if(IS_ENABLED(UNI_ENABLED_BLE))
+        ble_enabled = uni_bt_le_is_enabled();
+
     logi("Max connected gamepads: %d\n", CONFIG_BLUEPAD32_MAX_DEVICES);
 
-    logi("BR/EDR support: %s\n", uni_bt_bredr_is_enabled() ? "enabled" : "disabled");
-    logi("BLE support: %s\n", uni_bt_le_is_enabled() ? "enabled" : "disabled");
+    logi("BR/EDR support: %s\n", bredr_enabled ? "enabled" : "disabled");
+    logi("BLE support: %s\n", ble_enabled ? "enabled" : "disabled");
 
     // register for HCI events
     hci_event_callback_registration.callback = &uni_bluetooth_packet_handler;
     hci_add_event_handler(&hci_event_callback_registration);
 
-    if (IS_ENABLED(UNI_ENABLE_BREDR) && uni_bt_bredr_is_enabled())
+    if (IS_ENABLED(UNI_ENABLE_BREDR) && bredr_enabled)
         uni_bt_bredr_setup();
 
-    if (IS_ENABLED(UNI_ENABLE_BLE) && uni_bt_le_is_enabled())
+    if (IS_ENABLED(UNI_ENABLE_BLE) && ble_enabled)
         uni_bt_le_setup();
 
     // Disable stdout buffering

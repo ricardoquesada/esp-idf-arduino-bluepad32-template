@@ -395,8 +395,10 @@ void uni_hid_device_disconnect(uni_hid_device_t* d) {
     connected = d->conn.connected;
 
     // Cleanup
-    uni_bt_bredr_disconnect(&d->conn);
-    uni_bt_le_disconnect(&d->conn);
+    if (IS_ENABLED(UNI_ENABLE_BREDR))
+        uni_bt_bredr_disconnect(&d->conn);
+    if (IS_ENABLED(UNI_ENABLE_BLE))
+        uni_bt_le_disconnect(&d->conn);
 
     // Close possible open connections
     uni_bt_conn_disconnect(&d->conn);

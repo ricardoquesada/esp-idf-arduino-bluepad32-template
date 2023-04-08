@@ -31,7 +31,6 @@ limitations under the License.
 #include "sdkconfig.h"
 #include "uni_bt.h"
 #include "uni_bt_le.h"
-#include "uni_bt_setup.h"
 #include "uni_common.h"
 #include "uni_gpio.h"
 #include "uni_hid_device.h"
@@ -125,7 +124,7 @@ static int set_gap_security_level(int argc, char** argv) {
     }
 
     gap = set_gap_security_level_args.value->ival[0];
-    uni_bt_setup_set_gap_security_level(gap);
+    uni_bt_set_gap_security_level(gap);
     logi("Done. Restart required. Type 'restart' + Enter\n");
     return 0;
 }
@@ -134,7 +133,7 @@ static int get_gap_security_level(int argc, char** argv) {
     ARG_UNUSED(argc);
     ARG_UNUSED(argv);
 
-    int gap = uni_bt_setup_get_gap_security_level();
+    int gap = uni_bt_get_gap_security_level();
     logi("%d\n", gap);
     return 0;
 }
@@ -151,9 +150,9 @@ static int set_gap_periodic_inquiry(int argc, char** argv) {
     max = set_gap_periodic_inquiry_args.max->ival[0];
     min = set_gap_periodic_inquiry_args.min->ival[0];
     len = set_gap_periodic_inquiry_args.len->ival[0];
-    uni_bt_setup_set_gap_max_peridic_length(max);
-    uni_bt_setup_set_gap_min_peridic_length(min);
-    uni_bt_setup_set_gap_inquiry_length(len);
+    uni_bt_set_gap_max_peridic_length(max);
+    uni_bt_set_gap_min_peridic_length(min);
+    uni_bt_set_gap_inquiry_length(len);
     logi("Done. Restart required. Type 'restart' + Enter\n");
     return 0;
 }
@@ -162,9 +161,9 @@ static int get_gap_periodic_inquiry(int argc, char** argv) {
     ARG_UNUSED(argc);
     ARG_UNUSED(argv);
 
-    int max = uni_bt_setup_get_gap_max_periodic_lenght();
-    int min = uni_bt_setup_get_gap_min_periodic_lenght();
-    int len = uni_bt_setup_get_gap_inquiry_lenght();
+    int max = uni_bt_get_gap_max_periodic_lenght();
+    int min = uni_bt_get_gap_min_periodic_lenght();
+    int len = uni_bt_get_gap_inquiry_lenght();
     logi("GAP max periodic len: %d, min periodic len: %d, inquiry len: %d\n", max, min, len);
     return 0;
 }

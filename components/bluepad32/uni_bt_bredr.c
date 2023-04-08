@@ -27,7 +27,6 @@ limitations under the License.
 #include "uni_bt.h"
 #include "uni_bt_defines.h"
 #include "uni_bt_sdp.h"
-#include "uni_bt_setup.h"
 #include "uni_common.h"
 #include "uni_config.h"
 #include "uni_log.h"
@@ -77,9 +76,8 @@ static void inquiry_remote_name_timeout_callback(btstack_timer_source_t* ts) {
 void uni_bt_bredr_scan_start(void) {
     uint8_t status;
 
-    status =
-        gap_inquiry_periodic_start(uni_bt_setup_get_gap_inquiry_lenght(), uni_bt_setup_get_gap_max_periodic_lenght(),
-                                   uni_bt_setup_get_gap_min_periodic_lenght());
+    status = gap_inquiry_periodic_start(uni_bt_get_gap_inquiry_lenght(), uni_bt_get_gap_max_periodic_lenght(),
+                                        uni_bt_get_gap_min_periodic_lenght());
     if (status)
         loge("Failed to start period inquiry, error=0x%02x\n", status);
 }
@@ -162,7 +160,7 @@ void uni_bt_bredr_list_bonded_keys(void) {
 }
 
 void uni_bt_bredr_setup(void) {
-    int security_level = uni_bt_setup_get_gap_security_level();
+    int security_level = uni_bt_get_gap_security_level();
     gap_set_security_level(security_level);
 
     gap_connectable_control(1);
@@ -193,8 +191,8 @@ void uni_bt_bredr_setup(void) {
     hci_set_master_slave_policy(HCI_ROLE_MASTER);
 
     logi("Gap security level: %d\n", security_level);
-    logi("Periodic Inquiry: max=%d, min=%d, len=%d\n", uni_bt_setup_get_gap_max_periodic_lenght(),
-         uni_bt_setup_get_gap_min_periodic_lenght(), uni_bt_setup_get_gap_inquiry_lenght());
+    logi("Periodic Inquiry: max=%d, min=%d, len=%d\n", uni_bt_get_gap_max_periodic_lenght(),
+         uni_bt_get_gap_min_periodic_lenght(), uni_bt_get_gap_inquiry_lenght());
 }
 
 void uni_bt_bredr_set_enabled(bool enabled) {

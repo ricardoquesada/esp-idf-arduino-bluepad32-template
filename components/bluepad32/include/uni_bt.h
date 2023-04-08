@@ -48,6 +48,16 @@ void uni_bt_disconnect_device_safe(int device_idx);
 // Private functions.
 void uni_bt_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t* packet, uint16_t size);
 
+// Properties
+void uni_bt_set_gap_security_level(int gap);
+int uni_bt_get_gap_security_level(void);
+void uni_bt_set_gap_inquiry_length(int len);
+int uni_bt_get_gap_inquiry_lenght(void);
+void uni_bt_set_gap_max_peridic_length(int len);
+int uni_bt_get_gap_max_periodic_lenght(void);
+void uni_bt_set_gap_min_peridic_length(int len);
+int uni_bt_get_gap_min_periodic_lenght(void);
+
 #ifdef __cplusplus
 }
 #endif

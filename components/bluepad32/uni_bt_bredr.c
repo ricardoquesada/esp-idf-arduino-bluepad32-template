@@ -180,8 +180,7 @@ void uni_bt_bredr_setup(void) {
 
     l2cap_register_service(uni_bt_packet_handler, BLUETOOTH_PSM_HID_INTERRUPT, UNI_BT_L2CAP_CHANNEL_MTU,
                            security_level);
-    l2cap_register_service(uni_bt_packet_handler, BLUETOOTH_PSM_HID_CONTROL, UNI_BT_L2CAP_CHANNEL_MTU,
-                           security_level);
+    l2cap_register_service(uni_bt_packet_handler, BLUETOOTH_PSM_HID_CONTROL, UNI_BT_L2CAP_CHANNEL_MTU, security_level);
 
     // Allow sniff mode requests by HID device and support role switch
     gap_set_default_link_policy_settings(LM_LINK_POLICY_ENABLE_SNIFF_MODE | LM_LINK_POLICY_ENABLE_ROLE_SWITCH);

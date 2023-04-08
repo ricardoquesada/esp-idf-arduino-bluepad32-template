@@ -22,7 +22,7 @@ Includes the following ESP-IDF components, with a pre-configured `sdkconfig` fil
 
 1. Install [ESP-IDF v4.4][esp-idf-windows-installer]. For further info, read: [ESP-IDF Getting Started for Windows][esp-idf-windows-setup]
 
-   * Either the Online or Offline version shoud work
+   * Either the Online or Offline version should work
    * When asked which components to install, don't change anything. Default options are Ok.
    * When asked whether ESP can modify the system, answer "Yes"
 
@@ -118,17 +118,15 @@ Includes the following ESP-IDF components, with a pre-configured `sdkconfig` fil
 To include 3rd party Arduino libraries in your project, you have to:
 
 * Add them to the `components` folder.
-* Add a file `component.mk` and/or `CMakeLists.txt` inside the component's folder
+* Add `CMakeLists.txt` file inside the component's folder
 
-`component.mk` is needed if you use `make` to compile it. And `CMakeLists.txt` is needed if you use `idf.py` to compile it.
-
-Let's use a real case as example:
+Let's use a real case as an example:
 
 ### Example: Adding ESP32Servo
 
 Suppose you want to use [ESP32Servo] project. The first thing to notice is that the source files are placed
-in the `src` folder.  We have to create a `component.mk` and/or `CMakeLists.txt` files that tells the
-ESP-IDF to look for the sources in the `src` folder.
+in the `src` folder.  We have to create a `CMakeLists.txt` file that tells ESP-IDF to look for the sources
+in the `src` folder.
 
 Example:
 
@@ -139,21 +137,10 @@ git clone https://github.com/madhephaestus/ESP32Servo.git
 cd ESP32Servo
 ```
 
-And now create create these files files inside `components/ESP32Servo` folder:
+And now create these files inside `components/ESP32Servo` folder:
 
 ```sh
-# 2) Create component.mk file
-# Only needed if you use "make" to compile the project
-# Copy & paste the following lines to the terminal:
-cat << EOF > component.mk
-COMPONENT_ADD_INCLUDEDIRS := src
-COMPONENT_SRCDIRS := src
-EOF
-```
-
-```sh
-# 3) Create CMakeLists.txt file
-# Only needed if you use "idf.py" to compile the project
+# 2) Create CMakeLists.txt file
 # Copy & paste the following lines to the terminal:
 cat << EOF > CMakeLists.txt
 idf_component_register(SRC_DIRS "src"
@@ -162,10 +149,9 @@ idf_component_register(SRC_DIRS "src"
 EOF
 ```
 
-Finally, if you use `idf.py`, you have to update the dependencies in the `main/CMakeLists.txt`. E.g:
+Finally, update the dependencies in the `main/CMakeLists.txt`. E.g:
 
 ```sh
-# Needed if you use "idf.py" to compile the project
 cd main
 edit CMakeLists.txt
 ```
@@ -212,6 +198,6 @@ Subjective opinion: VSCode + ESP-IDF plugin is muuuuuch better than Arduino IDE.
 
 ## Support
 
-* [Discord][discord]: any question? Ask them in our Discord server.
+* [Discord][discord]: any question? Ask them on our Discord server.
 
 [discord]: https://discord.gg/r5aMn6Cw5q

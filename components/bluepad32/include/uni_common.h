@@ -21,6 +21,8 @@ limitations under the License.
 #ifndef UNI_COMMON_H
 #define UNI_COMMON_H
 
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -219,6 +221,16 @@ extern "C" {
 
 /* Used to remove brackets from around a single argument. */
 #define __DEBRACKET(...) __VA_ARGS__
+
+/* Multiplies an integer by a fraction, while avoiding unnecessary
+ * overflow or loss of precision.
+ * Taken FreeBSD code.
+ */
+static inline intmax_t mult_frac(intmax_t x, intmax_t multiplier, intmax_t divisor) {
+    intmax_t q = (x / divisor);
+    intmax_t r = (x % divisor);
+    return (q * multiplier) + ((r * multiplier) / divisor);
+}
 
 #ifdef __cplusplus
 }

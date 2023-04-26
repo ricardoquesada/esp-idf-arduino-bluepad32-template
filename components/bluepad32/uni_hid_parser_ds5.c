@@ -39,6 +39,12 @@ limitations under the License.
 #define DS5_FEATURE_REPORT_FIRMWARE_VERSION_SIZE 64
 #define DS5_STATUS_BATTERY_CAPACITY GENMASK(3, 0)
 
+// DualSense hardware limits.
+#define DS5_ACC_RES_PER_G 8192
+#define DS5_ACC_RANGE (4 * DS5_ACC_RES_PER_G)
+#define DS5_GYRO_RES_PER_DEG_S 1024
+#define DS5_GYRO_RANGE (2048 * DS5_GYRO_RES_PER_DEG_S)
+
 enum {
     // Values for flag 0
     DS5_FLAG0_COMPATIBLE_VIBRATION = BIT(0),
@@ -63,6 +69,13 @@ typedef enum {
     DS5_STATE_READY,
 } ds5_state_t;
 
+// Calibration data for motion sensors.
+struct ds5_calibration_data {
+    int16_t bias;
+    int32_t sens_numer;
+    int32_t sens_denom;
+};
+
 typedef struct {
     btstack_timer_source_t rumble_timer;
     bool rumble_in_progress;
@@ -70,6 +83,10 @@ typedef struct {
     ds5_state_t state;
     uint32_t hw_version;
     uint32_t fw_version;
+
+    struct ds5_calibration_data gyro_calib_data[3];
+    struct ds5_calibration_data accel_calib_data[3];
+
 } ds5_instance_t;
 _Static_assert(sizeof(ds5_instance_t) < HID_DEVICE_MAX_PARSER_DATA, "DS5 intance too big");
 
@@ -154,6 +171,29 @@ typedef struct __attribute((packed)) {
 _Static_assert(sizeof(ds5_feature_report_firmware_version_t) == DS5_FEATURE_REPORT_FIRMWARE_VERSION_SIZE,
                "Invalid size");
 
+typedef struct __attribute((packed)) {
+    uint8_t report_id;  // Must be DS5_FEATURE_REPORT_CALIBRATION
+    int16_t gyro_pitch_bias;
+    int16_t gyro_yaw_bias;
+    int16_t gyro_roll_bias;
+    int16_t gyro_pitch_plus;
+    int16_t gyro_pitch_minus;
+    int16_t gyro_yaw_plus;
+    int16_t gyro_yaw_minus;
+    int16_t gyro_roll_plus;
+    int16_t gyro_roll_minus;
+    int16_t gyro_speed_plus;
+    int16_t gyro_speed_minus;
+    int16_t acc_x_plus;
+    int16_t acc_x_minus;
+    int16_t acc_y_plus;
+    int16_t acc_y_minus;
+    int16_t acc_z_plus;
+    int16_t acc_z_minus;
+    char unk[6];
+} ds5_feature_report_calibration_t;
+_Static_assert(sizeof(ds5_feature_report_calibration_t) == DS5_FEATURE_REPORT_CALIBRATION_SIZE, "Invalid size");
+
 static ds5_instance_t* get_ds5_instance(uni_hid_device_t* d);
 static void ds5_send_output_report(uni_hid_device_t* d, ds5_output_report_t* out);
 static void ds5_send_enable_lightbar_report(uni_hid_device_t* d);
@@ -172,12 +212,25 @@ void uni_hid_parser_ds5_init_report(uni_hid_device_t* d) {
 void uni_hid_parser_ds5_setup(uni_hid_device_t* d) {
     ds5_instance_t* ins = get_ds5_instance(d);
     memset(ins, 0, sizeof(*ins));
+
+    // Default values for Accel / Gyro calibration data, until calibration is supported.
+    for (size_t i = 0; i < ARRAY_SIZE(ins->accel_calib_data); i++) {
+        ins->gyro_calib_data[i].bias = 0;
+        ins->gyro_calib_data[i].sens_numer = DS5_GYRO_RANGE;
+        ins->gyro_calib_data[i].sens_denom = INT16_MAX;
+
+        ins->accel_calib_data[i].bias = 0;
+        ins->accel_calib_data[i].sens_numer = DS5_ACC_RANGE;
+        ins->accel_calib_data[i].sens_denom = INT16_MAX;
+    }
+
     ds5_request_pairing_info_report(d);
 }
 
 void uni_hid_parser_ds5_parse_feature_report(uni_hid_device_t* d, const uint8_t* report, uint16_t len) {
     ds5_instance_t* ins = get_ds5_instance(d);
     uint8_t report_id = report[0];
+
     switch (report_id) {
         case DS5_FEATURE_REPORT_PAIRING_INFO:
             if (len != DS5_FEATURE_REPORT_PAIRING_INFO_SIZE) {
@@ -196,7 +249,7 @@ void uni_hid_parser_ds5_parse_feature_report(uni_hid_device_t* d, const uint8_t*
             ds5_request_firmware_version_report(d);
             break;
 
-        case DS5_FEATURE_REPORT_FIRMWARE_VERSION:
+        case DS5_FEATURE_REPORT_FIRMWARE_VERSION: {
             if (len != DS5_FEATURE_REPORT_FIRMWARE_VERSION_SIZE) {
                 loge("DS5: Unexpected firmware version size: got %d, want: %d\n", len,
                      DS5_FEATURE_REPORT_FIRMWARE_VERSION_SIZE);
@@ -218,15 +271,83 @@ void uni_hid_parser_ds5_parse_feature_report(uni_hid_device_t* d, const uint8_t*
 
             ds5_request_calibration_report(d);
             break;
+        }
 
-        case DS5_FEATURE_REPORT_CALIBRATION:
-            /* TODO: Don't ignore calibration */
+        case DS5_FEATURE_REPORT_CALIBRATION: {
+            int speed_2x;
+            int range_2g;
+
             if (len != DS5_FEATURE_REPORT_CALIBRATION_SIZE) {
                 loge("DS5: Unexpected calibration size: got %d, want: %d\n", len, DS5_FEATURE_REPORT_CALIBRATION_SIZE);
                 /* fallthrough */
             }
+            logi("DS5: Calibration report received\n");
+            ds5_feature_report_calibration_t* r = (ds5_feature_report_calibration_t*)report;
+
+            // Taken from Linux Kernel
+            // Set gyroscope calibration and normalization parameters.
+            // Data values will be normalized to 1/DS_GYRO_RES_PER_DEG_S degree/s.
+            speed_2x = r->gyro_speed_plus + r->gyro_speed_minus;
+            ins->gyro_calib_data[0].bias = 0;
+            ins->gyro_calib_data[0].sens_numer = speed_2x * DS5_GYRO_RES_PER_DEG_S;
+            ins->gyro_calib_data[0].sens_denom =
+                abs(r->gyro_pitch_plus - r->gyro_pitch_bias) + abs(r->gyro_pitch_minus + r->gyro_pitch_bias);
+
+            ins->gyro_calib_data[1].bias = 0;
+            ins->gyro_calib_data[1].sens_numer = speed_2x * DS5_GYRO_RES_PER_DEG_S;
+            ins->gyro_calib_data[1].sens_denom =
+                abs(r->gyro_yaw_plus - r->gyro_yaw_bias) + abs(r->gyro_yaw_minus - r->gyro_yaw_bias);
+
+            ins->gyro_calib_data[2].bias = 0;
+            ins->gyro_calib_data[2].sens_numer = speed_2x * DS5_GYRO_RES_PER_DEG_S;
+            ins->gyro_calib_data[2].sens_denom =
+                abs(r->gyro_roll_plus - r->gyro_roll_bias) + abs(r->gyro_roll_minus - r->gyro_roll_bias);
+
+            // Sanity check gyro calibration data. This is needed to prevent crashes
+            // during report handling of virtual, clone or broken devices not implementing
+            // calibration data properly.
+            for (size_t i = 0; i < ARRAY_SIZE(ins->gyro_calib_data); i++) {
+                if (ins->gyro_calib_data[i].sens_denom == 0) {
+                    loge("Invalid gyro calibration data for axis (%d), disabling calibration for axis = %d\n", i);
+                    ins->gyro_calib_data[i].bias = 0;
+                    ins->gyro_calib_data[i].sens_numer = DS5_GYRO_RANGE;
+                    ins->gyro_calib_data[i].sens_denom = INT16_MAX;
+                }
+            }
+
+            // Set accelerometer calibration and normalization parameters.
+            // Data values will be normalized to 1/DS_ACC_RES_PER_G g.
+            range_2g = r->acc_x_plus - r->acc_x_minus;
+            ins->accel_calib_data[0].bias = r->acc_x_plus - range_2g / 2;
+            ins->accel_calib_data[0].sens_numer = 2 * DS5_ACC_RES_PER_G;
+            ins->accel_calib_data[0].sens_denom = range_2g;
+
+            range_2g = r->acc_y_plus - r->acc_y_minus;
+            ins->accel_calib_data[1].bias = r->acc_y_plus - range_2g / 2;
+            ins->accel_calib_data[1].sens_numer = 2 * DS5_ACC_RES_PER_G;
+            ins->accel_calib_data[1].sens_denom = range_2g;
+
+            range_2g = r->acc_z_plus - r->acc_z_minus;
+            ins->accel_calib_data[2].bias = r->acc_z_plus - range_2g / 2;
+            ins->accel_calib_data[2].sens_numer = 2 * DS5_ACC_RES_PER_G;
+            ins->accel_calib_data[2].sens_denom = range_2g;
+
+            // Sanity check accelerometer calibration data. This is needed to prevent crashes
+            // during report handling of virtual, clone or broken devices not implementing calibration
+            // data properly.
+            for (size_t i = 0; i < ARRAY_SIZE(ins->accel_calib_data); i++) {
+                if (ins->accel_calib_data[i].sens_denom == 0) {
+                    loge("Invalid accelerometer calibration data for axis (%d), disabling calibration for axis=%d\n",
+                         i);
+                    ins->accel_calib_data[i].bias = 0;
+                    ins->accel_calib_data[i].sens_numer = DS5_ACC_RANGE;
+                    ins->accel_calib_data[i].sens_denom = INT16_MAX;
+                }
+            }
+
             ds5_send_enable_lightbar_report(d);
             break;
+        }
 
         default:
             loge("DS5: Unexpected report id in feature report: 0x%02x\n", report_id);
@@ -235,6 +356,13 @@ void uni_hid_parser_ds5_parse_feature_report(uni_hid_device_t* d, const uint8_t*
 }
 
 void uni_hid_parser_ds5_parse_input_report(uni_hid_device_t* d, const uint8_t* report, uint16_t len) {
+    ds5_instance_t* ins = get_ds5_instance(d);
+
+    // Don't process reports until state is ready. Prevents possible div-by-0 on calibration
+    // and ignores other warnings.
+    if (ins->state != DS5_STATE_READY)
+        return;
+
     if (report[0] != 0x31) {
         loge("DS5: Unexpected report type: got 0x%02x, want: 0x31\n", report[0]);
         return;
@@ -289,6 +417,22 @@ void uni_hid_parser_ds5_parse_input_report(uni_hid_device_t* d, const uint8_t* r
         ctl->gamepad.buttons |= BUTTON_THUMB_R;  // Thumb R
     if (r->buttons[2] & 0x01)
         ctl->gamepad.misc_buttons |= MISC_BUTTON_SYSTEM;  // PS
+
+    // Gyro
+    for (size_t i = 0; i < ARRAY_SIZE(r->gyro); i++) {
+        int32_t raw_data = (int16_t)r->gyro[i];
+        int32_t calib_data =
+            mult_frac(ins->gyro_calib_data[i].sens_numer, raw_data, ins->gyro_calib_data[i].sens_denom);
+        ctl->gamepad.gyro[i] = calib_data;
+    }
+
+    // Accel
+    for (size_t i = 0; i < ARRAY_SIZE(r->accel); i++) {
+        int32_t raw_data = (int16_t)r->accel[i];
+        int32_t calib_data =
+            mult_frac(ins->accel_calib_data[i].sens_numer, raw_data, ins->accel_calib_data[i].sens_denom);
+        ctl->gamepad.accel[i] = calib_data;
+    }
 
     // Value goes from 0 to 10. Make it from 0 to 250.
     // The +1 is to avoid having a value of 0, which means "battery unavailable".

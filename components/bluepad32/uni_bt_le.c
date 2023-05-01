@@ -102,8 +102,8 @@ static void hog_disconnect(hci_con_handle_t con_handle) {
     if (gap_get_connection_type(con_handle) != GAP_CONNECTION_INVALID)
         gap_disconnect(con_handle);
     device = uni_hid_device_get_instance_for_connection_handle(con_handle);
-
-    hids_client_disconnect(device->hids_cid);
+    if (device)
+        hids_client_disconnect(device->hids_cid);
     resume_scanning_hint();
 }
 
@@ -368,6 +368,8 @@ static void device_information_packet_handler(uint8_t packet_type, uint16_t chan
                     }
                     logi("Using hids_cid=%d\n", hids_cid);
                     device->hids_cid = hids_cid;
+
+                    hids_client_enable_notifications(hids_cid);
                     break;
                 default:
                     logi("Device Information service client connection failed, err 0x%02x.\n", status);
@@ -712,8 +714,10 @@ void uni_bt_le_on_gap_event_advertising_report(const uint8_t* packet, uint16_t s
     adv_event_get_data(packet, &appearance, name);
 
     if (appearance != UNI_BT_HID_APPEARANCE_GAMEPAD && appearance != UNI_BT_HID_APPEARANCE_JOYSTICK &&
-        appearance != UNI_BT_HID_APPEARANCE_MOUSE)
+        appearance != UNI_BT_HID_APPEARANCE_MOUSE) {
+        // Don't log it. There too many devices advertising themselves.
         return;
+    }
 
     addr_type = gap_event_advertising_report_get_address_type(packet);
     if (uni_hid_device_get_instance_for_address(addr)) {

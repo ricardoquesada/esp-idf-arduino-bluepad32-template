@@ -6,6 +6,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.7.2] - 2023-05-20
 - Bluepad32 v3.7.2
+- Arduino Core v2.0.9
 
 ## [3.7.1] - 2023-04-30
 - Bluepad32 v3.7.1

@@ -47,6 +47,7 @@ limitations under the License.
 #include "uni_gamepad.h"
 #include "uni_gpio.h"
 #include "uni_hid_device.h"
+#include "uni_hid_device_vendors.h"
 #include "uni_joystick.h"
 #include "uni_log.h"
 #include "uni_platform.h"
@@ -884,7 +885,13 @@ static void process_gamepad(uni_hid_device_t* d, uni_gamepad_t* gp) {
 
     switch (ins->gamepad_mode) {
         case UNI_PLATFORM_UNIJOYSTICLE_GAMEPAD_MODE_NORMAL:
-            uni_joy_to_single_joy_from_gamepad(gp, &joy);
+            // Special case when the accelerometer mode is enabled in Wii.
+            // Use it as regular joystick
+            if (d->controller_type == CONTROLLER_TYPE_WiiController &&
+                d->controller_subtype == CONTROLLER_SUBTYPE_WIIMOTE_ACCEL)
+                uni_joy_to_single_from_wii_accel(gp, &joy);
+            else
+                uni_joy_to_single_joy_from_gamepad(gp, &joy);
             process_joystick(d, ins->seat, &joy);
             break;
         case UNI_PLATFORM_UNIJOYSTICLE_GAMEPAD_MODE_ENHANCED:
@@ -926,6 +933,7 @@ static void process_gamepad(uni_hid_device_t* d, uni_gamepad_t* gp) {
 }
 
 static void process_balance_board(uni_hid_device_t* d, uni_balance_board_t* bb) {
+    // TODO: Implement me
     logd("bb tl=%d, tr=%d, bl=%d, br=%d, temperature=%d\n", bb->tl, bb->tr, bb->bl, bb->br, bb->temperature);
 }
 
@@ -976,14 +984,14 @@ static void joy_update_port(const uni_joystick_t* joy, const gpio_num_t* gpios) 
     logd("up=%d, down=%d, left=%d, right=%d, fire=%d, bt2=%d, bt3=%d\n", joy->up, joy->down, joy->left, joy->right,
          joy->fire, joy->button2, joy->button3);
 
-    uni_gpio_set_level(gpios[UNI_PLATFORM_UNIJOYSTICLE_JOY_UP], !!joy->up);
-    uni_gpio_set_level(gpios[UNI_PLATFORM_UNIJOYSTICLE_JOY_DOWN], !!joy->down);
-    uni_gpio_set_level(gpios[UNI_PLATFORM_UNIJOYSTICLE_JOY_LEFT], !!joy->left);
-    uni_gpio_set_level(gpios[UNI_PLATFORM_UNIJOYSTICLE_JOY_RIGHT], !!joy->right);
+    uni_gpio_set_level(gpios[UNI_PLATFORM_UNIJOYSTICLE_JOY_UP], joy->up);
+    uni_gpio_set_level(gpios[UNI_PLATFORM_UNIJOYSTICLE_JOY_DOWN], joy->down);
+    uni_gpio_set_level(gpios[UNI_PLATFORM_UNIJOYSTICLE_JOY_LEFT], joy->left);
+    uni_gpio_set_level(gpios[UNI_PLATFORM_UNIJOYSTICLE_JOY_RIGHT], joy->right);
 
     // Only update fire if auto-fire is off. Otherwise it will conflict.
     if (!joy->auto_fire) {
-        uni_gpio_set_level(gpios[UNI_PLATFORM_UNIJOYSTICLE_JOY_FIRE], !!joy->fire);
+        uni_gpio_set_level(gpios[UNI_PLATFORM_UNIJOYSTICLE_JOY_FIRE], joy->fire);
     }
 
     if (get_uni_model_from_pins() == BOARD_MODEL_UNIJOYSTICLE2_C64) {
@@ -991,8 +999,8 @@ static void joy_update_port(const uni_joystick_t* joy, const gpio_num_t* gpios) 
         uni_platform_unijoysticle_c64_set_pot_level(gpios[UNI_PLATFORM_UNIJOYSTICLE_JOY_BUTTON2], joy->button2);
         uni_platform_unijoysticle_c64_set_pot_level(gpios[UNI_PLATFORM_UNIJOYSTICLE_JOY_BUTTON3], joy->button3);
     } else {
-        uni_gpio_set_level(gpios[UNI_PLATFORM_UNIJOYSTICLE_JOY_BUTTON2], !!joy->button2);
-        uni_gpio_set_level(gpios[UNI_PLATFORM_UNIJOYSTICLE_JOY_BUTTON3], !!joy->button3);
+        uni_gpio_set_level(gpios[UNI_PLATFORM_UNIJOYSTICLE_JOY_BUTTON2], joy->button2);
+        uni_gpio_set_level(gpios[UNI_PLATFORM_UNIJOYSTICLE_JOY_BUTTON3], joy->button3);
     }
 }
 

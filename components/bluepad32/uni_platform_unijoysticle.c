@@ -87,6 +87,12 @@ limitations under the License.
 #define AUTOFIRE_CPS_COMPETITION_PRO (62)  // ~8ms, ~1/2 frame
 #define AUTOFIRE_CPS_DEFAULT AUTOFIRE_CPS_QUICKGUN
 
+// Balance Board defaults
+#define BB_FIRE_MAX_FRAMES 25              // Max frames that fire can be kept pressed
+#define BB_IDLE_THRESHOLD 1600             // Below this value, it is considered that noone is on top of the BB
+#define BB_MOVE_THRESHOLD_DEFAULT 1500     // Diff in weight to consider a Movement
+#define BB_FIRE_THRESHOLD_DEFAULT 1000000  // Max weight before staring the "de-accel" to trigger fire.
+
 #define TASK_AUTOFIRE_PRIO (9)
 #define TASK_PUSH_BUTTON_PRIO (8)
 #define TASK_BLINK_LED_PRIO (7)
@@ -139,6 +145,13 @@ typedef enum {
 
     BOARD_MODEL_COUNT,
 } board_model_t;
+
+enum {
+    BB_STATE_RESET,      // After fire
+    BB_STATE_THRESHOLD,  // "fire threshold" detected
+    BB_STATE_IN_AIR,     // in the air
+    BB_STATE_FIRE,       // "fire pressed"
+};
 
 // --- Structs / Typedefs
 typedef void (*button_cb_t)(int button_idx);
@@ -202,7 +215,13 @@ static int cmd_set_gamepad_mode(int argc, char** argv);
 static int cmd_get_gamepad_mode(int argc, char** argv);
 static int cmd_set_autofire_cps(int argc, char** argv);
 static int cmd_get_autofire_cps(int argc, char** argv);
+static int cmd_set_bb_move_threshold(int argc, char** argv);
+static int cmd_get_bb_move_threshold(int argc, char** argv);
+static int cmd_set_bb_fire_threshold(int argc, char** argv);
+static int cmd_get_bb_fire_threshold(int argc, char** argv);
 static int cmd_version(int argc, char** argv);
+static int get_bb_move_threshold_from_nvs(void);
+static int get_bb_fire_threshold_from_nvs(void);
 static void swap_ports(void);
 static void try_swap_ports(uni_hid_device_t* d);
 static void set_next_gamepad_mode(uni_hid_device_t* d);
@@ -337,6 +356,10 @@ static bool s_auto_enable_bluetooth = true;
 // When True, it means the "Unijosyticle" generated the Bluetooth-Enable event.
 static bool s_skip_next_enable_bluetooth_event = false;
 
+// Gets initialized at platform_init time.
+static int balanceboard_move_threshold;
+static int balanceboard_fire_threshold;
+
 // For the console
 static struct {
     struct arg_str* value;
@@ -347,6 +370,16 @@ static struct {
     struct arg_int* value;
     struct arg_end* end;
 } set_autofire_cps_args;
+
+static struct {
+    struct arg_int* value;
+    struct arg_end* end;
+} set_bb_move_threshold_args;
+
+static struct {
+    struct arg_int* value;
+    struct arg_end* end;
+} set_bb_fire_threshold_args;
 
 static btstack_context_callback_registration_t cmd_callback_registration;
 
@@ -445,6 +478,10 @@ static void unijoysticle_on_init_complete(void) {
     // Turn off LEDs
     uni_gpio_set_level(g_gpio_config->leds[LED_J1], 0);
     uni_gpio_set_level(g_gpio_config->leds[LED_J2], 0);
+
+    // Update Balance Board threshold
+    balanceboard_move_threshold = get_bb_move_threshold_from_nvs();
+    balanceboard_fire_threshold = get_bb_fire_threshold_from_nvs();
 
     board_model_t model = get_uni_model_from_pins();
 
@@ -675,6 +712,12 @@ static void unijoysticle_register_cmds(void) {
     set_autofire_cps_args.value = arg_int1(NULL, NULL, "<cps>", "clicks per second (cps)");
     set_autofire_cps_args.end = arg_end(2);
 
+    set_bb_move_threshold_args.value = arg_int1(NULL, NULL, "<threshold>", "balance board 'move weight' threshold");
+    set_bb_move_threshold_args.end = arg_end(2);
+
+    set_bb_fire_threshold_args.value = arg_int1(NULL, NULL, "<threshold>", "balance board 'fire weight' threshold");
+    set_bb_fire_threshold_args.end = arg_end(2);
+
     const esp_console_cmd_t swap_ports = {
         .command = "swap_ports",
         .help = "Swaps joystick ports",
@@ -726,6 +769,40 @@ static void unijoysticle_register_cmds(void) {
         .func = &cmd_version,
     };
 
+    const esp_console_cmd_t set_bb_move_threshold = {
+        .command = "set_bb_move_threshold",
+        .help =
+            "Sets the Balance Board 'Move Weight' threshold\n"
+            "Default: 5000",  // BB_MOVE_THRESHOLD_DEFAULT
+        .hint = NULL,
+        .func = &cmd_set_bb_move_threshold,
+        .argtable = &set_bb_move_threshold_args,
+    };
+
+    const esp_console_cmd_t get_bb_move_threshold = {
+        .command = "get_bb_move_threshold",
+        .help = "Returns the Balance Board Move threshold (weight)",
+        .hint = NULL,
+        .func = &cmd_get_bb_move_threshold,
+    };
+
+    const esp_console_cmd_t set_bb_fire_threshold = {
+        .command = "set_bb_fire_threshold",
+        .help =
+            "Sets the Balance Board 'Fire Weight' threshold\n"
+            "Default: 50000",  // BB_FIRE_THRESHOLD_DEFAULT
+        .hint = NULL,
+        .func = &cmd_set_bb_fire_threshold,
+        .argtable = &set_bb_fire_threshold_args,
+    };
+
+    const esp_console_cmd_t get_bb_fire_threshold = {
+        .command = "get_bb_fire_threshold",
+        .help = "Returns the Balance Board Fire threshold (weight)",
+        .hint = NULL,
+        .func = &cmd_get_bb_fire_threshold,
+    };
+
     ESP_ERROR_CHECK(esp_console_cmd_register(&swap_ports));
     ESP_ERROR_CHECK(esp_console_cmd_register(&set_gamepad_mode));
     ESP_ERROR_CHECK(esp_console_cmd_register(&get_gamepad_mode));
@@ -740,6 +817,11 @@ static void unijoysticle_register_cmds(void) {
         uni_platform_unijoysticle_amiga_register_cmds();
 
     ESP_ERROR_CHECK(esp_console_cmd_register(&version));
+
+    ESP_ERROR_CHECK(esp_console_cmd_register(&set_bb_move_threshold));
+    ESP_ERROR_CHECK(esp_console_cmd_register(&get_bb_move_threshold));
+    ESP_ERROR_CHECK(esp_console_cmd_register(&set_bb_fire_threshold));
+    ESP_ERROR_CHECK(esp_console_cmd_register(&get_bb_fire_threshold));
 }
 
 //
@@ -781,7 +863,7 @@ static void set_autofire_cps_to_nvs(int cps) {
     logi("Done\n");
 }
 
-static int get_autofire_cps_from_nvs() {
+static int get_autofire_cps_from_nvs(void) {
     uni_property_value_t value;
     uni_property_value_t def;
 
@@ -791,7 +873,43 @@ static int get_autofire_cps_from_nvs() {
     return value.u8;
 }
 
-static board_model_t get_uni_model_from_pins() {
+static void set_bb_move_threshold_to_nvs(int threshold) {
+    uni_property_value_t value;
+    value.u32 = threshold;
+
+    uni_property_set(UNI_PROPERTY_KEY_UNI_BB_MOVE_THRESHOLD, UNI_PROPERTY_TYPE_U32, value);
+    logi("Done\n");
+}
+
+static int get_bb_move_threshold_from_nvs(void) {
+    uni_property_value_t value;
+    uni_property_value_t def;
+
+    def.u32 = BB_MOVE_THRESHOLD_DEFAULT;
+
+    value = uni_property_get(UNI_PROPERTY_KEY_UNI_BB_MOVE_THRESHOLD, UNI_PROPERTY_TYPE_U32, def);
+    return value.u32;
+}
+
+static void set_bb_fire_threshold_to_nvs(int threshold) {
+    uni_property_value_t value;
+    value.u32 = threshold;
+
+    uni_property_set(UNI_PROPERTY_KEY_UNI_BB_FIRE_THRESHOLD, UNI_PROPERTY_TYPE_U32, value);
+    logi("Done\n");
+}
+
+static int get_bb_fire_threshold_from_nvs(void) {
+    uni_property_value_t value;
+    uni_property_value_t def;
+
+    def.u32 = BB_FIRE_THRESHOLD_DEFAULT;
+
+    value = uni_property_get(UNI_PROPERTY_KEY_UNI_BB_FIRE_THRESHOLD, UNI_PROPERTY_TYPE_U32, def);
+    return value.u32;
+}
+
+static board_model_t get_uni_model_from_pins(void) {
 #if PLAT_UNIJOYSTICLE_SINGLE_PORT
     // Legacy: Only needed for Arananet's Unijoy2Amiga.
     // Single-port boards should ground GPIO 5. It will be detected in runtime.
@@ -933,8 +1051,85 @@ static void process_gamepad(uni_hid_device_t* d, uni_gamepad_t* gp) {
 }
 
 static void process_balance_board(uni_hid_device_t* d, uni_balance_board_t* bb) {
-    // TODO: Implement me
-    logd("bb tl=%d, tr=%d, bl=%d, br=%d, temperature=%d\n", bb->tl, bb->tr, bb->bl, bb->br, bb->temperature);
+    uni_platform_unijoysticle_instance_t* ins = uni_platform_unijoysticle_get_instance(d);
+    uni_joystick_t joy;
+    memset(&joy, 0, sizeof(joy));
+
+    // Low pass filter, assuming values arrive at the same framespeed
+    ins->bb_smooth_down = mult_frac((bb->bl + bb->br) - ins->bb_smooth_down, 6, 100);
+    ins->bb_smooth_top = mult_frac((bb->tl + bb->tr) - ins->bb_smooth_top, 6, 100);
+    ins->bb_smooth_left = mult_frac((bb->tl + bb->bl) - ins->bb_smooth_left, 6, 100);
+    ins->bb_smooth_right = mult_frac((bb->tr + bb->br) - ins->bb_smooth_right, 6, 100);
+
+    logd("l=%d, r=%d, t=%d, d=%d\n", ins->bb_smooth_left, ins->bb_smooth_right, ins->bb_smooth_top,
+         ins->bb_smooth_down);
+
+    if ((ins->bb_smooth_top - ins->bb_smooth_down) > balanceboard_move_threshold)
+        joy.up = true;
+    else if ((ins->bb_smooth_down - ins->bb_smooth_top) > balanceboard_move_threshold)
+        joy.down = true;
+
+    if ((ins->bb_smooth_right - ins->bb_smooth_left) > balanceboard_move_threshold)
+        joy.right = true;
+    else if ((ins->bb_smooth_left - ins->bb_smooth_right) > balanceboard_move_threshold)
+        joy.left = true;
+
+    // State machine to detect whether we can trigger fire
+    int sum = bb->tl + bb->tr + bb->bl + bb->br;
+    ins->bb_fire_counter++;
+    logd("SUM=%d, counter=%d, state=%d (%d,%d,%d,%d)\n", sum, ins->bb_fire_counter, ins->bb_fire_state, bb->tl, bb->tr,
+         bb->bl, bb->br);
+    switch (ins->bb_fire_state) {
+        case BB_STATE_RESET:
+            if (sum >= balanceboard_fire_threshold) {
+                ins->bb_fire_state = BB_STATE_THRESHOLD;
+                ins->bb_fire_counter = 0;
+            }
+            break;
+        case BB_STATE_THRESHOLD:
+            if (bb->tl < BB_IDLE_THRESHOLD && bb->tr < BB_IDLE_THRESHOLD && bb->bl < BB_IDLE_THRESHOLD &&
+                bb->br < BB_IDLE_THRESHOLD) {
+                ins->bb_fire_state = BB_STATE_IN_AIR;
+                ins->bb_fire_counter = 0;
+                break;
+            }
+            // Since threshold was triggered, it has 10 frames to get to "in_air", otherwise we reset the state.
+            if (ins->bb_fire_counter > 10) {
+                ins->bb_fire_state = BB_STATE_RESET;
+                ins->bb_fire_counter = 0;
+                break;
+            }
+            // Reset counter in case we are still above threshold
+            if (sum >= balanceboard_fire_threshold) {
+                ins->bb_fire_counter = 0;
+                break;
+            }
+            break;
+        case BB_STATE_IN_AIR:
+            // Once in Air, it must be at least 2 frames in the air
+            if (ins->bb_fire_counter > 2) {
+                joy.fire = true;
+                ins->bb_fire_state = BB_STATE_FIRE;
+                ins->bb_fire_counter = 0;
+                break;
+            }
+            if (bb->tl >= BB_IDLE_THRESHOLD || bb->tr >= BB_IDLE_THRESHOLD || bb->bl > BB_IDLE_THRESHOLD ||
+                bb->br >= BB_IDLE_THRESHOLD) {
+                ins->bb_fire_state = BB_STATE_RESET;
+                ins->bb_fire_counter = 0;
+            }
+            break;
+        case BB_STATE_FIRE:
+            joy.fire = true;
+            // Maintain "fire" pressed for 10 frames
+            if (ins->bb_fire_counter > 10) {
+                ins->bb_fire_state = BB_STATE_RESET;
+                ins->bb_fire_counter = 0;
+            }
+            break;
+    }
+
+    process_joystick(d, ins->seat, &joy);
 }
 
 static void set_gamepad_seat(uni_hid_device_t* d, uni_gamepad_seat_t seat) {
@@ -1510,6 +1705,52 @@ static int cmd_get_autofire_cps(int argc, char** argv) {
     int cps = get_autofire_cps_from_nvs();
 
     logi("%d\n", cps);
+    return 0;
+}
+
+static int cmd_set_bb_move_threshold(int argc, char** argv) {
+    int nerrors = arg_parse(argc, argv, (void**)&set_bb_move_threshold_args);
+    if (nerrors != 0) {
+        arg_print_errors(stderr, set_bb_move_threshold_args.end, argv[0]);
+        return 1;
+    }
+    int threshold = set_bb_move_threshold_args.value->ival[0];
+    set_bb_move_threshold_to_nvs(threshold);
+
+    // Update static value
+    balanceboard_move_threshold = threshold;
+
+    logi("New Balance Board Move threshold: %d\n", threshold);
+    return 0;
+}
+
+static int cmd_get_bb_move_threshold(int argc, char** argv) {
+    int threshold = get_bb_move_threshold_from_nvs();
+
+    logi("%d\n", threshold);
+    return 0;
+}
+
+static int cmd_set_bb_fire_threshold(int argc, char** argv) {
+    int nerrors = arg_parse(argc, argv, (void**)&set_bb_fire_threshold_args);
+    if (nerrors != 0) {
+        arg_print_errors(stderr, set_bb_fire_threshold_args.end, argv[0]);
+        return 1;
+    }
+    int threshold = set_bb_fire_threshold_args.value->ival[0];
+    set_bb_fire_threshold_to_nvs(threshold);
+
+    // Update static value
+    balanceboard_fire_threshold = threshold;
+
+    logi("New Balance Board Fire threshold: %d\n", threshold);
+    return 0;
+}
+
+static int cmd_get_bb_fire_threshold(int argc, char** argv) {
+    int threshold = get_bb_fire_threshold_from_nvs();
+
+    logi("%d\n", threshold);
     return 0;
 }
 

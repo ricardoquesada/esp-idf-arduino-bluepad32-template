@@ -1,7 +1,7 @@
 /****************************************************************************
 http://retro.moe/unijoysticle2
 
-Copyright 2021 Ricardo Quesada
+Copyright 2023 Ricardo Quesada
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,9 +16,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ****************************************************************************/
 
-#ifndef UNI_VERSION_H
-#define UNI_VERSION_H
+#ifndef UNI_PLATFORM_UNIJOYSTICLE_SINGLEPORT_H
+#define UNI_PLATFORM_UNIJOYSTICLE_SINGLEPORT_H
 
-#define UNI_VERSION "3.8.1"
+#include <stdint.h>
 
-#endif  // UNI_VERSION_H
+#include "uni_hid_device.h"
+#include "uni_platform_unijoysticle.h"
+
+const struct uni_platform_unijoysticle_variant* uni_platform_unijoysticle_singleport_create_variant(void);
+
+#endif  // UNI_PLATFORM_UNIJOYSTICLE_SINGLEPORT_H

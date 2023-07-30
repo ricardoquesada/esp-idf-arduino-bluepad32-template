@@ -81,7 +81,7 @@ uni_hid_device_t* uni_hid_device_create(bd_addr_t address) {
             logi("Creating device: %s (idx=%d)\n", bd_addr_to_str(address), i);
 
             memset(&g_devices[i], 0, sizeof(g_devices[i]));
-            memcpy(g_devices[i].conn.btaddr, address, 6);
+            bd_addr_copy(g_devices[i].conn.btaddr, address);
 
             // Delete device if it doesn't have a connection
             start_connection_timeout(&g_devices[i]);
@@ -801,7 +801,7 @@ static void misc_button_enable_callback(btstack_timer_source_t* ts) {
     d->misc_button_wait_delay &= ~MISC_BUTTON_SYSTEM;
 }
 
-// process_mic_button_system swaps joystick port A and B only if there is one device attached.
+// process_mic_button_system
 static void process_misc_button_system(uni_hid_device_t* d) {
     if ((d->controller.gamepad.misc_buttons & MISC_BUTTON_SYSTEM) == 0) {
         // System button released ?

@@ -1,7 +1,7 @@
 /****************************************************************************
 http://retro.moe/unijoysticle2
 
-Copyright 2019 Ricardo Quesada
+Copyright 2023 Ricardo Quesada
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,20 +16,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ****************************************************************************/
 
-#ifndef UNI_PLATFORM_UNIJOYSTICLE_AMIGA_H
-#define UNI_PLATFORM_UNIJOYSTICLE_AMIGA_H
+#ifndef UNI_PLATFORM_UNIJOYSTICLE_2_H
+#define UNI_PLATFORM_UNIJOYSTICLE_2_H
 
 #include <stdint.h>
 
 #include "uni_hid_device.h"
+#include "uni_platform_unijoysticle.h"
 
-void uni_platform_unijoysticle_amiga_register_cmds(void);
-void uni_platform_unijoysticle_amiga_on_init_complete(void);
-void uni_platform_unijoysticle_amiga_maybe_enable_mouse_timers(void);
-void uni_platform_unijoysticle_amiga_process_mouse(uni_hid_device_t* d,
-                                                   uni_gamepad_seat_t seat,
-                                                   int32_t delta_x,
-                                                   int32_t delta_y,
-                                                   uint16_t buttons);
-void uni_platform_unijoysticle_amiga_version(void);
-#endif  // UNI_PLATFORM_UNIJOYSTICLE_AMIGA_H
+const struct uni_platform_unijoysticle_variant* uni_platform_unijoysticle_2_create_variant(void);
+
+#endif  // UNI_PLATFORM_UNIJOYSTICLE_2_H

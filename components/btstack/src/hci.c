@@ -1374,7 +1374,7 @@ static const struct {
         { 32, SCO_PACKET_TYPES_EV4 },                           // EV4 packets
         { 45, SCO_PACKET_TYPES_2EV3 | SCO_PACKET_TYPES_2EV5 },  // EDR eSCO 2 Mb/s
         { 46, SCO_PACKET_TYPES_3EV3 | SCO_PACKET_TYPES_3EV5 },  // EDR eSCO 3 Mb/s
-        { 47, SCO_PACKET_TYPES_2EV3 | SCO_PACKET_TYPES_3EV3 },  // 3-slot EDR eSCO packets
+        { 47, SCO_PACKET_TYPES_2EV5 | SCO_PACKET_TYPES_3EV5 },  // 3-slot EDR eSCO packets, 2-EV3/3-EV3 use single slot
 };
 
 static uint16_t hci_sco_packet_types_for_features(const uint8_t * local_supported_features){
@@ -7345,7 +7345,6 @@ uint8_t hci_send_cmd_packet(uint8_t *packet, int size){
             (void) memcpy(hci_stack->outgoing_addr, addr, 6);
             break;
 
-#if defined (ENABLE_SCO_OVER_HCI) || defined (HAVE_SCO_TRANSPORT)
         case HCI_OPCODE_HCI_SETUP_SYNCHRONOUS_CONNECTION:
             conn = hci_connection_for_handle(little_endian_read_16(packet, 3));
             if (conn == NULL) {
@@ -7404,7 +7403,6 @@ uint8_t hci_send_cmd_packet(uint8_t *packet, int size){
             // TODO: compare to current setting if sco connection already active
             hci_stack->sco_voice_setting_active = little_endian_read_16(packet, 19);
             break;
-#endif
 #endif
 
 #ifdef ENABLE_BLE

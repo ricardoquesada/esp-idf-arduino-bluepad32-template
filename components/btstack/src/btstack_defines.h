@@ -1502,8 +1502,9 @@ typedef uint8_t sm_key_t[16];
 #define GATT_EVENT_CHARACTERISTIC_DESCRIPTOR_QUERY_RESULT        0xA9u
 
 /**
- * @format H2LV
+ * @format H22LV
  * @param handle
+ * @param descriptor_handle
  * @param descriptor_offset
  * @param descriptor_length
  * @param descriptor
@@ -3863,25 +3864,28 @@ typedef uint8_t sm_key_t[16];
 #define HIDS_SUBEVENT_BOOT_KEYBOARD_INPUT_REPORT_ENABLE                     0x04u
 
 /**
- * @format 121
+ * @format 1211
  * @param subevent_code
  * @param con_handle
+ * @param report_id
  * @param enable
 */
 #define HIDS_SUBEVENT_INPUT_REPORT_ENABLE                                   0x05u
 
 /**
- * @format 121
+ * @format 1211
  * @param subevent_code
  * @param con_handle
+ * @param report_id
  * @param enable
 */
 #define HIDS_SUBEVENT_OUTPUT_REPORT_ENABLE                                  0x06u
 
 /**
- * @format 121
+ * @format 1211
  * @param subevent_code
  * @param con_handle
+ * @param report_id
  * @param enable
 */
 #define HIDS_SUBEVENT_FEATURE_REPORT_ENABLE                                 0x07u

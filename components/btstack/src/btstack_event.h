@@ -2836,13 +2836,22 @@ static inline hci_con_handle_t gatt_event_long_characteristic_descriptor_query_r
     return little_endian_read_16(event, 2);
 }
 /**
+ * @brief Get field descriptor_handle from event GATT_EVENT_LONG_CHARACTERISTIC_DESCRIPTOR_QUERY_RESULT
+ * @param event packet
+ * @return descriptor_handle
+ * @note: btstack_type 2
+ */
+static inline uint16_t gatt_event_long_characteristic_descriptor_query_result_get_descriptor_handle(const uint8_t * event){
+    return little_endian_read_16(event, 4);
+}
+/**
  * @brief Get field descriptor_offset from event GATT_EVENT_LONG_CHARACTERISTIC_DESCRIPTOR_QUERY_RESULT
  * @param event packet
  * @return descriptor_offset
  * @note: btstack_type 2
  */
 static inline uint16_t gatt_event_long_characteristic_descriptor_query_result_get_descriptor_offset(const uint8_t * event){
-    return little_endian_read_16(event, 4);
+    return little_endian_read_16(event, 6);
 }
 /**
  * @brief Get field descriptor_length from event GATT_EVENT_LONG_CHARACTERISTIC_DESCRIPTOR_QUERY_RESULT
@@ -2851,7 +2860,7 @@ static inline uint16_t gatt_event_long_characteristic_descriptor_query_result_ge
  * @note: btstack_type L
  */
 static inline uint16_t gatt_event_long_characteristic_descriptor_query_result_get_descriptor_length(const uint8_t * event){
-    return little_endian_read_16(event, 6);
+    return little_endian_read_16(event, 8);
 }
 /**
  * @brief Get field descriptor from event GATT_EVENT_LONG_CHARACTERISTIC_DESCRIPTOR_QUERY_RESULT
@@ -2860,7 +2869,7 @@ static inline uint16_t gatt_event_long_characteristic_descriptor_query_result_ge
  * @note: btstack_type V
  */
 static inline const uint8_t * gatt_event_long_characteristic_descriptor_query_result_get_descriptor(const uint8_t * event){
-    return &event[8];
+    return &event[10];
 }
 #endif
 
@@ -12378,13 +12387,22 @@ static inline uint16_t hids_subevent_input_report_enable_get_con_handle(const ui
     return little_endian_read_16(event, 3);
 }
 /**
+ * @brief Get field report_id from event HIDS_SUBEVENT_INPUT_REPORT_ENABLE
+ * @param event packet
+ * @return report_id
+ * @note: btstack_type 1
+ */
+static inline uint8_t hids_subevent_input_report_enable_get_report_id(const uint8_t * event){
+    return event[5];
+}
+/**
  * @brief Get field enable from event HIDS_SUBEVENT_INPUT_REPORT_ENABLE
  * @param event packet
  * @return enable
  * @note: btstack_type 1
  */
 static inline uint8_t hids_subevent_input_report_enable_get_enable(const uint8_t * event){
-    return event[5];
+    return event[6];
 }
 
 /**
@@ -12397,13 +12415,22 @@ static inline uint16_t hids_subevent_output_report_enable_get_con_handle(const u
     return little_endian_read_16(event, 3);
 }
 /**
+ * @brief Get field report_id from event HIDS_SUBEVENT_OUTPUT_REPORT_ENABLE
+ * @param event packet
+ * @return report_id
+ * @note: btstack_type 1
+ */
+static inline uint8_t hids_subevent_output_report_enable_get_report_id(const uint8_t * event){
+    return event[5];
+}
+/**
  * @brief Get field enable from event HIDS_SUBEVENT_OUTPUT_REPORT_ENABLE
  * @param event packet
  * @return enable
  * @note: btstack_type 1
  */
 static inline uint8_t hids_subevent_output_report_enable_get_enable(const uint8_t * event){
-    return event[5];
+    return event[6];
 }
 
 /**
@@ -12416,13 +12443,22 @@ static inline uint16_t hids_subevent_feature_report_enable_get_con_handle(const 
     return little_endian_read_16(event, 3);
 }
 /**
+ * @brief Get field report_id from event HIDS_SUBEVENT_FEATURE_REPORT_ENABLE
+ * @param event packet
+ * @return report_id
+ * @note: btstack_type 1
+ */
+static inline uint8_t hids_subevent_feature_report_enable_get_report_id(const uint8_t * event){
+    return event[5];
+}
+/**
  * @brief Get field enable from event HIDS_SUBEVENT_FEATURE_REPORT_ENABLE
  * @param event packet
  * @return enable
  * @note: btstack_type 1
  */
 static inline uint8_t hids_subevent_feature_report_enable_get_enable(const uint8_t * event){
-    return event[5];
+    return event[6];
 }
 
 /**

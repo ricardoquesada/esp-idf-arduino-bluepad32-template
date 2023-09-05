@@ -177,6 +177,8 @@ typedef enum {
     HCI_OPCODE_HCI_WRITE_EXTENDED_INQUIRY_RESPONSE = HCI_OPCODE (OGF_CONTROLLER_BASEBAND, 0x52),
     HCI_OPCODE_HCI_WRITE_SIMPLE_PAIRING_MODE = HCI_OPCODE (OGF_CONTROLLER_BASEBAND, 0x56),
     HCI_OPCODE_HCI_READ_LOCAL_OOB_DATA = HCI_OPCODE (OGF_CONTROLLER_BASEBAND, 0x57),
+    HCI_OPCODE_HCI_READ_INQUIRY_RESPONSE_TRANSMIT_POWER_LEVEL = HCI_OPCODE (OGF_CONTROLLER_BASEBAND, 0x58),
+    HCI_OPCODE_HCI_WRITE_INQUIRY_TRANSMIT_POWER_LEVEL = HCI_OPCODE (OGF_CONTROLLER_BASEBAND, 0x59),
     HCI_OPCODE_HCI_WRITE_DEFAULT_ERRONEOUS_DATA_REPORTING = HCI_OPCODE (OGF_CONTROLLER_BASEBAND, 0x5B),
     HCI_OPCODE_HCI_SET_EVENT_MASK_2 = HCI_OPCODE (OGF_CONTROLLER_BASEBAND, 0x63),
     HCI_OPCODE_HCI_READ_LE_HOST_SUPPORTED = HCI_OPCODE (OGF_CONTROLLER_BASEBAND, 0x6c),
@@ -333,6 +335,7 @@ typedef enum {
     HCI_OPCODE_HCI_LE_SET_TRANSMIT_POWER_REPORTING_ENABLE = HCI_OPCODE (OGF_LE_CONTROLLER, 0x7a),
     HCI_OPCODE_HCI_LE_TRANSMITTER_TEST_V4 = HCI_OPCODE (OGF_LE_CONTROLLER, 0x7B),
 
+    // Broadcom/Cypress/Infineon/Synaptics
     HCI_OPCODE_HCI_BCM_WRITE_SCO_PCM_INT = HCI_OPCODE (0x3f, 0x1c),
     HCI_OPCODE_HCI_BCM_SET_SLEEP_MODE = HCI_OPCODE (0x3f, 0x27),
     HCI_OPCODE_HCI_BCM_WRITE_I2SPCM_INTERFACE_PARAM = HCI_OPCODE (0x3f, 0x6d),
@@ -340,10 +343,23 @@ typedef enum {
     HCI_OPCODE_HCI_BCM_WRITE_TX_POWER_TABLE = HCI_OPCODE (0x3f, 0x1C9),
     HCI_OPCODE_HCI_BCM_SET_TX_PWR = HCI_OPCODE (0x3f, 0x1A5),
 
+    // Texas Instruments
     HCI_OPCODE_HCI_TI_VS_CONFIGURE_DDIP = 0xFD55,
 
+    // Realtek
     HCI_OPCODE_HCI_RTK_CONFIGURE_SCO_ROUTING = HCI_OPCODE (0x3f, 0x93),
     HCI_OPCODE_HCI_RTK_READ_CARD_INFO = 0xFC61,
+
+    // Marvell/NXP
+    HCI_OPCODE_HCI_NXP_WRITE_PCM_I2S_SETTINGS      = 0xFC07,
+    HCI_OPCODE_HCI_NXP_SET_SCO_DATA_PATH	       = 0xFC1D,
+    HCI_OPCODE_HCI_NXP_SET_BDADDR		           = 0xFC22,
+    HCI_OPCODE_HCI_NXP_WRITE_PCM_I2S_SYNC_SETTINGS = 0xFC28,
+    HCI_OPCODE_HCI_NXP_WRITE_PCM_LINK_SETTINGS     = 0xFC29,
+    HCI_OPCODE_HCI_NXP_SET_WBS_CONNECTION          = 0xFC73,
+    HCI_OPCODE_HCI_NXP_HOST_PCM_I2S_AUDIO_CONFIG   = 0xFC6F,
+    HCI_OPCODE_HCI_NXP_HOST_PCM_I2S_CONTROL_ENABLE = 0xFC70,
+
 } hci_opcode_t;
 
 // HCI Commands - see hci_cmd.c for info on parameters
@@ -390,6 +406,8 @@ extern const hci_cmd_t hci_read_link_supervision_timeout;
 extern const hci_cmd_t hci_read_local_extended_oob_data;
 extern const hci_cmd_t hci_read_local_name;
 extern const hci_cmd_t hci_read_local_oob_data;
+extern const hci_cmd_t hci_read_inquiry_response_transmit_power_level;
+extern const hci_cmd_t hci_write_inquiry_transmit_power_level;
 extern const hci_cmd_t hci_read_local_supported_commands;
 extern const hci_cmd_t hci_read_local_supported_features;
 extern const hci_cmd_t hci_read_local_version_information;
@@ -600,12 +618,24 @@ extern const hci_cmd_t hci_ti_write_codec_config;
 extern const hci_cmd_t hci_ti_write_hardware_register;
 
 
-// Relatek specific HCI commands
+// Realtek specific HCI commands
 extern const hci_cmd_t hci_rtk_configure_sco_routing;
 extern const hci_cmd_t hci_rtk_read_card_info;
 
+// Marvell/NXP specific HCI commands
+extern const hci_cmd_t hci_nxp_set_sco_data_path;
+extern const hci_cmd_t hci_nxp_write_pcm_i2s_settings;
+extern const hci_cmd_t hci_nxp_write_pcm_i2s_sync_settings;
+extern const hci_cmd_t hci_nxp_write_pcm_link_settings;
+extern const hci_cmd_t hci_nxp_set_wbs_connection;
+extern const hci_cmd_t hci_nxp_host_pcm_i2s_audio_config;
+extern const hci_cmd_t hci_nxp_host_pcm_i2s_control_enable;
+
 /**
  * construct HCI Command based on template
+ * @param hci_cmd_buffer for command
+ * @param cmd describing command opcode and format
+ * @param argptr for command arguments
  *
  * Format:
  *   1,2,3,4: one to four byte value
@@ -617,10 +647,21 @@ extern const hci_cmd_t hci_rtk_read_card_info;
  *   P: 16 byte Pairing code
  *   A: 31 bytes advertising data
  *   S: Service Record (Data Element Sequence)
+ * @returns size of command
  */
 
 uint16_t hci_cmd_create_from_template(uint8_t *hci_cmd_buffer, const hci_cmd_t *cmd, va_list argptr);
-    
+
+/**
+ * construct HCI Command based on template
+ * Same as hci_cmd_create_from_template but with variable arguments
+ *
+ * @param hci_cmd_buffer for command
+ * @param cmd describing command opcode and format
+ * @returns size of command
+ */
+uint16_t hci_cmd_create_from_template_with_vargs(uint8_t * hci_cmd_buffer, const hci_cmd_t * cmd, ...);
+
 #if defined __cplusplus
 }
 #endif

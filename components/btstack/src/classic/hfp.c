@@ -122,6 +122,20 @@ static const struct {
         {0x000d, 0x02, SCO_PACKET_TYPES_2EV3, CODEC_MASK_OTHER}  // HFP_LINK_SETTINGS_T2
 };
 
+// table 5.8 'mandatory safe settings' for eSCO + similar entries for SCO
+static const struct hfp_mandatory_safe_setting {
+    const uint8_t codec_mask;
+    const bool secure_connection_in_use;
+    hfp_link_settings_t link_setting;
+} hfp_mandatory_safe_settings[] = {
+        { CODEC_MASK_CVSD,  false, HFP_LINK_SETTINGS_D1},
+        { CODEC_MASK_CVSD,  true,  HFP_LINK_SETTINGS_D1},
+        { CODEC_MASK_CVSD,  false, HFP_LINK_SETTINGS_S1},
+        { CODEC_MASK_CVSD,  true,  HFP_LINK_SETTINGS_S4},
+        { CODEC_MASK_OTHER, false, HFP_LINK_SETTINGS_T1},
+        { CODEC_MASK_OTHER, true,  HFP_LINK_SETTINGS_T2},
+};
+
 static const char * hfp_hf_features[] = {
         "EC and/or NR function",
         "Three-way calling",
@@ -801,7 +815,7 @@ static void handle_query_rfcomm_event(uint8_t packet_type, uint16_t channel, uin
 // returns 0 if unexpected error or no other link options remained, otherwise 1
 static int hfp_handle_failed_sco_connection(uint8_t status){
                    
-    if (!hfp_sco_establishment_active){
+    if (hfp_sco_establishment_active->accept_sco != 0){
         log_info("(e)SCO Connection failed but not started by us");
         return 0;
     }
@@ -839,6 +853,7 @@ static int hfp_handle_failed_sco_connection(uint8_t status){
     log_info("e)SCO Connection: try new link_setting %d", next_setting);
     hfp_sco_establishment_active->establish_audio_connection = 1;
     hfp_sco_establishment_active->link_setting = next_setting;
+    hfp_sco_establishment_active->accept_sco = 0;
     hfp_sco_establishment_active = NULL;
     return 1;
 }
@@ -869,17 +884,9 @@ void hfp_handle_hci_event(uint8_t packet_type, uint16_t channel, uint8_t *packet
                     } else {
                         hfp_connection->accept_sco = 1;
                     }
-#ifdef ENABLE_CC256X_ASSISTED_HFP
-                    hfp_cc256x_prepare_for_sco(hfp_connection);
-#endif
-#ifdef ENABLE_BCM_PCM_WBS
-                    hfp_bcm_prepare_for_sco(hfp_connection);
-#endif
-#ifdef ENABLE_RTK_PCM_WBS
-                    hfp_connection->rtk_send_sco_config = true;
-#endif
+                    // configure SBC coded if needed
+                    hfp_prepare_for_sco(hfp_connection);
                     log_info("accept sco %u\n", hfp_connection->accept_sco);
-                    hfp_sco_establishment_active = hfp_connection;
                     break;
                 default:
                     break;                    
@@ -894,8 +901,11 @@ void hfp_handle_hci_event(uint8_t packet_type, uint16_t channel, uint8_t *packet
                 
                 hfp_connection = hfp_sco_establishment_active;
                 if (hfp_handle_failed_sco_connection(status)) break;
+
+                hfp_connection->accept_sco = 0;
                 hfp_connection->establish_audio_connection = 0;
                 hfp_connection->state = HFP_SERVICE_LEVEL_CONNECTION_ESTABLISHED;
+                hfp_sco_establishment_active = NULL;
                 hfp_emit_sco_connection_established(hfp_connection, status,
                                                     hfp_connection->negotiated_codec, 0, 0);
             }
@@ -903,20 +913,17 @@ void hfp_handle_hci_event(uint8_t packet_type, uint16_t channel, uint8_t *packet
 
         case HCI_EVENT_SYNCHRONOUS_CONNECTION_COMPLETE:{
             if (hfp_sco_establishment_active == NULL) break;
-            hci_event_synchronous_connection_complete_get_bd_addr(packet, event_addr);
-            hfp_connection = get_hfp_connection_context_for_bd_addr(event_addr, local_role);
-            if (!hfp_connection) {
-                log_error("HFP: connection does not exist for remote with addr %s.", bd_addr_to_str(event_addr));
-                return;
-            }
+
+            hfp_connection = hfp_sco_establishment_active;
             
             status = hci_event_synchronous_connection_complete_get_status(packet);
             if (status != ERROR_CODE_SUCCESS){
-                hfp_connection->accept_sco = 0;
                 if (hfp_handle_failed_sco_connection(status)) break;
 
+                hfp_connection->accept_sco = 0;
                 hfp_connection->establish_audio_connection = 0;
                 hfp_connection->state = HFP_SERVICE_LEVEL_CONNECTION_ESTABLISHED;
+                hfp_sco_establishment_active = NULL;
                 hfp_emit_sco_connection_established(hfp_connection, status,
                                                     hfp_connection->negotiated_codec, 0, 0);
                 break;
@@ -956,8 +963,9 @@ void hfp_handle_hci_event(uint8_t packet_type, uint16_t channel, uint8_t *packet
                 break;
             }
             hfp_connection->sco_handle = sco_handle;
+            hfp_connection->accept_sco = 0;
             hfp_connection->establish_audio_connection = 0;
-            
+
             hfp_connection->state = HFP_AUDIO_CONNECTION_ESTABLISHED;
             
             switch (hfp_connection->vra_state){
@@ -968,6 +976,9 @@ void hfp_handle_hci_event(uint8_t packet_type, uint16_t channel, uint8_t *packet
                     hfp_connection->ag_audio_connection_opened_before_vra = true;
                     break;
             }
+
+            hfp_sco_establishment_active = NULL;
+
             hfp_emit_sco_connection_established(hfp_connection, status,
                                                 hfp_connection->negotiated_codec, rx_packet_length, tx_packet_length);
             break;                
@@ -1903,11 +1914,17 @@ uint8_t hfp_trigger_release_audio_connection(hfp_connection_t * hfp_connection){
     return ERROR_CODE_SUCCESS;
 }
 
+bool hfp_sco_setup_active(void){
+    return hfp_sco_establishment_active != NULL;
+}
+
 void hfp_setup_synchronous_connection(hfp_connection_t * hfp_connection){
+
+    hfp_sco_establishment_active = hfp_connection;
+
     // all packet types, fixed bandwidth
     int setting = hfp_connection->link_setting;
     log_info("hfp_setup_synchronous_connection using setting nr %u", setting);
-    hfp_sco_establishment_active = hfp_connection;
     uint16_t sco_voice_setting = hci_get_sco_voice_setting();
     if (hfp_connection->negotiated_codec != HFP_CODEC_CVSD){
 #ifdef ENABLE_BCM_PCM_WBS
@@ -1925,11 +1942,34 @@ void hfp_setup_synchronous_connection(hfp_connection_t * hfp_connection){
         sco_voice_setting, hfp_link_settings[setting].retransmission_effort, packet_types_flipped);
 }
 
+hfp_link_settings_t hfp_safe_settings_for_context(bool use_eSCO, uint8_t negotiated_codec, bool secure_connection_in_use){
+    uint8_t i;
+    hfp_link_settings_t link_setting = HFP_LINK_SETTINGS_NONE;
+    for (i=0 ; i < (sizeof(hfp_mandatory_safe_settings) / sizeof(struct hfp_mandatory_safe_setting)) ; i++){
+        uint16_t packet_types = hfp_link_settings[(uint8_t)(hfp_mandatory_safe_settings[i].link_setting)].packet_types;
+        bool is_eSCO_setting = (packet_types & SCO_PACKET_TYPES_ESCO) != 0;
+        if (is_eSCO_setting != use_eSCO) continue;
+        if ((hfp_mandatory_safe_settings[i].codec_mask & (1 << negotiated_codec)) == 0) continue;
+        if (hfp_mandatory_safe_settings[i].secure_connection_in_use != secure_connection_in_use) continue;
+        link_setting = hfp_mandatory_safe_settings[i].link_setting;
+        break;
+    }
+    return link_setting;
+}
+
 void hfp_accept_synchronous_connection(hfp_connection_t * hfp_connection, bool use_eSCO){
 
-    // use "don't care" where possible
-    uint16_t max_latency           = 0xffff;
-    uint16_t retransmission_effort = 0xff;
+    hfp_sco_establishment_active = hfp_connection;
+
+    bool secure_connection_in_use = gap_secure_connection(hfp_connection->acl_handle);
+
+    // lookup safe settings based on SCO type, SC use and Codec type
+    hfp_link_settings_t link_setting = hfp_safe_settings_for_context(use_eSCO, hfp_connection->negotiated_codec, secure_connection_in_use);
+    btstack_assert(link_setting != HFP_LINK_SETTINGS_NONE);
+
+    uint16_t max_latency             = hfp_link_settings[(uint8_t) link_setting].max_latency;
+    uint16_t packet_types            = hfp_link_settings[(uint8_t) link_setting].packet_types;
+    uint16_t retransmission_effort   = hfp_link_settings[(uint8_t) link_setting].retransmission_effort;
 
     // transparent data for non-CVSD connections or if codec provided by Controller
     uint16_t sco_voice_setting = hci_get_sco_voice_setting();
@@ -1942,25 +1982,21 @@ void hfp_accept_synchronous_connection(hfp_connection_t * hfp_connection, bool u
     }
 
     // filter packet types
-    uint16_t packet_types = hfp_get_sco_packet_types();
+    packet_types &= hfp_get_sco_packet_types();
+
     hfp_connection->packet_types = packet_types;
 
     // bits 6-9 are 'don't allow'
     uint16_t packet_types_flipped = packet_types ^ 0x3c0;
 
-    log_info("HFP: sending hci_accept_connection_request, packet types 0x%04x, sco_voice_setting 0x%02x", packet_types, sco_voice_setting);
+    log_info("Sending hci_accept_connection_request for link settings %u: packet types 0x%04x, sco_voice_setting 0x%02x",
+             (uint8_t) link_setting, packet_types, sco_voice_setting);
+
     hci_send_cmd(&hci_accept_synchronous_connection, hfp_connection->remote_addr, 8000, 8000, max_latency,
                  sco_voice_setting, retransmission_effort, packet_types_flipped);
 }
 
 #ifdef ENABLE_CC256X_ASSISTED_HFP
-void hfp_cc256x_prepare_for_sco(hfp_connection_t * hfp_connection){
-    hfp_connection->cc256x_send_write_codec_config = true;
-    if (hfp_connection->negotiated_codec == HFP_CODEC_MSBC){
-        hfp_connection->cc256x_send_wbs_associate = true;
-    }
-}
-
 void hfp_cc256x_write_codec_config(hfp_connection_t * hfp_connection){
     uint32_t sample_rate_hz;
     uint16_t clock_rate_khz;
@@ -1989,18 +2025,32 @@ void hfp_cc256x_write_codec_config(hfp_connection_t * hfp_connection){
 #endif
 
 #ifdef ENABLE_BCM_PCM_WBS
-void hfp_bcm_prepare_for_sco(hfp_connection_t * hfp_connection){
-    hfp_connection->bcm_send_write_i2spcm_interface_param = true;
-    if (hfp_connection->negotiated_codec == HFP_CODEC_MSBC){
-        hfp_connection->bcm_send_enable_wbs = true;
-    }
-}
 void hfp_bcm_write_i2spcm_interface_param(hfp_connection_t * hfp_connection){
     uint8_t sample_rate = (hfp_connection->negotiated_codec == HFP_CODEC_MSBC) ? 1 : 0;
     // i2s enable, master, 8/16 kHz, 512 kHz
     hci_send_cmd(&hci_bcm_write_i2spcm_interface_param, 1, 1, sample_rate, 2);
 }
 #endif
+
+void hfp_prepare_for_sco(hfp_connection_t * hfp_connection){
+#ifdef ENABLE_CC256X_ASSISTED_HFP
+    hfp_connection->cc256x_send_write_codec_config = true;
+    if (hfp_connection->negotiated_codec == HFP_CODEC_MSBC){
+        hfp_connection->cc256x_send_wbs_associate = true;
+    }
+#endif
+
+#ifdef ENABLE_BCM_PCM_WBS
+    hfp_connection->bcm_send_write_i2spcm_interface_param = true;
+    if (hfp_connection->negotiated_codec == HFP_CODEC_MSBC){
+        hfp_connection->bcm_send_enable_wbs = true;
+    }
+#endif
+
+#ifdef ENABLE_RTK_PCM_WBS
+    hfp_connection->rtk_send_sco_config = true;
+#endif
+}
 
 void hfp_set_hf_callback(btstack_packet_handler_t callback){
     hfp_hf_callback = callback;

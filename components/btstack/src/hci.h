@@ -287,6 +287,13 @@ typedef enum {
     LE_CONNECTING_WHITELIST,
 } le_connecting_state_t;
 
+typedef enum {
+    ATT_BEARER_UNENHANCED_LE,
+    ATT_BEARER_UNENHANCED_CLASSIC,
+    ATT_BEARER_ENHANCED_LE,
+    ATT_BEARER_ENHANCED_CLASSIC
+} att_bearer_type_t;
+
 #ifdef ENABLE_BLE
 
 //
@@ -484,6 +491,8 @@ typedef struct {
     uint8_t                 peer_addr_type;
     bd_addr_t               peer_address;
 
+    att_bearer_type_t       bearer_type;
+
     int                     ir_le_device_db_index;
     uint8_t                 ir_lookup_active;
     uint8_t                 pairing_active;
@@ -494,8 +503,13 @@ typedef struct {
     btstack_linked_list_t   notification_requests;
     btstack_linked_list_t   indication_requests;
 
-#ifdef ENABLE_GATT_OVER_CLASSIC
+#if defined(ENABLE_GATT_OVER_CLASSIC) || defined(ENABLE_GATT_OVER_EATT)
+    // unified (client + server) att bearer
     uint16_t                l2cap_cid;
+    bool                    send_requests[2];
+    bool                    outgoing_connection_active;
+    bool                    incoming_connection_request;
+    bool                    eatt_outgoing_active;
 #endif
 
     uint16_t                request_size;
@@ -601,6 +615,9 @@ typedef struct {
     // generate sco can send now based on received packets, using timeout below
     uint8_t  sco_tx_ready;
 
+    // SCO payload length
+    uint16_t sco_payload_length;
+
     // request role switch
     hci_role_t request_role;
 
@@ -663,6 +680,7 @@ typedef struct {
 
 #ifdef ENABLE_LE_PERIODIC_ADVERTISING
     hci_con_handle_t le_past_sync_handle;
+    uint8_t          le_past_advertising_handle;
     uint16_t         le_past_service_data;
 #endif
 
@@ -887,15 +905,16 @@ typedef enum hci_init_state{
 
 } hci_substate_t;
 
-#define GAP_TASK_SET_LOCAL_NAME               0x01
-#define GAP_TASK_SET_EIR_DATA                 0x02
-#define GAP_TASK_SET_CLASS_OF_DEVICE          0x04
-#define GAP_TASK_SET_DEFAULT_LINK_POLICY      0x08
-#define GAP_TASK_WRITE_SCAN_ENABLE            0x10
-#define GAP_TASK_WRITE_PAGE_SCAN_ACTIVITY     0x20
-#define GAP_TASK_WRITE_PAGE_SCAN_TYPE         0x40
-#define GAP_TASK_WRITE_PAGE_TIMEOUT           0x80
-#define GAP_TASK_WRITE_INQUIRY_SCAN_ACTIVITY 0x100
+#define GAP_TASK_SET_LOCAL_NAME                 0x01
+#define GAP_TASK_SET_EIR_DATA                   0x02
+#define GAP_TASK_SET_CLASS_OF_DEVICE            0x04
+#define GAP_TASK_SET_DEFAULT_LINK_POLICY        0x08
+#define GAP_TASK_WRITE_SCAN_ENABLE              0x10
+#define GAP_TASK_WRITE_PAGE_SCAN_ACTIVITY       0x20
+#define GAP_TASK_WRITE_PAGE_SCAN_TYPE           0x40
+#define GAP_TASK_WRITE_PAGE_TIMEOUT             0x80
+#define GAP_TASK_WRITE_INQUIRY_SCAN_ACTIVITY   0x100
+#define GAP_TASK_WRITE_INQUIRY_TX_POWER_LEVEL  0x200
 
 enum {
     // Tasks
@@ -1063,6 +1082,7 @@ typedef struct {
     uint32_t            inquiry_lap;      // GAP_IAC_GENERAL_INQUIRY or GAP_IAC_LIMITED_INQUIRY
     uint16_t            inquiry_scan_interval;
     uint16_t            inquiry_scan_window;
+    int8_t              inquiry_tx_power_level;
     
     bool                gap_secure_connections_only_mode;
 #endif
@@ -1250,6 +1270,7 @@ typedef struct {
     btstack_linked_list_t le_advertising_sets;
     uint16_t le_maximum_advertising_data_length;
     uint8_t  le_advertising_set_in_current_command;
+    uint16_t le_resolvable_private_address_update_s;
 #endif
 #endif
 
@@ -1425,7 +1446,15 @@ uint8_t hci_send_cmd(const hci_cmd_t * cmd, ...);
 
 // Sending SCO Packets
 
-/** @brief Get SCO packet length for current SCO Voice setting
+/** @brief Get SCO payload length for existing SCO connection and current SCO Voice setting
+ *  @note  Using SCO packets of the exact length is required for USB transfer in general and some H4 controllers as well
+ *  @param sco_con_handle
+ *  @return Length of SCO payload in bytes (not audio frames) incl. 3 byte header
+ */
+uint16_t hci_get_sco_packet_length_for_connection(hci_con_handle_t sco_con_handle);
+
+/** @brief Get SCO packet length for one of the existing SCO connections and current SCO Voice setting
+ *  @deprecated Please use hci_get_sco_packet_length_for_connection instead
  *  @note  Using SCO packets of the exact length is required for USB transfer
  *  @return Length of SCO packets in bytes (not audio frames) incl. 3 byte header
  */

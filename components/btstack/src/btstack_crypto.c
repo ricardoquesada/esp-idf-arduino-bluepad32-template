@@ -1160,8 +1160,11 @@ static void btstack_crypto_event_handler(uint8_t packet_type, uint16_t cid, uint
                     btstack_crypto_wait_for_hci_result = 0;
                     if (hci_subevent_le_generate_dhkey_complete_get_status(packet)){
                         log_error("Generate DHKEY failed -> abort");
+                        // set DHKEY to 0xff..ff
+                        memset(btstack_crypto_ec_p192->dhkey, 0xff, 32);
+                    } else {
+                        hci_subevent_le_generate_dhkey_complete_get_dhkey(packet, btstack_crypto_ec_p192->dhkey);
                     }
-                    hci_subevent_le_generate_dhkey_complete_get_dhkey(packet, btstack_crypto_ec_p192->dhkey);
                     // done
                     btstack_linked_list_pop(&btstack_crypto_operations);
                     (*btstack_crypto_ec_p192->btstack_crypto.context_callback.callback)(btstack_crypto_ec_p192->btstack_crypto.context_callback.context);                    
@@ -1263,10 +1266,10 @@ void btstack_crypto_ecc_p256_calculate_dhkey(btstack_crypto_ecc_p256_t * request
 
 int btstack_crypto_ecc_p256_validate_public_key(const uint8_t * public_key){
 
-    // validate public key using micro-ecc
     int err = 0;
 
-#if defined (USE_MICRO_ECC_P256)
+#ifdef USE_MICRO_ECC_P256
+    // validate public key using micro-ecc
 
 #if uECC_SUPPORTS_secp256r1
     // standard version
@@ -1275,8 +1278,11 @@ int btstack_crypto_ecc_p256_validate_public_key(const uint8_t * public_key){
     // static version
     err = uECC_valid_public_key(public_key) == 0;
 #endif
+#endif
 
-#elif defined(USE_MBEDTLS_ECC_P256)
+#ifdef USE_MBEDTLS_ECC_P256
+    // validate public using mbedtls_ecc
+
     mbedtls_ecp_point Q;
     mbedtls_ecp_point_init( &Q );
     mbedtls_mpi_read_binary(&Q.X, &public_key[0], 32);
@@ -1284,16 +1290,10 @@ int btstack_crypto_ecc_p256_validate_public_key(const uint8_t * public_key){
     mbedtls_mpi_lset(&Q.Z, 1);
     err = mbedtls_ecp_check_pubkey(&mbedtls_ec_group, &Q);
     mbedtls_ecp_point_free( & Q);
-#else
-
-    UNUSED(public_key);
-    err = 1;
-    log_error("No elliptic curve library available");
-
 #endif
 
     if (err != 0){
-        log_error("public key invalid %x", err);
+        log_info("public key invalid %x", err);
     }
     return  err;
 }

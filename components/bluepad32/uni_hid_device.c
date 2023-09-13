@@ -599,6 +599,7 @@ void uni_hid_device_guess_controller_type_from_pid_vid(uni_hid_device_t* d) {
             d->report_parser.init_report = uni_hid_parser_xboxone_init_report;
             d->report_parser.parse_usage = uni_hid_parser_xboxone_parse_usage;
             d->report_parser.set_rumble = uni_hid_parser_xboxone_set_rumble;
+            d->report_parser.device_dump = uni_hid_parser_xboxone_device_dump;
             logi("Device detected as Xbox Wireless: 0x%02x\n", type);
             break;
         case CONTROLLER_TYPE_AndroidController:
@@ -903,18 +904,18 @@ static void process_misc_button_system(uni_hid_device_t* d) {
 
 // process_misc_button_home dumps uni_hid_device debug info in the console.
 static void process_misc_button_home(uni_hid_device_t* d) {
-    if ((d->controller.gamepad.misc_buttons & MISC_BUTTON_HOME) == 0) {
+    if ((d->controller.gamepad.misc_buttons & MISC_BUTTON_START) == 0) {
         // Home button released ? Clear "wait" flag.
-        d->misc_button_wait_release &= ~MISC_BUTTON_HOME;
+        d->misc_button_wait_release &= ~MISC_BUTTON_START;
         return;
     }
 
     // "Wait" flag present? Return.
-    if (d->misc_button_wait_release & MISC_BUTTON_HOME)
+    if (d->misc_button_wait_release & MISC_BUTTON_START)
         return;
 
     // Update "wait" flag.
-    d->misc_button_wait_release |= MISC_BUTTON_HOME;
+    d->misc_button_wait_release |= MISC_BUTTON_START;
 
     uni_hid_device_dump_all();
 }

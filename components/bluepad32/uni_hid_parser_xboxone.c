@@ -107,11 +107,11 @@ void uni_hid_parser_xboxone_setup(uni_hid_device_t* d) {
     // FIXME: Parse HID descriptor and see if it supports 0xf buttons. Checking
     // for the len is a horrible hack.
     if (d->hid_descriptor_len > 330) {
-        logi("Xbox one: Assuming it is firmware v4.8 or v5.x\n");
+        logi("Xbox: Assuming it is firmware v4.8 or v5.x\n");
         ins->version = XBOXONE_FIRMWARE_V4_8;
     } else {
         // If it is really firmware 4.8, it will be set later.
-        logi("Xbox one: Assuming it is firmware 3.1\n");
+        logi("Xbox: Assuming it is firmware v3.1\n");
         ins->version = XBOXONE_FIRMWARE_V3_1;
     }
 
@@ -184,7 +184,7 @@ static void parse_usage_firmware_v3_1(uni_hid_device_t* d,
                     uni_hid_parser_process_dpad(usage, value, &ctl->gamepad.dpad);
                     break;
                 default:
-                    logi("Xbox One: Unsupported page: 0x%04x, usage: 0x%04x, value=0x%x\n", usage_page, usage, value);
+                    logi("Xbox: Unsupported page: 0x%04x, usage: 0x%04x, value=0x%x\n", usage_page, usage, value);
                     break;
             }
             break;
@@ -195,7 +195,7 @@ static void parse_usage_firmware_v3_1(uni_hid_device_t* d,
                     ctl->battery = value;
                     break;
                 default:
-                    logi("Xbox One: Unsupported page: 0x%04x, usage: 0x%04x, value=0x%x\n", usage_page, usage, value);
+                    logi("Xbox: Unsupported page: 0x%04x, usage: 0x%04x, value=0x%x\n", usage_page, usage, value);
                     break;
             }
             break;
@@ -228,11 +228,11 @@ static void parse_usage_firmware_v3_1(uni_hid_device_t* d,
                     break;
                 case 0x07:  // View button
                     if (value)
-                        ctl->gamepad.misc_buttons |= MISC_BUTTON_BACK;
+                        ctl->gamepad.misc_buttons |= MISC_BUTTON_SELECT;
                     break;
                 case 0x08:  // Menu button
                     if (value)
-                        ctl->gamepad.misc_buttons |= MISC_BUTTON_HOME;
+                        ctl->gamepad.misc_buttons |= MISC_BUTTON_START;
                     break;
                 case 0x09:  // Thumb left
                     if (value)
@@ -246,11 +246,11 @@ static void parse_usage_firmware_v3_1(uni_hid_device_t* d,
                     // Only available in firmware v4.8 / 5.x
                     xboxone_instance_t* ins = get_xboxone_instance(d);
                     ins->version = XBOXONE_FIRMWARE_V4_8;
-                    logi("Xbox one: Firmware 4.8 / 5.x detected\n");
+                    logi("Xbox: Firmware 4.8 / 5.x detected\n");
                     break;
                 }
                 default:
-                    logi("Xbox One: Unsupported page: 0x%04x, usage: 0x%04x, value=0x%x\n", usage_page, usage, value);
+                    logi("Xbox: Unsupported page: 0x%04x, usage: 0x%04x, value=0x%x\n", usage_page, usage, value);
                     break;
             }
             break;
@@ -264,14 +264,14 @@ static void parse_usage_firmware_v3_1(uni_hid_device_t* d,
                 case HID_USAGE_AC_BACK:
                     break;
                 default:
-                    logi("Xbox One: Unsupported page: 0x%04x, usage: 0x%04x, value=0x%x\n", usage_page, usage, value);
+                    logi("Xbox: Unsupported page: 0x%04x, usage: 0x%04x, value=0x%x\n", usage_page, usage, value);
                     break;
             }
             break;
 
         // unknown usage page
         default:
-            logi("Xbox One: Unsupported page: 0x%04x, usage: 0x%04x, value=0x%x\n", usage_page, usage, value);
+            logi("Xbox: Unsupported page: 0x%04x, usage: 0x%04x, value=0x%x\n", usage_page, usage, value);
             break;
     }
 }
@@ -317,7 +317,7 @@ static void parse_usage_firmware_v4_v5(uni_hid_device_t* d,
                     uni_hid_parser_process_dpad(usage, value, &ctl->gamepad.dpad);
                     break;
                 default:
-                    logi("Xbox One: Unsupported page: 0x%04x, usage: 0x%04x, value=0x%x\n", usage_page, usage, value);
+                    logi("Xbox: Unsupported page: 0x%04x, usage: 0x%04x, value=0x%x\n", usage_page, usage, value);
                     break;
             }
             break;
@@ -335,7 +335,7 @@ static void parse_usage_firmware_v4_v5(uni_hid_device_t* d,
                         ctl->gamepad.buttons |= BUTTON_TRIGGER_L;
                     break;
                 default:
-                    logi("Xbox One: Unsupported page: 0x%04x, usage: 0x%04x, value=0x%x\n", usage_page, usage, value);
+                    logi("Xbox: Unsupported page: 0x%04x, usage: 0x%04x, value=0x%x\n", usage_page, usage, value);
                     break;
             }
             break;
@@ -346,7 +346,7 @@ static void parse_usage_firmware_v4_v5(uni_hid_device_t* d,
                     ctl->battery = value;
                     break;
                 default:
-                    logi("Xbox One: Unsupported page: 0x%04x, usage: 0x%04x, value=0x%x\n", usage_page, usage, value);
+                    logi("Xbox: Unsupported page: 0x%04x, usage: 0x%04x, value=0x%x\n", usage_page, usage, value);
                     break;
             }
             break;
@@ -386,11 +386,11 @@ static void parse_usage_firmware_v4_v5(uni_hid_device_t* d,
                     break;
                 case 0x0b:  // Unused in v4.8, used in v5.x
                     if (value)
-                        ctl->gamepad.misc_buttons |= MISC_BUTTON_BACK;
+                        ctl->gamepad.misc_buttons |= MISC_BUTTON_SELECT;
                     break;
                 case 0x0c:  // Burger button
                     if (value)
-                        ctl->gamepad.misc_buttons |= MISC_BUTTON_HOME;
+                        ctl->gamepad.misc_buttons |= MISC_BUTTON_START;
                     break;
                 case 0x0d:  // Xbox button
                     if (value)
@@ -405,7 +405,7 @@ static void parse_usage_firmware_v4_v5(uni_hid_device_t* d,
                         ctl->gamepad.buttons |= BUTTON_THUMB_R;
                     break;
                 default:
-                    logi("Xbox One: Unsupported page: 0x%04x, usage: 0x%04x, value=0x%x\n", usage_page, usage, value);
+                    logi("Xbox: Unsupported page: 0x%04x, usage: 0x%04x, value=0x%x\n", usage_page, usage, value);
                     break;
             }
             break;
@@ -415,16 +415,18 @@ static void parse_usage_firmware_v4_v5(uni_hid_device_t* d,
             switch (usage) {
                 case HID_USAGE_RECORD:
                     // Model 1914: Share button
-                    // Model 1807: reports it but always 0
-                    // FW 5.15.5
+                    // Model 1708: reports it but always 0
+                    // FW 5.x
                     if (ins->version != XBOXONE_FIRMWARE_V5) {
                         ins->version = XBOXONE_FIRMWARE_V5;
-                        logi("Xbox One: Assuming Xbox FW version 5.x\n");
+                        logi("Xbox: Assuming it is firmware v5.x\n");
                     }
+                    if (value)
+                        ctl->gamepad.misc_buttons |= MISC_BUTTON_CAPTURE;
                     break;
                 case HID_USAGE_AC_BACK:  // Back in v4.8 (not v5.x)
                     if (value)
-                        ctl->gamepad.misc_buttons |= MISC_BUTTON_BACK;
+                        ctl->gamepad.misc_buttons |= MISC_BUTTON_SELECT;
                     break;
                 case HID_USAGE_ASSIGN_SELECTION:
                 case HID_USAGE_ORDER_MOVIE:
@@ -433,21 +435,21 @@ static void parse_usage_firmware_v4_v5(uni_hid_device_t* d,
                     // Don't know the purpose of these "usages".
                     break;
                 default:
-                    logi("Xbox One: Unsupported page: 0x%04x, usage: 0x%04x, value=0x%x\n", usage_page, usage, value);
+                    logi("Xbox: Unsupported page: 0x%04x, usage: 0x%04x, value=0x%x\n", usage_page, usage, value);
                     break;
             }
             break;
 
         // unknown usage page
         default:
-            logi("Xbox One: Unsupported page: 0x%04x, usage: 0x%04x, value=0x%x\n", usage_page, usage, value);
+            logi("Xbox: Unsupported page: 0x%04x, usage: 0x%04x, value=0x%x\n", usage_page, usage, value);
             break;
     }
 }
 
 void uni_hid_parser_xboxone_set_rumble(uni_hid_device_t* d, uint8_t value, uint8_t duration) {
     if (d == NULL) {
-        loge("Xbox One: Invalid device\n");
+        loge("Xbox: Invalid device\n");
         return;
     }
 
@@ -494,6 +496,17 @@ void uni_hid_parser_xboxone_set_rumble(uni_hid_device_t* d, uint8_t value, uint8
     };
 
     uni_hid_device_send_intr_report(d, (uint8_t*)&ff, sizeof(ff));
+}
+
+void uni_hid_parser_xboxone_device_dump(uni_hid_device_t* d) {
+    static char* versions[] = {
+        "v3.1",
+        "v4.8",
+        "v5.x",
+    };
+    xboxone_instance_t* ins = get_xboxone_instance(d);
+    if (ins->version >= 0 && ins->version < ARRAY_SIZE(versions))
+        logi("\tXbox: FW version %s\n", versions[ins->version]);
 }
 
 //

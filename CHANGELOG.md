@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.9.0] - 2023-09-17
+- Bluepad32 v3.9.0
+- Arduino Core v2.0.12
+- BTstack develop branch: 6d7084813262308410501e1cf0c602a6ec2b0471
+
 ## [3.8.2] - 2023-08-02
 - Bluepad32 v3.8.2
 - Arduino Core v2.0.11

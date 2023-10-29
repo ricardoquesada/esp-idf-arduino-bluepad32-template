@@ -47,6 +47,9 @@ CONFIG_BLUEPAD32_MAX_DEVICES=4
 # Arduino Serial conflicts with the console
 # To disable replace "y" with "n"
 CONFIG_BLUEPAD32_USB_CONSOLE_ENABLE=y
+# Brings too many issues with Arduino users. Disable it by default.
+# Can be enabled via API.
+CONFIG_BLUEPAD32_ENABLE_VIRTUAL_DEVICE_BY_DEFAULT=n
 
 #
 # Arduino Options

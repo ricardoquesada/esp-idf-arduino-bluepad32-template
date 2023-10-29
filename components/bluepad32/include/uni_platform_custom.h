@@ -1,8 +1,6 @@
 /****************************************************************************
 http://retro.moe/unijoysticle2
 
-Copyright 2021 Ricardo Quesada
-
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -16,9 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ****************************************************************************/
 
-#ifndef UNI_VERSION_H
-#define UNI_VERSION_H
+#ifndef UNI_PLATFORM_CUSTOM_H
+#define UNI_PLATFORM_CUSTOM_H
 
-#define UNI_VERSION "3.10"
+#include "uni_platform.h"
 
-#endif  // UNI_VERSION_H
+struct uni_platform* uni_platform_custom_create(void);
+
+#endif  // UNI_PLATFORM_CUSTOM_H

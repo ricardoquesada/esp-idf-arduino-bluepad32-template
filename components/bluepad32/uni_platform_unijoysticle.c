@@ -38,6 +38,7 @@ limitations under the License.
 #include <hal/gpio_types.h>
 
 #include "cmd_system.h"
+#include "hid_usage.h"
 #include "sdkconfig.h"
 #include "uni_balance_board.h"
 #include "uni_bt.h"
@@ -49,6 +50,7 @@ limitations under the License.
 #include "uni_hid_device.h"
 #include "uni_hid_device_vendors.h"
 #include "uni_joystick.h"
+#include "uni_keyboard.h"
 #include "uni_log.h"
 #include "uni_mouse_quadrature.h"
 #include "uni_platform.h"
@@ -91,12 +93,6 @@ limitations under the License.
 #define AUTOFIRE_CPS_QUICKSHOT (29)        // ~17ms, ~1 frame
 #define AUTOFIRE_CPS_COMPETITION_PRO (62)  // ~8ms, ~1/2 frame
 #define AUTOFIRE_CPS_DEFAULT AUTOFIRE_CPS_QUICKGUN
-
-// Balance Board defaults
-#define BB_FIRE_MAX_FRAMES 25           // Max frames that fire can be kept pressed
-#define BB_IDLE_THRESHOLD 1600          // Below this value, it is considered that noone is on top of the BB
-#define BB_MOVE_THRESHOLD_DEFAULT 1500  // Diff in weight to consider a Movement
-#define BB_FIRE_THRESHOLD_DEFAULT 5000  // Max weight before staring the "de-accel" to trigger fire.
 
 #define TASK_AUTOFIRE_PRIO (9)
 #define TASK_PUSH_BUTTON_PRIO (8)
@@ -141,13 +137,6 @@ typedef enum {
     BOARD_MODEL_COUNT,
 } board_model_t;
 
-enum {
-    BB_STATE_RESET,      // After fire
-    BB_STATE_THRESHOLD,  // "fire threshold" detected
-    BB_STATE_IN_AIR,     // in the air
-    BB_STATE_FIRE,       // "fire pressed"
-};
-
 // CPU where the Quadrature task runs
 #define QUADRATURE_MOUSE_TASK_CPU 1
 
@@ -181,6 +170,7 @@ static void process_mouse(uni_hid_device_t* d,
                           uint16_t buttons);
 static void process_gamepad(uni_hid_device_t* d, uni_gamepad_t* gp);
 static void process_balance_board(uni_hid_device_t* d, uni_balance_board_t* bb);
+static void process_keyboard(uni_hid_device_t* d, uni_keyboard_t* kb);
 static void joy_update_port(const uni_joystick_t* joy, const gpio_num_t* gpios);
 static void init_quadrature_mouse(void);
 static int get_mouse_emulation_from_nvs(void);
@@ -200,12 +190,8 @@ static void maybe_enable_mouse_timers(void);
 static int cmd_swap_ports(int argc, char** argv);
 static int cmd_gamepad_mode(int argc, char** argv);
 static int cmd_autofire_cps(int argc, char** argv);
-static int cmd_bb_move_threshold(int argc, char** argv);
-static int cmd_bb_fire_threshold(int argc, char** argv);
 static int cmd_mouse_emulation(int argc, char** argv);
 static int cmd_version(int argc, char** argv);
-static int get_bb_move_threshold_from_nvs(void);
-static int get_bb_fire_threshold_from_nvs(void);
 static void swap_ports(void);
 static void try_swap_ports(uni_hid_device_t* d);
 static void set_next_gamepad_mode(uni_hid_device_t* d);
@@ -246,10 +232,6 @@ static bool s_auto_enable_bluetooth = true;
 // When True, it means the "Unijosyticle" generated the Bluetooth-Enable event.
 static bool s_skip_next_enable_bluetooth_event = false;
 
-// Gets initialized at platform_init time.
-static int balanceboard_move_threshold;
-static int balanceboard_fire_threshold;
-
 // Cache of mouse emulation type
 static int mouse_emulation_cached;
 
@@ -263,16 +245,6 @@ static struct {
     struct arg_int* value;
     struct arg_end* end;
 } autofire_cps_args;
-
-static struct {
-    struct arg_int* value;
-    struct arg_end* end;
-} bb_move_threshold_args;
-
-static struct {
-    struct arg_int* value;
-    struct arg_end* end;
-} bb_fire_threshold_args;
 
 static struct {
     struct arg_str* value;
@@ -379,10 +351,6 @@ static void unijoysticle_on_init_complete(void) {
     // Turn off LEDs
     uni_gpio_set_level(g_gpio_config->leds[UNI_PLATFORM_UNIJOYSTICLE_LED_J1], 0);
     uni_gpio_set_level(g_gpio_config->leds[UNI_PLATFORM_UNIJOYSTICLE_LED_J2], 0);
-
-    // Update Balance Board threshold
-    balanceboard_move_threshold = get_bb_move_threshold_from_nvs();
-    balanceboard_fire_threshold = get_bb_fire_threshold_from_nvs();
 
     if (g_variant->flags & UNI_PLATFORM_UNIJOYSTICLE_VARIANT_FLAG_QUADRATURE_MOUSE)
         init_quadrature_mouse();
@@ -521,34 +489,72 @@ static uni_error_t unijoysticle_on_device_ready(uni_hid_device_t* d) {
     return UNI_ERROR_SUCCESS;
 }
 
-static void test_gamepad_select_button(uni_hid_device_t* d, uni_gamepad_t* gp) {
+static bool test_gamepad_misc_button_pressed(uni_hid_device_t* d, uni_gamepad_t* gp, uint32_t button_mask) {
     uni_platform_unijoysticle_instance_t* ins = uni_platform_unijoysticle_get_instance(d);
-    bool already_pressed = ins->buttons_debouncer & MISC_BUTTON_SELECT;
+    bool already_pressed = ins->debouncer & button_mask;
 
-    if (gp->misc_buttons & MISC_BUTTON_SELECT) {
-        // 'Select' pressed
+    // Only return true the first time it is pressed.
+    // Next time will occur when the button is released and pressed again.
+    if (gp->misc_buttons & button_mask) {
         if (already_pressed)
-            return;
-        ins->buttons_debouncer |= MISC_BUTTON_SELECT;
-        try_swap_ports(d);
+            return false;
+        ins->debouncer |= button_mask;
+        return true;
     } else {
-        ins->buttons_debouncer &= ~MISC_BUTTON_SELECT;
+        ins->debouncer &= ~button_mask;
     }
+    return false;
+}
+
+static bool test_keyboard_key_pressed(uni_hid_device_t* d, uni_keyboard_t* kb, uint8_t usage_key, uint32_t key_mask) {
+    uni_platform_unijoysticle_instance_t* ins = uni_platform_unijoysticle_get_instance(d);
+    bool already_pressed = ins->debouncer & key_mask;
+    bool found = false;
+
+    // Only return true the first time it is pressed.
+    // Next time will occur when the button is released and pressed again.
+    for (int i = 0; i < UNI_KEYBOARD_PRESSED_KEYS_MAX; i++) {
+        // Assume not found is value is between 0 and 3, which are all errors.
+        if (kb->pressed_keys[i] < HID_USAGE_KB_ERROR_UNDEFINED)
+            break;
+        if (kb->pressed_keys[i] == usage_key) {
+            found = true;
+            break;
+        }
+    }
+    if (found) {
+        if (already_pressed)
+            return false;
+        ins->debouncer |= key_mask;
+        return true;
+    } else {
+        ins->debouncer &= ~key_mask;
+    }
+    return false;
+}
+
+static void test_gamepad_select_button(uni_hid_device_t* d, uni_gamepad_t* gp) {
+    if (test_gamepad_misc_button_pressed(d, gp, MISC_BUTTON_SELECT))
+        try_swap_ports(d);
 }
 
 static void test_gamepad_start_button(uni_hid_device_t* d, uni_gamepad_t* gp) {
-    uni_platform_unijoysticle_instance_t* ins = uni_platform_unijoysticle_get_instance(d);
-    bool already_pressed = ins->buttons_debouncer & MISC_BUTTON_START;
-
-    if (gp->misc_buttons & MISC_BUTTON_START) {
-        // 'Start' pressed
-        if (already_pressed)
-            return;
-        ins->buttons_debouncer |= MISC_BUTTON_START;
+    if (test_gamepad_misc_button_pressed(d, gp, MISC_BUTTON_START))
         set_next_gamepad_mode(d);
-    } else {
-        ins->buttons_debouncer &= ~MISC_BUTTON_START;
-    }
+}
+
+static void test_keyboard_esc_key(uni_hid_device_t* d, uni_keyboard_t* kb) {
+    // FIXME: BUTTON_A should not be mapped to ESC.
+    // Define BIT constants for 32 keys (size of the bitmask)
+    if (test_keyboard_key_pressed(d, kb, HID_USAGE_KB_ESCAPE, BUTTON_A))
+        try_swap_ports(d);
+}
+
+static void test_keyboard_tab_key(uni_hid_device_t* d, uni_keyboard_t* kb) {
+    // FIXME: BUTTON_B should not be mapped to Tab.
+    // Define BIT constants for 32 keys (size of the bitmask)
+    if (test_keyboard_key_pressed(d, kb, HID_USAGE_KB_TAB, BUTTON_B))
+        set_next_gamepad_mode(d);
 }
 
 static void unijoysticle_on_controller_data(uni_hid_device_t* d, uni_controller_t* ctl) {
@@ -567,6 +573,10 @@ static void unijoysticle_on_controller_data(uni_hid_device_t* d, uni_controller_
             break;
         case UNI_CONTROLLER_CLASS_BALANCE_BOARD:
             process_balance_board(d, &ctl->balance_board);
+            break;
+        case UNI_CONTROLLER_CLASS_KEYBOARD:
+            process_keyboard(d, &ctl->keyboard);
+            break;
         default:
             break;
     }
@@ -775,12 +785,6 @@ static void unijoysticle_register_cmds(void) {
     autofire_cps_args.value = arg_int1(NULL, NULL, "<cps>", "clicks per second (cps)");
     autofire_cps_args.end = arg_end(2);
 
-    bb_move_threshold_args.value = arg_int1(NULL, NULL, "<threshold>", "balance board 'move weight' threshold");
-    bb_move_threshold_args.end = arg_end(2);
-
-    bb_fire_threshold_args.value = arg_int1(NULL, NULL, "<threshold>", "balance board 'fire weight' threshold");
-    bb_fire_threshold_args.end = arg_end(2);
-
     const esp_console_cmd_t swap_ports = {
         .command = "swap_ports",
         .help = "Swaps joystick ports",
@@ -816,33 +820,11 @@ static void unijoysticle_register_cmds(void) {
         .func = &cmd_version,
     };
 
-    const esp_console_cmd_t bb_move_threshold = {
-        .command = "bb_move_threshold",
-        .help =
-            "Get/Set the Balance Board 'Move Weight' threshold\n"
-            "Default: 1500",  // BB_MOVE_THRESHOLD_DEFAULT
-        .hint = NULL,
-        .func = &cmd_bb_move_threshold,
-        .argtable = &bb_move_threshold_args,
-    };
-
-    const esp_console_cmd_t bb_fire_threshold = {
-        .command = "bb_fire_threshold",
-        .help =
-            "Get/Set the Balance Board 'Fire Weight' threshold\n"
-            "Default: 5000",  // BB_FIRE_THRESHOLD_DEFAULT
-        .hint = NULL,
-        .func = &cmd_bb_fire_threshold,
-        .argtable = &bb_fire_threshold_args,
-    };
-
     ESP_ERROR_CHECK(esp_console_cmd_register(&swap_ports));
     ESP_ERROR_CHECK(esp_console_cmd_register(&gamepad_mode));
-
     ESP_ERROR_CHECK(esp_console_cmd_register(&autofire_cps));
 
-    ESP_ERROR_CHECK(esp_console_cmd_register(&bb_move_threshold));
-    ESP_ERROR_CHECK(esp_console_cmd_register(&bb_fire_threshold));
+    uni_balance_board_register_cmds();
 
     if (g_variant->flags & UNI_PLATFORM_UNIJOYSTICLE_VARIANT_FLAG_QUADRATURE_MOUSE)
         register_console_cmds_quadrature_mouse();
@@ -901,42 +883,6 @@ static int get_autofire_cps_from_nvs(void) {
 
     value = uni_property_get(UNI_PROPERTY_KEY_UNI_AUTOFIRE_CPS, UNI_PROPERTY_TYPE_U8, def);
     return value.u8;
-}
-
-static void set_bb_move_threshold_to_nvs(int threshold) {
-    uni_property_value_t value;
-    value.u32 = threshold;
-
-    uni_property_set(UNI_PROPERTY_KEY_UNI_BB_MOVE_THRESHOLD, UNI_PROPERTY_TYPE_U32, value);
-    logi("Done\n");
-}
-
-static int get_bb_move_threshold_from_nvs(void) {
-    uni_property_value_t value;
-    uni_property_value_t def;
-
-    def.u32 = BB_MOVE_THRESHOLD_DEFAULT;
-
-    value = uni_property_get(UNI_PROPERTY_KEY_UNI_BB_MOVE_THRESHOLD, UNI_PROPERTY_TYPE_U32, def);
-    return value.u32;
-}
-
-static void set_bb_fire_threshold_to_nvs(int threshold) {
-    uni_property_value_t value;
-    value.u32 = threshold;
-
-    uni_property_set(UNI_PROPERTY_KEY_UNI_BB_FIRE_THRESHOLD, UNI_PROPERTY_TYPE_U32, value);
-    logi("Done\n");
-}
-
-static int get_bb_fire_threshold_from_nvs(void) {
-    uni_property_value_t value;
-    uni_property_value_t def;
-
-    def.u32 = BB_FIRE_THRESHOLD_DEFAULT;
-
-    value = uni_property_get(UNI_PROPERTY_KEY_UNI_BB_FIRE_THRESHOLD, UNI_PROPERTY_TYPE_U32, def);
-    return value.u32;
 }
 
 static board_model_t get_uni_model_from_pins(void) {
@@ -1130,84 +1076,44 @@ static void process_gamepad(uni_hid_device_t* d, uni_gamepad_t* gp) {
 
 static void process_balance_board(uni_hid_device_t* d, uni_balance_board_t* bb) {
     uni_platform_unijoysticle_instance_t* ins = uni_platform_unijoysticle_get_instance(d);
+    uni_balance_board_state_t* bb_state = &ins->bb_state;
     uni_joystick_t joy;
     memset(&joy, 0, sizeof(joy));
 
-    // Low pass filter, assuming values arrive at the same framespeed
-    ins->bb_smooth_down = mult_frac((bb->bl + bb->br) - ins->bb_smooth_down, 6, 100);
-    ins->bb_smooth_top = mult_frac((bb->tl + bb->tr) - ins->bb_smooth_top, 6, 100);
-    ins->bb_smooth_left = mult_frac((bb->tl + bb->bl) - ins->bb_smooth_left, 6, 100);
-    ins->bb_smooth_right = mult_frac((bb->tr + bb->br) - ins->bb_smooth_right, 6, 100);
-
-    logd("l=%d, r=%d, t=%d, d=%d\n", ins->bb_smooth_left, ins->bb_smooth_right, ins->bb_smooth_top,
-         ins->bb_smooth_down);
-
-    if ((ins->bb_smooth_top - ins->bb_smooth_down) > balanceboard_move_threshold)
-        joy.up = true;
-    else if ((ins->bb_smooth_down - ins->bb_smooth_top) > balanceboard_move_threshold)
-        joy.down = true;
-
-    if ((ins->bb_smooth_right - ins->bb_smooth_left) > balanceboard_move_threshold)
-        joy.right = true;
-    else if ((ins->bb_smooth_left - ins->bb_smooth_right) > balanceboard_move_threshold)
-        joy.left = true;
-
-    // State machine to detect whether we can trigger fire
-    int sum = bb->tl + bb->tr + bb->bl + bb->br;
-    ins->bb_fire_counter++;
-    logd("SUM=%d, counter=%d, state=%d (%d,%d,%d,%d)\n", sum, ins->bb_fire_counter, ins->bb_fire_state, bb->tl, bb->tr,
-         bb->bl, bb->br);
-    switch (ins->bb_fire_state) {
-        case BB_STATE_RESET:
-            if (sum >= balanceboard_fire_threshold) {
-                ins->bb_fire_state = BB_STATE_THRESHOLD;
-                ins->bb_fire_counter = 0;
-            }
-            break;
-        case BB_STATE_THRESHOLD:
-            if (bb->tl < BB_IDLE_THRESHOLD && bb->tr < BB_IDLE_THRESHOLD && bb->bl < BB_IDLE_THRESHOLD &&
-                bb->br < BB_IDLE_THRESHOLD) {
-                ins->bb_fire_state = BB_STATE_IN_AIR;
-                ins->bb_fire_counter = 0;
-                break;
-            }
-            // Since threshold was triggered, it has 10 frames to get to "in_air", otherwise we reset the state.
-            if (ins->bb_fire_counter > 10) {
-                ins->bb_fire_state = BB_STATE_RESET;
-                ins->bb_fire_counter = 0;
-                break;
-            }
-            // Reset counter in case we are still above threshold
-            if (sum >= balanceboard_fire_threshold) {
-                ins->bb_fire_counter = 0;
-                break;
-            }
-            break;
-        case BB_STATE_IN_AIR:
-            // Once in Air, it must be at least 2 frames in the air
-            if (ins->bb_fire_counter > 2) {
-                joy.fire = true;
-                ins->bb_fire_state = BB_STATE_FIRE;
-                ins->bb_fire_counter = 0;
-                break;
-            }
-            if (bb->tl >= BB_IDLE_THRESHOLD || bb->tr >= BB_IDLE_THRESHOLD || bb->bl > BB_IDLE_THRESHOLD ||
-                bb->br >= BB_IDLE_THRESHOLD) {
-                ins->bb_fire_state = BB_STATE_RESET;
-                ins->bb_fire_counter = 0;
-            }
-            break;
-        case BB_STATE_FIRE:
-            joy.fire = true;
-            // Maintain "fire" pressed for 10 frames
-            if (ins->bb_fire_counter > 10) {
-                ins->bb_fire_state = BB_STATE_RESET;
-                ins->bb_fire_counter = 0;
-            }
-            break;
-    }
+    uni_joy_to_single_joy_from_balance_board(bb, bb_state, &joy);
 
     process_joystick(d, ins->seat, &joy);
+}
+
+static void process_keyboard(uni_hid_device_t* d, uni_keyboard_t* kb) {
+    uni_platform_unijoysticle_instance_t* ins = uni_platform_unijoysticle_get_instance(d);
+    uni_joystick_t joy, joy_ext;
+    memset(&joy, 0, sizeof(joy));
+    memset(&joy_ext, 0, sizeof(joy_ext));
+
+    switch (ins->gamepad_mode) {
+        case UNI_PLATFORM_UNIJOYSTICLE_GAMEPAD_MODE_NORMAL:
+            uni_joy_to_single_joy_from_keyboard(kb, &joy);
+            process_joystick(d, ins->seat, &joy);
+            break;
+        case UNI_PLATFORM_UNIJOYSTICLE_GAMEPAD_MODE_TWINSTICK:
+            uni_joy_to_twinstick_from_keyboard(kb, &joy, &joy_ext);
+            if (ins->swap_ports_in_twinstick) {
+                process_joystick(d, GAMEPAD_SEAT_B, &joy);
+                process_joystick(d, GAMEPAD_SEAT_A, &joy_ext);
+            } else {
+                process_joystick(d, GAMEPAD_SEAT_A, &joy);
+                process_joystick(d, GAMEPAD_SEAT_B, &joy_ext);
+            }
+            break;
+        default:
+            loge("Unijoysticle: Mode %d not supported with keyboard\n", ins->gamepad_mode);
+    }
+
+    // Swap ?
+    test_keyboard_esc_key(d, kb);
+    // Change mode ?
+    test_keyboard_tab_key(d, kb);
 }
 
 static void set_gamepad_seat(uni_hid_device_t* d, uni_gamepad_seat_t seat) {
@@ -1551,7 +1457,7 @@ static void set_gamepad_mode(uni_hid_device_t* d, uni_platform_unijoysticle_game
     int num_devices = 0;
     for (int j = 0; j < CONFIG_BLUEPAD32_MAX_DEVICES; j++) {
         uni_hid_device_t* tmp_d = uni_hid_device_get_instance_for_idx(j);
-        if (uni_bt_conn_is_connected(&tmp_d->conn)) {
+        if (uni_bt_conn_is_connected(&tmp_d->conn) && !uni_hid_device_is_virtual_device(tmp_d)) {
             num_devices++;
             if (uni_hid_device_is_gamepad(tmp_d) && d == NULL) {
                 // Get the first valid gamepad device
@@ -1701,6 +1607,9 @@ static void swap_ports(void) {
 // Call this function, instead of "swap_ports" when the user requested
 // a swap port from a button press.
 static void try_swap_ports(uni_hid_device_t* d) {
+    // We assume that "d" is already connected.
+    uni_hid_device_t* d2 = NULL;
+
     if (get_uni_model_from_pins() == BOARD_MODEL_UNIJOYSTICLE2_SINGLE_PORT) {
         logi("INFO: unijoysticle_on_device_oob_event: No effect in single port boards\n");
         return;
@@ -1717,26 +1626,38 @@ static void try_swap_ports(uni_hid_device_t* d) {
         goto ok;
     }
 
+    // Find the possible 2nd connected device
+    for (int i = 0; i < CONFIG_BLUEPAD32_MAX_DEVICES; i++) {
+        uni_hid_device_t* tmp_d = uni_hid_device_get_instance_for_idx(i);
+        if (tmp_d != d &&                              // Not current device
+            uni_bt_conn_is_connected(&tmp_d->conn) &&  // Is it connected ?
+            !uni_hid_device_is_virtual_device(tmp_d)   // It isn't virtual
+        ) {
+            // d2 represents the other connected device
+            d2 = tmp_d;
+            break;
+        }
+    }
+
+    // Swap if there are no other connected devices
+    if (d2 == NULL)
+        goto ok;
+
     // Swap joystick ports except if there is a connected gamepad that doesn't have the "System" or "Select" button
     // pressed. Basically allow:
     //  - swapping mouse+gamepad
     //  - swapping between physical+virtual
     //  - two gamepads while both are pressing the "system" or "select" button at the same time.
-    for (int j = 0; j < CONFIG_BLUEPAD32_MAX_DEVICES; j++) {
-        uni_hid_device_t* tmp_d = uni_hid_device_get_instance_for_idx(j);
-        uni_platform_unijoysticle_instance_t* tmp_ins = uni_platform_unijoysticle_get_instance(tmp_d);
-        if (uni_bt_conn_is_connected(&tmp_d->conn) &&  // Is it connected ?
-            tmp_ins->seat != GAMEPAD_SEAT_NONE &&      // Does it have a seat ?
-            !uni_hid_device_is_virtual_device(tmp_d) &&
-            tmp_ins->gamepad_mode == UNI_PLATFORM_UNIJOYSTICLE_GAMEPAD_MODE_NORMAL &&
-            ((tmp_d->controller.gamepad.misc_buttons & (MISC_BUTTON_SYSTEM | MISC_BUTTON_SELECT)) ==
-             0)  // "swap" pressed?
-        ) {
-            // If so, don't allow swap.
-            logi("unijoysticle: to swap ports press 'system' button on both gamepads at the same time\n");
-            uni_hid_device_dump_all();
-            return;
-        }
+    uni_platform_unijoysticle_instance_t* d2_ins = uni_platform_unijoysticle_get_instance(d2);
+    if (d2->controller_type == UNI_CONTROLLER_CLASS_GAMEPAD &&  // Is it a gamepad ?
+        d2_ins->seat != GAMEPAD_SEAT_NONE &&                    // ... and does it have a seat ?
+        ((d2->controller.gamepad.misc_buttons & (MISC_BUTTON_SYSTEM | MISC_BUTTON_SELECT)) ==
+         0)  // ...without pressing "swap" ?
+    ) {
+        // If so, don't allow swap.
+        logi("unijoysticle: to swap ports press 'system' button on both gamepads at the same time\n");
+        uni_hid_device_dump_all();
+        return;
     }
 
 ok:
@@ -1769,46 +1690,6 @@ static int cmd_autofire_cps(int argc, char** argv) {
     logi("New autofire cps: %d\n", cps);
 
     xEventGroupSetBits(g_autofire_group, BIT(EVENT_AUTOFIRE_CONFIG));
-    return 0;
-}
-
-static int cmd_bb_move_threshold(int argc, char** argv) {
-    int nerrors = arg_parse(argc, argv, (void**)&bb_move_threshold_args);
-    if (nerrors != 0) {
-        arg_print_errors(stderr, bb_move_threshold_args.end, argv[0]);
-
-        // Don't treat as error, just print current value.
-        int threshold = get_bb_move_threshold_from_nvs();
-        logi("%d\n", threshold);
-        return 0;
-    }
-    int threshold = bb_move_threshold_args.value->ival[0];
-    set_bb_move_threshold_to_nvs(threshold);
-
-    // Update static value
-    balanceboard_move_threshold = threshold;
-
-    logi("New Balance Board Move threshold: %d\n", threshold);
-    return 0;
-}
-
-static int cmd_bb_fire_threshold(int argc, char** argv) {
-    int nerrors = arg_parse(argc, argv, (void**)&bb_fire_threshold_args);
-    if (nerrors != 0) {
-        arg_print_errors(stderr, bb_fire_threshold_args.end, argv[0]);
-
-        // Don't treat as error, just print current value.
-        int threshold = get_bb_fire_threshold_from_nvs();
-        logi("%d\n", threshold);
-        return 0;
-    }
-    int threshold = bb_fire_threshold_args.value->ival[0];
-    set_bb_fire_threshold_to_nvs(threshold);
-
-    // Update static value
-    balanceboard_fire_threshold = threshold;
-
-    logi("New Balance Board Fire threshold: %d\n", threshold);
     return 0;
 }
 

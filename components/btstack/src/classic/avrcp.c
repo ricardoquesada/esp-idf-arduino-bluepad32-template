@@ -47,9 +47,9 @@
 #include "btstack_debug.h"
 #include "btstack_event.h"
 #include "btstack_memory.h"
+#include "classic/avrcp.h"
 #include "classic/sdp_client.h"
 #include "classic/sdp_util.h"
-#include "classic/avrcp.h"
 
 
 typedef struct {
@@ -67,10 +67,10 @@ typedef struct {
 static void avrcp_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size);
 static void avrcp_start_next_sdp_query(void);
 
-static const char * avrcp_default_controller_service_name = "BTstack AVRCP Controller Service";
-static const char * avrcp_default_controller_service_provider_name = "BTstack AVRCP Controller Service Provider";
-static const char * avrcp_defaul_target_service_name = "BTstack AVRCP Target Service";
-static const char * avrcp_default_target_service_provider_name = "BTstack AVRCP Target Service Provider";
+static const char * avrcp_default_controller_service_name = "AVRCP Controller";
+static const char * avrcp_default_controller_service_provider_name = "BlueKitchen";
+static const char * avrcp_default_target_service_name = "AVRCP Target";
+static const char * avrcp_default_target_service_provider_name = "BlueKitchen";
 
 static const char * avrcp_subunit_type_name[] = {
         "MONITOR", "AUDIO", "PRINTER", "DISC", "TAPE_RECORDER_PLAYER", "TUNER",
@@ -250,8 +250,8 @@ uint8_t avrcp_cmd_opcode(uint8_t *packet, uint16_t size){
     return packet[cmd_opcode_index];
 }
 
-void avrcp_create_sdp_record(uint8_t controller, uint8_t * service, uint32_t service_record_handle, uint8_t browsing, uint16_t supported_features, 
-    const char * service_name, const char * service_provider_name){
+void avrcp_create_sdp_record(bool controller, uint8_t * service, uint32_t service_record_handle, uint8_t browsing, uint16_t supported_features,
+                             const char * service_name, const char * service_provider_name){
     uint8_t* attribute;
     de_create_sequence(service);
 
@@ -348,7 +348,7 @@ void avrcp_create_sdp_record(uint8_t controller, uint8_t * service, uint32_t ser
         if (controller){
             de_add_data(service, DE_STRING, (uint16_t) strlen(avrcp_default_controller_service_name), (uint8_t *) avrcp_default_controller_service_name);
         } else {
-            de_add_data(service, DE_STRING, (uint16_t) strlen(avrcp_defaul_target_service_name), (uint8_t *) avrcp_defaul_target_service_name);
+            de_add_data(service, DE_STRING, (uint16_t) strlen(avrcp_default_target_service_name), (uint8_t *) avrcp_default_target_service_name);
         }
     }
 
@@ -365,7 +365,7 @@ void avrcp_create_sdp_record(uint8_t controller, uint8_t * service, uint32_t ser
     }
 
     // 0x0311 "Supported Features"
-    de_add_number(service, DE_UINT, DE_SIZE_16, 0x0311);
+    de_add_number(service, DE_UINT, DE_SIZE_16, BLUETOOTH_ATTRIBUTE_SUPPORTED_FEATURES);
     de_add_number(service, DE_UINT, DE_SIZE_16, supported_features);
 }
 

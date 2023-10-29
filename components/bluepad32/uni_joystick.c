@@ -21,7 +21,8 @@ limitations under the License.
 
 #include <string.h>
 
-#include "uni_gamepad.h"
+#include "hid_usage.h"
+#include "uni_log.h"
 
 // When accelerometer mode is enabled, it will use it as if it were
 // in the Nintendo Wii Wheel.
@@ -69,7 +70,7 @@ void uni_joy_to_single_joy_from_gamepad(const uni_gamepad_t* gp, uni_joystick_t*
     out_joy->button3 |= ((gp->buttons & BUTTON_Y) != 0);
 }
 
-// Enhanced mode: One gamepad controls two joysticks
+// Twin Stick mode: One gamepad controls two joysticks
 void uni_joy_to_twinstick_from_gamepad(const uni_gamepad_t* gp, uni_joystick_t* out_joy1, uni_joystick_t* out_joy2) {
     to_single_joy(gp, out_joy2);
 
@@ -150,4 +151,196 @@ void uni_joy_to_single_from_wii_accel(const uni_gamepad_t* gp, uni_joystick_t* o
         out_joy->down = 1;
     }
 #endif  // ! ENABLE_ACCEL_WHEEL_MODE
+}
+
+static void to_joy_from_keyboard(const uni_keyboard_t* kb, uni_joystick_t* out_joy1, uni_joystick_t* out_joy2) {
+    // Sanity check. Joy1 must be valid, joy2 can be null
+    if (!out_joy1) {
+        loge("Joystick: Invalid joy1 for keyboard\n");
+        return;
+    }
+
+    // Keys
+    for (int i = 0; i < UNI_KEYBOARD_PRESSED_KEYS_MAX; i++) {
+        // Stop on values from 0-3, they invalid codes.
+        const uint8_t key = kb->pressed_keys[i];
+        if (key <= HID_USAGE_KB_ERROR_UNDEFINED)
+            break;
+        switch (key) {
+            // Valid for both "single" and "twin stick" modes
+            // 1st joystick: Arrow keys
+            case HID_USAGE_KB_LEFT_ARROW:
+                out_joy1->left = 1;
+                break;
+            case HID_USAGE_KB_RIGHT_ARROW:
+                out_joy1->right = 1;
+                break;
+            case HID_USAGE_KB_UP_ARROW:
+                out_joy1->up = 1;
+                break;
+            case HID_USAGE_KB_DOWN_ARROW:
+                out_joy1->down = 1;
+                break;
+
+            // Only valid in "single" mode
+            // 1st joystick: Buttons
+            case HID_USAGE_KB_SPACEBAR:
+            case HID_USAGE_KB_Z:
+                if (out_joy2 == NULL)
+                    out_joy1->fire = 1;
+                break;
+            case HID_USAGE_KB_X:
+                if (out_joy2 == NULL)
+                    out_joy1->button2 = 1;
+                break;
+            case HID_USAGE_KB_C:
+                if (out_joy2 == NULL)
+                    out_joy1->button3 = 1;
+                break;
+
+            // Only valid in "twin stick" mode
+            // 2nd joystick: WASD and buttons (Q, E, R)
+            case HID_USAGE_KB_W:
+                if (out_joy2)
+                    out_joy2->up = 1;
+                break;
+
+            case HID_USAGE_KB_A:
+                if (out_joy2)
+                    out_joy2->left = 1;
+                break;
+
+            case HID_USAGE_KB_S:
+                if (out_joy2)
+                    out_joy2->down = 1;
+                break;
+
+            case HID_USAGE_KB_D:
+                if (out_joy2)
+                    out_joy2->right = 1;
+                break;
+
+            case HID_USAGE_KB_Q:
+                if (out_joy2)
+                    out_joy2->button2 = 1;
+                break;
+
+            case HID_USAGE_KB_E:
+                if (out_joy2)
+                    out_joy2->fire = 1;
+                break;
+
+            case HID_USAGE_KB_R:
+                if (out_joy2)
+                    out_joy2->button3 = 1;
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    // Joystick 1 buttons from Modifiers
+    if (out_joy2 == NULL) {
+        // Left modifiers only valid when in "single" mode
+        out_joy1->fire |= (kb->modifiers & UNI_KEYBOARD_MODIFIER_LEFT_CONTROL) ? 1 : 0;
+        out_joy1->button2 |= (kb->modifiers & UNI_KEYBOARD_MODIFIER_LEFT_ALT) ? 1 : 0;
+        out_joy1->button3 |= (kb->modifiers & UNI_KEYBOARD_MODIFIER_LEFT_SHIFT) ? 1 : 0;
+    } else {
+        // Right modifiers only valid when in "twin stick" mode
+        out_joy1->fire |= (kb->modifiers & UNI_KEYBOARD_MODIFIER_RIGHT_ALT) ? 1 : 0;
+        out_joy1->button2 |= (kb->modifiers & UNI_KEYBOARD_MODIFIER_RIGHT_CONTROL) ? 1 : 0;
+        out_joy1->button3 |= (kb->modifiers & UNI_KEYBOARD_MODIFIER_RIGHT_SHIFT) ? 1 : 0;
+    }
+}
+void uni_joy_to_single_joy_from_keyboard(const uni_keyboard_t* kb, uni_joystick_t* out_joy) {
+    to_joy_from_keyboard(kb, out_joy, NULL);
+}
+
+// Twin Stick: One keyboard controls two joysticks
+void uni_joy_to_twinstick_from_keyboard(const uni_keyboard_t* kb, uni_joystick_t* out_joy1, uni_joystick_t* out_joy2) {
+    to_joy_from_keyboard(kb, out_joy2, out_joy1);
+}
+
+void uni_joy_to_single_joy_from_balance_board(const uni_balance_board_t* bb,
+                                              uni_balance_board_state_t* bb_state,
+                                              uni_joystick_t* out_joy) {
+    uni_balance_board_threshold_t bb_threshold = uni_balance_board_get_threshold();
+
+    // Low pass filter, assuming values arrive at the same framespeed
+    bb_state->smooth_down = mult_frac((bb->bl + bb->br) - bb_state->smooth_down, 6, 100);
+    bb_state->smooth_top = mult_frac((bb->tl + bb->tr) - bb_state->smooth_top, 6, 100);
+    bb_state->smooth_left = mult_frac((bb->tl + bb->bl) - bb_state->smooth_left, 6, 100);
+    bb_state->smooth_right = mult_frac((bb->tr + bb->br) - bb_state->smooth_right, 6, 100);
+
+    logd("l=%d, r=%d, t=%d, d=%d\n", bb_state->smooth_left, bb_state->smooth_right, bb_state->smooth_top,
+         bb_state->smooth_down);
+
+    if ((bb_state->smooth_top - bb_state->smooth_down) > bb_threshold.move)
+        out_joy->up = 1;
+    else if ((bb_state->smooth_down - bb_state->smooth_top) > bb_threshold.move)
+        out_joy->down = 1;
+
+    if ((bb_state->smooth_right - bb_state->smooth_left) > bb_threshold.move)
+        out_joy->right = 1;
+    else if ((bb_state->smooth_left - bb_state->smooth_right) > bb_threshold.move)
+        out_joy->left = 1;
+
+    // State machine to detect whether we can trigger fire
+    int sum = bb->tl + bb->tr + bb->bl + bb->br;
+    bb_state->fire_counter++;
+    logd("SUM=%d, counter=%d, state=%d (%d,%d,%d,%d)\n", sum, bb_state->fire_counter, bb_state->fire_state, bb->tl,
+         bb->tr, bb->bl, bb->br);
+    switch (bb_state->fire_state) {
+        case UNI_BALANCE_BOARD_STATE_RESET:
+            if (sum >= bb_threshold.fire) {
+                bb_state->fire_state = UNI_BALANCE_BOARD_STATE_THRESHOLD;
+                bb_state->fire_counter = 0;
+            }
+            break;
+        case UNI_BALANCE_BOARD_STATE_THRESHOLD:
+            if (bb->tl < UNI_BALANCE_BOARD_IDLE_THRESHOLD && bb->tr < UNI_BALANCE_BOARD_IDLE_THRESHOLD &&
+                bb->bl < UNI_BALANCE_BOARD_IDLE_THRESHOLD && bb->br < UNI_BALANCE_BOARD_IDLE_THRESHOLD) {
+                bb_state->fire_state = UNI_BALANCE_BOARD_STATE_IN_AIR;
+                bb_state->fire_counter = 0;
+                break;
+            }
+            // Since threshold was triggered, it has 10 frames to get to "in_air", otherwise we reset the state.
+            if (bb_state->fire_counter > 10) {
+                bb_state->fire_state = UNI_BALANCE_BOARD_STATE_RESET;
+                bb_state->fire_counter = 0;
+                break;
+            }
+            // Reset counter in case we are still above threshold
+            if (sum >= bb_threshold.fire) {
+                bb_state->fire_counter = 0;
+                break;
+            }
+            break;
+        case UNI_BALANCE_BOARD_STATE_IN_AIR:
+            // Once in Air, it must be at least 2 frames in the air
+            if (bb_state->fire_counter > 2) {
+                out_joy->fire = 1;
+                bb_state->fire_state = UNI_BALANCE_BOARD_STATE_FIRE;
+                bb_state->fire_counter = 0;
+                break;
+            }
+            if (bb->tl >= UNI_BALANCE_BOARD_IDLE_THRESHOLD || bb->tr >= UNI_BALANCE_BOARD_IDLE_THRESHOLD ||
+                bb->bl > UNI_BALANCE_BOARD_IDLE_THRESHOLD || bb->br >= UNI_BALANCE_BOARD_IDLE_THRESHOLD) {
+                bb_state->fire_state = UNI_BALANCE_BOARD_STATE_RESET;
+                bb_state->fire_counter = 0;
+            }
+            break;
+        case UNI_BALANCE_BOARD_STATE_FIRE:
+            out_joy->fire = 1;
+            // Maintain "fire" pressed for 10 frames
+            if (bb_state->fire_counter > 10) {
+                bb_state->fire_state = UNI_BALANCE_BOARD_STATE_RESET;
+                bb_state->fire_counter = 0;
+            }
+            break;
+        default:
+            loge("Joystick: Unexpected balance board state: %d\n", bb_state->fire_state);
+            break;
+    }
 }

@@ -68,7 +68,7 @@ static int avrcp_target_supports_browsing(uint16_t target_supported_features){
 }
 
 void avrcp_target_create_sdp_record(uint8_t * service, uint32_t service_record_handle, uint16_t supported_features, const char * service_name, const char * service_provider_name){
-    avrcp_create_sdp_record(0, service, service_record_handle, avrcp_target_supports_browsing(supported_features), supported_features, service_name, service_provider_name);
+    avrcp_create_sdp_record(false, service, service_record_handle, avrcp_target_supports_browsing(supported_features), supported_features, service_name, service_provider_name);
 }
 
 static void
@@ -1229,6 +1229,7 @@ static void avrcp_handle_l2cap_data_packet_for_signaling_connection(avrcp_connec
 }
 
 static void avrcp_target_notification_init(avrcp_connection_t * connection, avrcp_notification_event_id_t notification_id, uint8_t * value, uint16_t value_len){
+    btstack_assert(value_len + 1 < AVRCP_MAX_COMMAND_PARAMETER_LENGTH);
     avrcp_target_vendor_dependent_response_data_init(connection, AVRCP_CTYPE_RESPONSE_CHANGED_STABLE, AVRCP_PDU_ID_REGISTER_NOTIFICATION);
     connection->transaction_id = avrcp_target_get_transaction_label_for_notification(connection, notification_id);
 

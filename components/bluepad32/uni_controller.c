@@ -30,6 +30,9 @@ void uni_controller_dump(const uni_controller_t* ctl) {
         case UNI_CONTROLLER_CLASS_MOUSE:
             uni_mouse_dump(&ctl->mouse);
             break;
+        case UNI_CONTROLLER_CLASS_KEYBOARD:
+            uni_keyboard_dump(&ctl->keyboard);
+            break;
         default:
             logi("uni_controller_dump: Unsupported controller class: %d\n", ctl->klass);
             break;

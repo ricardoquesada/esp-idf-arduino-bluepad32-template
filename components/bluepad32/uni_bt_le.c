@@ -554,7 +554,7 @@ static void sm_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t* pa
             logi("Display Passkey: %" PRIu32 "\n", sm_event_passkey_display_number_get_passkey(packet));
             break;
         case SM_EVENT_IDENTITY_RESOLVING_STARTED:
-            logi("SM_EVENT_PAIRING_STARTED\n");
+            logi("SM_EVENT_IDENTITY_RESOLVING_STARTED\n");
             break;
         case SM_EVENT_IDENTITY_RESOLVING_FAILED:
             sm_event_identity_created_get_address(packet, addr);
@@ -681,6 +681,7 @@ void uni_bt_le_on_hci_event_le_meta(const uint8_t* packet, uint16_t size) {
             // Safely ignore it, we handle the GAP advertising report instead
             break;
 
+        case HCI_SUBEVENT_LE_CONNECTION_UPDATE_COMPLETE:
         case HCI_SUBEVENT_LE_READ_REMOTE_FEATURES_COMPLETE:
             // Ignore it
             break;

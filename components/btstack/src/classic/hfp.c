@@ -751,8 +751,10 @@ void hfp_create_sdp_record(uint8_t * service, uint32_t service_record_handle, ui
     de_pop_sequence(service, attribute);
 
     // 0x0100 "Service Name"
-    de_add_number(service,  DE_UINT, DE_SIZE_16, 0x0100);
-    de_add_data(service,  DE_STRING, (uint16_t) strlen(name), (uint8_t *) name);
+    if (strlen(name) > 0){
+        de_add_number(service,  DE_UINT, DE_SIZE_16, 0x0100);
+        de_add_data(service,  DE_STRING, (uint16_t) strlen(name), (uint8_t *) name);
+    }
 }
 
 static void hfp_handle_slc_setup_error(hfp_connection_t * hfp_connection, uint8_t status){
@@ -829,6 +831,7 @@ static int hfp_handle_failed_sco_connection(uint8_t status){
 
     log_info("(e)SCO Connection failed 0x%02x", status);
     switch (status){
+        case ERROR_CODE_INVALID_LMP_PARAMETERS_INVALID_LL_PARAMETERS:
         case ERROR_CODE_SCO_AIR_MODE_REJECTED:
         case ERROR_CODE_SCO_INTERVAL_REJECTED:
         case ERROR_CODE_SCO_OFFSET_REJECTED:
@@ -2056,9 +2059,9 @@ void hfp_accept_synchronous_connection(hfp_connection_t * hfp_connection, bool u
     uint16_t max_latency;
     uint16_t packet_types;
     uint16_t retransmission_effort;
-    hfp_link_settings_t link_setting = HFP_LINK_SETTINGS_NONE;
 
 #ifdef ENABLE_HFP_HF_SAFE_SETTINGS
+    hfp_link_settings_t link_setting = HFP_LINK_SETTINGS_NONE;
     // fallback for non-CVSD codec and SCO connection
     if ((hfp_connection->negotiated_codec != HFP_CODEC_CVSD) && (use_eSCO == false)){
         max_latency           = 0xffff;
@@ -2100,8 +2103,8 @@ void hfp_accept_synchronous_connection(hfp_connection_t * hfp_connection, bool u
     // bits 6-9 are 'don't allow'
     uint16_t packet_types_flipped = packet_types ^ 0x3c0;
 
-    log_info("Sending hci_accept_connection_request for link settings %u: packet types 0x%04x, sco_voice_setting 0x%02x",
-             (uint8_t) link_setting, packet_types, sco_voice_setting);
+    log_info("Sending hci_accept_connection_request: packet types 0x%04x, sco_voice_setting 0x%02x",
+            packet_types, sco_voice_setting);
 
 #if defined(ENABLE_SCO_OVER_PCM) && defined(ENABLE_NXP_PCM_WBS)
     uint8_t radio_coding_format = 3;

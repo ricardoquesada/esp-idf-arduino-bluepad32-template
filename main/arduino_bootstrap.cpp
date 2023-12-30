@@ -34,4 +34,4 @@ void arduino_bootstrap() {
                          CONFIG_ARDUINO_RUNNING_CORE);
     assert(_arduino_task != NULL);
 }
-} // extern "C"
+}  // extern "C"

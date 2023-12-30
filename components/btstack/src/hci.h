@@ -45,6 +45,7 @@
 
 #include "btstack_config.h"
 
+#include "btstack_bool.h"
 #include "btstack_chipset.h"
 #include "btstack_control.h"
 #include "btstack_linked_list.h"
@@ -446,8 +447,8 @@ typedef struct sm_connection {
     hci_con_handle_t         sm_handle;
     uint16_t                 sm_cid;
     uint8_t                  sm_role;   // 0 - IamMaster, 1 = IamSlave
-    uint8_t                  sm_security_request_received;
-    uint8_t                  sm_pairing_requested;
+    bool                     sm_security_request_received;
+    bool                     sm_pairing_requested;
     uint8_t                  sm_peer_addr_type;
     bd_addr_t                sm_peer_address;
     uint8_t                  sm_own_addr_type;
@@ -455,9 +456,9 @@ typedef struct sm_connection {
     security_manager_state_t sm_engine_state;
     irk_lookup_state_t       sm_irk_lookup_state;
     uint8_t                  sm_pairing_failed_reason;
-    uint8_t                  sm_connection_encrypted;
+    uint8_t                  sm_connection_encrypted;       // [0..2]
     uint8_t                  sm_connection_authenticated;   // [0..1]
-    uint8_t                  sm_connection_sc;
+    bool                     sm_connection_sc;
     uint8_t                  sm_actual_encryption_key_size;
     sm_pairing_packet_t      sm_m_preq;  // only used during c1
     authorization_state_t    sm_connection_authorization_state;
@@ -494,8 +495,8 @@ typedef struct {
     att_bearer_type_t       bearer_type;
 
     int                     ir_le_device_db_index;
-    uint8_t                 ir_lookup_active;
-    uint8_t                 pairing_active;
+    bool                    ir_lookup_active;
+    bool                    pairing_active;
 
     uint16_t                value_indication_handle;    
     btstack_timer_source_t  value_indication_timer;
@@ -1136,6 +1137,9 @@ typedef struct {
     // usable ACL packet types given HCI_ACL_BUFFER_SIZE and local supported features
     uint16_t usable_packet_types_acl;
 
+    // enabled ACL packet types
+    uint16_t enabled_packet_types_acl;
+
     // usable SCO packet types given local supported features
     uint16_t usable_packet_types_sco;
 
@@ -1204,6 +1208,10 @@ typedef struct {
     uint16_t le_supervision_timeout;
     uint16_t le_minimum_ce_length;
     uint16_t le_maximum_ce_length;
+
+#ifdef ENABLE_HCI_COMMAND_STATUS_DISCARDED_FOR_FAILED_CONNECTIONS_WORKAROUND
+    hci_con_handle_t hci_command_con_handle;
+#endif
 #endif
 
 #ifdef ENABLE_LE_CENTRAL
@@ -1529,7 +1537,7 @@ uint8_t* hci_get_outgoing_packet_buffer(void);
 
 /**
  * Release outgoing packet buffer\
- * @note only called instead of hci_send_preparared
+ * @note only called instead of hci_send_prepared
  */
 void hci_release_packet_buffer(void);
 
@@ -1538,6 +1546,27 @@ void hci_release_packet_buffer(void);
 * @param policy (0: attempt to become master, 1: let connecting device decide)
 */
 void hci_set_master_slave_policy(uint8_t policy);
+
+
+/**
+ * @brief Check if Controller supports BR/EDR (Bluetooth Classic)
+ * @return true if supported
+ * @note only valid in working state
+ */
+bool hci_classic_supported(void);
+
+/**
+ * @brief Check if Controller supports LE (Bluetooth Low Energy)
+ * @return true if supported
+ * @note only valid in working state
+ */
+bool hci_le_supported(void);
+
+/** @brief Check if address type corresponds to LE connection
+ *  @bparam address_type
+ *  @erturn true if LE connection
+ */
+bool hci_is_le_connection_type(bd_addr_type_t address_type);
 
 /* API_END */
 
@@ -1614,6 +1643,12 @@ uint16_t hci_max_acl_data_packet_length(void);
  * Get supported ACL packet types. Already flipped for create connection. Called by L2CAP
  */
 uint16_t hci_usable_acl_packet_types(void);
+
+/**
+ * Set filter for set of ACL packet types returned by hci_usable_acl_packet_types
+ * @param packet_types see CL_PACKET_TYPES_* in bluetooth.h, default: ACL_PACKET_TYPES_ALL
+ */
+void hci_enable_acl_packet_types(uint16_t packet_types);
 
 /**
  * Get supported SCO packet types. Not flipped. Called by HFP

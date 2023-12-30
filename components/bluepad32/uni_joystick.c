@@ -1,21 +1,6 @@
-
-/****************************************************************************
-http://retro.moe/unijoysticle2
-
-Copyright 2019 Ricardo Quesada
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-****************************************************************************/
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2019 Ricardo Quesada
+// http://retro.moe/unijoysticle2
 
 #include "uni_joystick.h"
 
@@ -62,7 +47,7 @@ static void to_single_joy(const uni_gamepad_t* gp, uni_joystick_t* out_joy) {
 void uni_joy_to_single_joy_from_gamepad(const uni_gamepad_t* gp, uni_joystick_t* out_joy) {
     to_single_joy(gp, out_joy);
 
-    // Buttom B is "jump". Good for C64 games
+    // Button B is "jump". Good for C64 games
     out_joy->up |= ((gp->buttons & BUTTON_B) != 0);
 
     // 2nd & 3rd buttons
@@ -76,7 +61,7 @@ void uni_joy_to_twinstick_from_gamepad(const uni_gamepad_t* gp, uni_joystick_t* 
 
     out_joy2->button2 |= ((gp->buttons & BUTTON_X) != 0);
 
-    // Buttom B is "fire"
+    // Button B is "fire"
     out_joy1->fire |= ((gp->buttons & BUTTON_B) != 0);
     // Thumb right is "fire"
     out_joy1->fire |= ((gp->buttons & BUTTON_THUMB_R) != 0);

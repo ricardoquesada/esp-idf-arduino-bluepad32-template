@@ -521,7 +521,7 @@ static void send_gatt_services_request(gatt_client_t *gatt_client){
 }
 
 static void send_gatt_by_uuid_request(gatt_client_t *gatt_client, uint16_t attribute_group_type){
-    if (gatt_client->uuid16){
+    if (gatt_client->uuid16 != 0u){
         uint8_t uuid16[2];
         little_endian_store_16(uuid16, 0, gatt_client->uuid16);
         att_find_by_type_value_request(gatt_client, ATT_FIND_BY_TYPE_VALUE_REQUEST, attribute_group_type,
@@ -564,7 +564,7 @@ static void send_gatt_read_characteristic_value_request(gatt_client_t *gatt_clie
 }
 
 static void send_gatt_read_by_type_request(gatt_client_t * gatt_client){
-    if (gatt_client->uuid16){
+    if (gatt_client->uuid16 != 0u){
         att_read_by_type_or_group_request_for_uuid16(gatt_client, ATT_READ_BY_TYPE_REQUEST,
                                                      gatt_client->uuid16, gatt_client->start_group_handle,
                                                      gatt_client->end_group_handle);
@@ -1003,7 +1003,7 @@ static void report_gatt_all_characteristic_descriptors(gatt_client_t * gatt_clie
     
 }
 
-static int is_query_done(gatt_client_t * gatt_client, uint16_t last_result_handle){
+static bool is_query_done(gatt_client_t * gatt_client, uint16_t last_result_handle){
     return last_result_handle >= gatt_client->end_group_handle;
 }
 
@@ -1083,12 +1083,12 @@ void gatt_client_stop_listening_for_characteristic_value_updates(gatt_client_not
     btstack_linked_list_remove(&gatt_client_value_listeners, (btstack_linked_item_t*) notification);
 }
 
-static int is_value_valid(gatt_client_t *gatt_client, uint8_t *packet, uint16_t size){
+static bool is_value_valid(gatt_client_t *gatt_client, uint8_t *packet, uint16_t size){
     uint16_t attribute_handle = little_endian_read_16(packet, 1);
     uint16_t value_offset = little_endian_read_16(packet, 3);
     
-    if (gatt_client->attribute_handle != attribute_handle) return 0;
-    if (gatt_client->attribute_offset != value_offset) return 0;
+    if (gatt_client->attribute_handle != attribute_handle) return false;
+    if (gatt_client->attribute_offset != value_offset) return false;
     return memcmp(&gatt_client->attribute_value[gatt_client->attribute_offset], &packet[5], size - 5u) == 0u;
 }
 
@@ -1128,7 +1128,7 @@ static bool gatt_client_run_for_gatt_client(gatt_client_t * gatt_client){
     }
     if (client_request_pending && (gatt_client_required_security_level > gatt_client->security_level) && check_security){
         log_info("Trigger pairing, current security level %u, required %u\n", gatt_client->security_level, gatt_client_required_security_level);
-        gatt_client->wait_for_authentication_complete = 1;
+        gatt_client->wait_for_authentication_complete = true;
         // set att error code for pairing failure based on required level
         switch (gatt_client_required_security_level){
             case LEVEL_4:
@@ -1156,7 +1156,7 @@ static bool gatt_client_run_for_gatt_client(gatt_client_t * gatt_client){
     }
 
     if (gatt_client->send_confirmation){
-        gatt_client->send_confirmation = 0;
+        gatt_client->send_confirmation = false;
         att_confirmation(gatt_client);
         return true;
     }
@@ -1373,7 +1373,7 @@ static bool gatt_client_run_for_gatt_client(gatt_client_t * gatt_client){
     }
 
     // requested can send now old
-    if (gatt_client->write_without_response_callback){
+    if (gatt_client->write_without_response_callback != NULL){
         btstack_packet_handler_t packet_handler = gatt_client->write_without_response_callback;
         gatt_client->write_without_response_callback = NULL;
         uint8_t event[4];
@@ -1483,7 +1483,7 @@ static void gatt_client_handle_reencryption_complete(const uint8_t * packet){
 
     gatt_client->reencryption_result = sm_event_reencryption_complete_get_status(packet);
     gatt_client->reencryption_active = false;
-    gatt_client->wait_for_authentication_complete = 0;
+    gatt_client->wait_for_authentication_complete = false;
 
     if (gatt_client->state == P_READY) return;
 
@@ -1555,8 +1555,8 @@ static void gatt_client_event_packet_handler(uint8_t packet_type, uint16_t chann
             gatt_client->security_level = gatt_client_le_security_level_for_connection(con_handle);
 
             if (gatt_client->wait_for_authentication_complete){
-                gatt_client->wait_for_authentication_complete = 0;
-                if (sm_event_pairing_complete_get_status(packet)){
+                gatt_client->wait_for_authentication_complete = false;
+                if (sm_event_pairing_complete_get_status(packet) != ERROR_CODE_SUCCESS){
                     log_info("pairing failed, report previous error 0x%x", gatt_client->pending_error_code);
                     gatt_client_report_error_if_pending(gatt_client, gatt_client->pending_error_code);
                 } else {
@@ -1799,7 +1799,7 @@ static void gatt_client_handle_att_response(gatt_client_t * gatt_client, uint8_t
         case ATT_HANDLE_VALUE_INDICATION:
             if (size < 3u) break;
             report_gatt_indication(gatt_client, little_endian_read_16(packet, 1u), &packet[3], size - 3u);
-            gatt_client->send_confirmation = 1;
+            gatt_client->send_confirmation = true;
             break;
         case ATT_READ_BY_TYPE_RESPONSE:
             gatt_client_handle_att_read_by_type_response(gatt_client, packet, size);
@@ -2098,7 +2098,7 @@ static void gatt_client_handle_att_response(gatt_client_t * gatt_client, uint8_t
                         log_info("security error, start pairing");
 
                         // start pairing for higher security level
-                        gatt_client->wait_for_authentication_complete = 1;
+                        gatt_client->wait_for_authentication_complete = true;
                         gatt_client->pending_error_code = att_status;
                         sm_request_pairing(gatt_client->con_handle);
                         break;
@@ -2321,7 +2321,7 @@ uint8_t gatt_client_discover_characteristics_for_service(btstack_packet_handler_
     gatt_client->callback = callback;
     gatt_client->start_group_handle = service->start_group_handle;
     gatt_client->end_group_handle   = service->end_group_handle;
-    gatt_client->filter_with_uuid = 0;
+    gatt_client->filter_with_uuid = false;
     gatt_client->characteristic_start_handle = 0;
     gatt_client->state = P_W2_SEND_ALL_CHARACTERISTICS_OF_SERVICE_QUERY;
     gatt_client_run();
@@ -2354,7 +2354,7 @@ uint8_t gatt_client_discover_characteristics_for_handle_range_by_uuid16(btstack_
     gatt_client->callback = callback;
     gatt_client->start_group_handle = start_handle;
     gatt_client->end_group_handle   = end_handle;
-    gatt_client->filter_with_uuid = 1;
+    gatt_client->filter_with_uuid = true;
     gatt_client->uuid16 = uuid16;
     uuid_add_bluetooth_prefix((uint8_t*) &(gatt_client->uuid128), uuid16);
     gatt_client->characteristic_start_handle = 0;
@@ -2373,7 +2373,7 @@ uint8_t gatt_client_discover_characteristics_for_handle_range_by_uuid128(btstack
     gatt_client->callback = callback;
     gatt_client->start_group_handle = start_handle;
     gatt_client->end_group_handle   = end_handle;
-    gatt_client->filter_with_uuid = 1;
+    gatt_client->filter_with_uuid = true;
     gatt_client->uuid16 = 0;
     (void)memcpy(gatt_client->uuid128, uuid128, 16);
     gatt_client->characteristic_start_handle = 0;

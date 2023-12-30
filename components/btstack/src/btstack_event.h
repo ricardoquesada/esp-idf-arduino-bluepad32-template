@@ -5818,7 +5818,7 @@ static inline uint8_t gap_subevent_big_created_get_num_bis(const uint8_t * event
  * @note: btstack_type C
  */
 static inline uint16_t gap_subevent_big_created_get_bis_con_handles(const uint8_t * event, uint8_t index){
-    return little_endian_read_16(event, 6 + (2 * index));
+    return little_endian_read_16(event, 6 + (2 * (int) index));
 }
 
 /**
@@ -5866,7 +5866,7 @@ static inline uint8_t gap_subevent_big_sync_created_get_num_bis(const uint8_t * 
  * @note: btstack_type C
  */
 static inline uint16_t gap_subevent_big_sync_created_get_bis_con_handles(const uint8_t * event, uint8_t index){
-    return little_endian_read_16(event, 6 + (2 * index));
+    return little_endian_read_16(event, 6 + (2 * (int) index));
 }
 
 /**
@@ -5914,7 +5914,7 @@ static inline uint8_t gap_subevent_cig_created_get_num_cis(const uint8_t * event
  * @note: btstack_type C
  */
 static inline uint16_t gap_subevent_cig_created_get_cis_con_handles(const uint8_t * event, uint8_t index){
-    return little_endian_read_16(event, 6 + (2 * index));
+    return little_endian_read_16(event, 6 + (2 * (int) index));
 }
 
 /**
@@ -6015,6 +6015,124 @@ static inline uint8_t gap_subevent_cis_created_get_flush_timeout_c_to_p(const ui
  */
 static inline uint8_t gap_subevent_cis_created_get_flush_timeout_p_to_c(const uint8_t * event){
     return event[16];
+}
+
+/**
+ * @brief Get field status from event GAP_SUBEVENT_LE_CONNECTION_COMPLETE
+ * @param event packet
+ * @return status
+ * @note: btstack_type 1
+ */
+static inline uint8_t gap_subevent_le_connection_complete_get_status(const uint8_t * event){
+    return event[3];
+}
+/**
+ * @brief Get field connection_handle from event GAP_SUBEVENT_LE_CONNECTION_COMPLETE
+ * @param event packet
+ * @return connection_handle
+ * @note: btstack_type H
+ */
+static inline hci_con_handle_t gap_subevent_le_connection_complete_get_connection_handle(const uint8_t * event){
+    return little_endian_read_16(event, 4);
+}
+/**
+ * @brief Get field role from event GAP_SUBEVENT_LE_CONNECTION_COMPLETE
+ * @param event packet
+ * @return role
+ * @note: btstack_type 1
+ */
+static inline uint8_t gap_subevent_le_connection_complete_get_role(const uint8_t * event){
+    return event[6];
+}
+/**
+ * @brief Get field peer_address_type from event GAP_SUBEVENT_LE_CONNECTION_COMPLETE
+ * @param event packet
+ * @return peer_address_type
+ * @note: btstack_type 1
+ */
+static inline uint8_t gap_subevent_le_connection_complete_get_peer_address_type(const uint8_t * event){
+    return event[7];
+}
+/**
+ * @brief Get field peer_address from event GAP_SUBEVENT_LE_CONNECTION_COMPLETE
+ * @param event packet
+ * @param Pointer to storage for peer_address
+ * @note: btstack_type B
+ */
+static inline void gap_subevent_le_connection_complete_get_peer_address(const uint8_t * event, bd_addr_t peer_address){
+    reverse_bytes(&event[8], peer_address, 6);
+}
+/**
+ * @brief Get field local_resolvable_private_address from event GAP_SUBEVENT_LE_CONNECTION_COMPLETE
+ * @param event packet
+ * @param Pointer to storage for local_resolvable_private_address
+ * @note: btstack_type B
+ */
+static inline void gap_subevent_le_connection_complete_get_local_resolvable_private_address(const uint8_t * event, bd_addr_t local_resolvable_private_address){
+    reverse_bytes(&event[14], local_resolvable_private_address, 6);
+}
+/**
+ * @brief Get field peer_resolvable_private_address from event GAP_SUBEVENT_LE_CONNECTION_COMPLETE
+ * @param event packet
+ * @param Pointer to storage for peer_resolvable_private_address
+ * @note: btstack_type B
+ */
+static inline void gap_subevent_le_connection_complete_get_peer_resolvable_private_address(const uint8_t * event, bd_addr_t peer_resolvable_private_address){
+    reverse_bytes(&event[20], peer_resolvable_private_address, 6);
+}
+/**
+ * @brief Get field conn_interval from event GAP_SUBEVENT_LE_CONNECTION_COMPLETE
+ * @param event packet
+ * @return conn_interval
+ * @note: btstack_type 2
+ */
+static inline uint16_t gap_subevent_le_connection_complete_get_conn_interval(const uint8_t * event){
+    return little_endian_read_16(event, 26);
+}
+/**
+ * @brief Get field conn_latency from event GAP_SUBEVENT_LE_CONNECTION_COMPLETE
+ * @param event packet
+ * @return conn_latency
+ * @note: btstack_type 2
+ */
+static inline uint16_t gap_subevent_le_connection_complete_get_conn_latency(const uint8_t * event){
+    return little_endian_read_16(event, 28);
+}
+/**
+ * @brief Get field supervision_timeout from event GAP_SUBEVENT_LE_CONNECTION_COMPLETE
+ * @param event packet
+ * @return supervision_timeout
+ * @note: btstack_type 2
+ */
+static inline uint16_t gap_subevent_le_connection_complete_get_supervision_timeout(const uint8_t * event){
+    return little_endian_read_16(event, 30);
+}
+/**
+ * @brief Get field master_clock_accuracy from event GAP_SUBEVENT_LE_CONNECTION_COMPLETE
+ * @param event packet
+ * @return master_clock_accuracy
+ * @note: btstack_type 1
+ */
+static inline uint8_t gap_subevent_le_connection_complete_get_master_clock_accuracy(const uint8_t * event){
+    return event[32];
+}
+/**
+ * @brief Get field advertising_handle from event GAP_SUBEVENT_LE_CONNECTION_COMPLETE
+ * @param event packet
+ * @return advertising_handle
+ * @note: btstack_type 1
+ */
+static inline uint8_t gap_subevent_le_connection_complete_get_advertising_handle(const uint8_t * event){
+    return event[33];
+}
+/**
+ * @brief Get field sync_handle from event GAP_SUBEVENT_LE_CONNECTION_COMPLETE
+ * @param event packet
+ * @return sync_handle
+ * @note: btstack_type H
+ */
+static inline hci_con_handle_t gap_subevent_le_connection_complete_get_sync_handle(const uint8_t * event){
+    return little_endian_read_16(event, 34);
 }
 
 /**
@@ -13648,7 +13766,7 @@ static inline const uint8_t * gattservice_subevent_bass_client_notify_receive_st
  * @note: btstack_type 3
  */
 static inline uint32_t gattservice_subevent_bass_client_notify_receive_state_subgroup_get_language_code(const uint8_t * event){
-    return little_endian_read_24(event, 16u + event[15]);
+    return little_endian_read_24(event, (int)(16u + event[15]));
 }
 /**
  * @brief Get field ccids_num from event GATTSERVICE_SUBEVENT_BASS_CLIENT_NOTIFY_RECEIVE_STATE_SUBGROUP
@@ -13702,7 +13820,7 @@ static inline const uint8_t * gattservice_subevent_bass_client_notify_receive_st
  * @note: btstack_type 2
  */
 static inline uint16_t gattservice_subevent_bass_client_notify_receive_state_subgroup_get_extended_metadata_type(const uint8_t * event){
-    return little_endian_read_16(event, 16u + event[15] + 3u + 1u + event[16u + event[15] + 3u] + 1u + 1u + event[16u + event[15] + 3u + 1u + event[16u + event[15] + 3u] + 1u]);
+    return little_endian_read_16(event, (int)(16u + event[15] + 3u + 1u + event[16u + event[15] + 3u] + 1u + 1u + event[16u + event[15] + 3u + 1u + event[16u + event[15] + 3u] + 1u]));
 }
 /**
  * @brief Get field extended_metadata_value_length from event GATTSERVICE_SUBEVENT_BASS_CLIENT_NOTIFY_RECEIVE_STATE_SUBGROUP
@@ -13729,7 +13847,7 @@ static inline const uint8_t * gattservice_subevent_bass_client_notify_receive_st
  * @note: btstack_type 2
  */
 static inline uint16_t gattservice_subevent_bass_client_notify_receive_state_subgroup_get_vendor_specific_metadata_type(const uint8_t * event){
-    return little_endian_read_16(event, 16u + event[15] + 3u + 1u + event[16u + event[15] + 3u] + 1u + 1u + event[16u + event[15] + 3u + 1u + event[16u + event[15] + 3u] + 1u] + 2u + 1u + event[16u + event[15] + 3u + 1u + event[16u + event[15] + 3u] + 1u + 1u + event[16u + event[15] + 3u + 1u + event[16u + event[15] + 3u] + 1u] + 2u]);
+    return little_endian_read_16(event, (int)(16u + event[15] + 3u + 1u + event[16u + event[15] + 3u] + 1u + 1u + event[16u + event[15] + 3u + 1u + event[16u + event[15] + 3u] + 1u] + 2u + 1u + event[16u + event[15] + 3u + 1u + event[16u + event[15] + 3u] + 1u + 1u + event[16u + event[15] + 3u + 1u + event[16u + event[15] + 3u] + 1u] + 2u]));
 }
 /**
  * @brief Get field vendor_specific_metadata_value_length from event GATTSERVICE_SUBEVENT_BASS_CLIENT_NOTIFY_RECEIVE_STATE_SUBGROUP

@@ -5,13 +5,9 @@
 
 #include "sdkconfig.h"
 
+#include <platform/uni_platform_arduino.h>
 #include <uni_common.h>
 #include <uni_log.h>
-#include <platform/uni_platform_arduino.h>
-
-#ifndef CONFIG_BLUEPAD32_PLATFORM_ARDUINO
-#error "Must only be compiled when using Bluepad32 Arduino platform"
-#endif  // !CONFIG_BLUEPAD32_PLATFORM_ARDUINO
 
 const struct Controller::controllerNames Controller::_controllerNames[] = {
     {Controller::CONTROLLER_TYPE_UnknownSteamController, "Unknown Steam"},

@@ -4,21 +4,15 @@
 
 #include "sdkconfig.h"
 
-#ifdef CONFIG_BLUEPAD32_PLATFORM_ARDUINO
 #include "platform/uni_platform_arduino.h"
 
 #include <esp_arduino_version.h>
 #include <esp_chip_info.h>
 #include <esp_console.h>
-#include <esp_idf_version.h>
 #include <esp_ota_ops.h>
-#include <esp_spi_flash.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include <freertos/semphr.h>
-
-#include <btstack_port_esp32.h>
-#include <btstack_run_loop.h>
 
 #include "bt/uni_bt.h"
 #include "cmd_system.h"
@@ -28,7 +22,6 @@
 #include "uni_common.h"
 #include "uni_config.h"
 #include "uni_hid_device.h"
-#include "uni_init.h"
 #include "uni_log.h"
 #include "uni_version.h"
 
@@ -126,8 +119,8 @@ static void process_pending_requests(void) {
 
             case PENDING_REQUEST_CMD_DISCONNECT:
                 // Don't call "uni_hid_device_disconnect" since it will
-                // disconnec the "d" immediately and functions in the
-                // stack trace might depend on it. Instead call it from
+                // disconnect the "d" immediately and functions in the
+                // stack trace might depend on it. Instead, call it from
                 // a callback.
                 idx = uni_hid_device_get_idx_for_instance(d);
                 uni_bt_disconnect_device_safe(idx);
@@ -406,9 +399,9 @@ static arduino_instance_t* get_arduino_instance(uni_hid_device_t* d) {
 }
 
 //
-// Entry Point
+// Public
 //
-struct uni_platform* uni_platform_arduino_create(void) {
+struct uni_platform* get_arduino_platform(void) {
     static struct uni_platform plat = {
         .name = "Arduino",
         .init = arduino_init,
@@ -424,29 +417,3 @@ struct uni_platform* uni_platform_arduino_create(void) {
 
     return &plat;
 }
-
-//
-// Autostart
-//
-int app_main(void) {
-    // hci_dump_open(NULL, HCI_DUMP_STDOUT);
-
-    // Configure BTstack for ESP32 VHCI Controller
-    btstack_init();
-
-    // hci_dump_init(hci_dump_embedded_stdout_get_instance());
-
-#ifdef CONFIG_BLUEPAD32_PLATFORM_CUSTOM
-    // Must be called before uni_init()
-    uni_platform_set_custom(get_my_platform());
-#endif  // CONFIG_BLUEPAD32_PLATFORM_CUSTOM
-
-    // Init Bluepad32.
-    uni_init(0 /* argc */, NULL /* argv */);
-
-    // Does not return.
-    btstack_run_loop_execute();
-    return 0;
-}
-
-#endif  // CONFIG_BLUEPAD32_PLATFORM_ARDUINO

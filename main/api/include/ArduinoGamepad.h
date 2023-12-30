@@ -5,9 +5,6 @@
 #define BP32_ARDUINO_GAMEPAD_H
 
 #include "sdkconfig.h"
-#ifndef CONFIG_BLUEPAD32_PLATFORM_ARDUINO
-#error "Must only be compiled when using Bluepad32 Arduino platform"
-#endif  // !CONFIG_BLUEPAD32_PLATFORM_ARDUINO
 
 #include "ArduinoController.h"
 

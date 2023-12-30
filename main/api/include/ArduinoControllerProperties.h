@@ -5,13 +5,10 @@
 #define BP32_ARDUINO_CONTROLLER_PROPERTIES_H
 
 #include "sdkconfig.h"
-#ifndef CONFIG_BLUEPAD32_PLATFORM_ARDUINO
-#error "Must only be compiled when using Bluepad32 Arduino platform"
-#endif  // !CONFIG_BLUEPAD32_PLATFORM_ARDUINO
 
 #include <platform/uni_platform_arduino.h>
 
 using ControllerProperties = arduino_controller_properties_t;
 typedef ControllerProperties* ControllerPropertiesPtr;
 
-#endif  // BP32_ARDUINO_GAMEPAD_PROPERTIES_H
+#endif  // BP32_ARDUINO_CONTROLLER_PROPERTIES_H

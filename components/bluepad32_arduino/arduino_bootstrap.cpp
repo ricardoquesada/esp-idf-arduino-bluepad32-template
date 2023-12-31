@@ -19,7 +19,7 @@
 static TaskHandle_t _arduino_task = NULL;
 
 extern "C" {
-static void arduino_task(void* params) {
+[[noreturn]] static void arduino_task(void* params) {
     setup();
     for (;;) {
         loop();

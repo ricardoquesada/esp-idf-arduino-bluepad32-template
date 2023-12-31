@@ -14,7 +14,6 @@
 #include <esp_chip_info.h>
 #include <esp_console.h>
 #include <esp_ota_ops.h>
-#include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include <freertos/semphr.h>
 
@@ -23,10 +22,14 @@
 #include "controller/uni_controller.h"
 #include "platform/uni_platform.h"
 #include "uni_common.h"
-#include "uni_config.h"
 #include "uni_hid_device.h"
 #include "uni_log.h"
 #include "uni_version.h"
+
+// Sanity check
+#ifndef CONFIG_BLUEPAD32_PLATFORM_CUSTOM
+#error "Must use BLUEPAD32_PLATFORM_CUSTOM"
+#endif
 
 //
 // Globals

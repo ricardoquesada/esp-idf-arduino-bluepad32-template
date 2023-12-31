@@ -6,7 +6,7 @@
 
 #include "sdkconfig.h"
 
-#include <platform/uni_platform_arduino.h>
+#include "arduino_platform.h"
 
 using ControllerProperties = arduino_controller_properties_t;
 typedef ControllerProperties* ControllerPropertiesPtr;

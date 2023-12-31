@@ -7,7 +7,6 @@
 #include "sdkconfig.h"
 
 #include <inttypes.h>
-#include <platform/uni_platform_arduino.h>
 
 #include <functional>
 

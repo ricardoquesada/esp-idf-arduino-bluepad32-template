@@ -8,8 +8,6 @@
 
 #include <inttypes.h>
 
-#include <platform/uni_platform_arduino.h>
-
 #include <Arduino.h>
 
 #include "ArduinoControllerData.h"

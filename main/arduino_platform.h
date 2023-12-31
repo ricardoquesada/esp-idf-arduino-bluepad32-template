@@ -16,8 +16,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ****************************************************************************/
 
-#ifndef UNI_PLATFORM_ARDUINO_H
-#define UNI_PLATFORM_ARDUINO_H
+#ifndef ARDUINO_PLATFORM_H
+#define ARDUINO_PLATFORM_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -26,8 +26,8 @@ extern "C" {
 #include <stdint.h>
 
 #include "controller/uni_controller.h"
+#include "platform/uni_platform.h"
 #include "uni_common.h"
-#include "uni_platform.h"
 
 enum {
     UNI_ARDUINO_OK = 0,
@@ -66,7 +66,7 @@ typedef struct {
     arduino_controller_properties_t properties;
 } arduino_controller_t;
 
-struct uni_platform* uni_platform_arduino_create(void);
+struct uni_platform* get_arduino_platform(void);
 
 // Deprecated: Call arduino_get_controller_data() instead.
 int arduino_get_gamepad_data(int idx, arduino_gamepad_data_t* out_data);
@@ -84,4 +84,4 @@ int arduino_forget_bluetooth_keys(void);
 }
 #endif
 
-#endif  // UNI_PLATFORM_ARDUINO_H
+#endif  // ARDUINO_PLATFORM_H

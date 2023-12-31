@@ -4,7 +4,11 @@
 
 #include "sdkconfig.h"
 
-#include "platform/uni_platform_arduino.h"
+#include <Arduino.h>
+#include <freertos/FreeRTOS.h>
+
+#include "arduino_platform.h"
+#include "arduino_bootstrap.h"
 
 #include <esp_arduino_version.h>
 #include <esp_chip_info.h>
@@ -18,7 +22,6 @@
 #include "cmd_system.h"
 #include "controller/uni_controller.h"
 #include "platform/uni_platform.h"
-#include "platform/uni_platform_arduino_bootstrap.h"
 #include "uni_common.h"
 #include "uni_config.h"
 #include "uni_hid_device.h"
@@ -141,6 +144,9 @@ static void arduino_on_init_complete(void) {
 
     _pending_queue = xQueueCreate(MAX_PENDING_REQUESTS, sizeof(pending_request_t));
     assert(_pending_queue != NULL);
+
+    // Start scanning
+    uni_bt_enable_new_connections_unsafe(true);
 
     arduino_bootstrap();
 }

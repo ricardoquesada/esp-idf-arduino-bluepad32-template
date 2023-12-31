@@ -6,7 +6,6 @@
 #include "sdkconfig.h"
 
 #include <bt/uni_bt.h>
-#include <platform/uni_platform_arduino.h>
 #include <uni_log.h>
 #include <uni_version.h>
 #include <uni_virtual_device.h>

@@ -5,7 +5,8 @@
 
 #include "sdkconfig.h"
 
-#include <platform/uni_platform_arduino.h>
+#include "arduino_platform.h"
+
 #include <uni_common.h>
 #include <uni_log.h>
 

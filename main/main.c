@@ -12,7 +12,7 @@
 #include "platform/uni_platform.h"
 #include "uni_init.h"
 
-struct uni_platform* get_arduino_platform(void);
+#include "arduino_platform.h"
 
 //
 // Autostart

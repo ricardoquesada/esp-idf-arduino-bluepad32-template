@@ -2,7 +2,7 @@
 // Copyright 2021 Ricardo Quesada
 // http://retro.moe/unijoysticle2
 
-#include "platform/uni_platform_arduino_bootstrap.h"
+#include "arduino_bootstrap.h"
 
 #include "sdkconfig.h"
 
@@ -15,7 +15,6 @@
 
 #include <Arduino.h>
 #include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
 
 static TaskHandle_t _arduino_task = NULL;
 

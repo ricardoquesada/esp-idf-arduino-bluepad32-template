@@ -6,7 +6,7 @@
 
 #include "sdkconfig.h"
 
-#include <platform/uni_platform_arduino.h>
+#include "arduino_platform.h"
 
 using ControllerData = arduino_controller_data_t;
 

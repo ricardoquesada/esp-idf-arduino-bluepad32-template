@@ -5,7 +5,7 @@
 #ifndef BP32_CONSOLE_H
 #define BP32_CONSOLE_H
 
-#include <stddef.h>
+#include <cstddef>
 
 // Arduino includes
 #include <WString.h>

@@ -4,7 +4,7 @@
 #ifndef BP32_ARDUINO_KEYBOARD_CONSTANTS_H
 #define BP32_ARDUINO_KEYBOARD_CONSTANTS_H
 
-#include <stdint.h>
+#include <cstdint>
 
 #include "controller/uni_keyboard.h"
 #include "hid_usage.h"

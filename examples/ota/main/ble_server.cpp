@@ -84,9 +84,9 @@ static uint16_t att_read_callback(hci_con_handle_t connection_handle,
 
     The first write after boot is considered the start of the process.
 
-    All subsiquent writes append binary data, the Web App sends data in blocks of 244.
+    All subsequent writes append binary data, the Web App sends data in blocks of 244.
 
-    Any block recieved less than that block size is considered the final block and terminates the OTA process rebooting
+    Any block received less than that block size is considered the final block and terminates the OTA process rebooting
    the ESP.
 
     A more robust mechanism would be to have a second custom characteristic where the UI could indicate states

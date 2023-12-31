@@ -6,8 +6,7 @@
 
 #include "sdkconfig.h"
 
-#include <inttypes.h>
-
+#include <cinttypes>
 #include <functional>
 
 #include "ArduinoController.h"

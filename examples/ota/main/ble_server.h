@@ -1,5 +1,6 @@
 #ifndef BLE_SERVER_H
 #define BLE_SERVER_H
+
 #include <Arduino.h>
 #include "att_delayed_response.h"
 #include "btstack.h"
@@ -8,4 +9,4 @@
 
 void BLE_SERVER_SETUP();
 
-#endif
+#endif // BLE_SERVER_H

@@ -1,20 +1,8 @@
 set(srcs
-        "arduino_bootstrap.cpp"
-        "arduino_platform.c"
         "main.c"
-        "sketch.cpp"
-        "api/ArduinoBluepad32.cpp"
-        "api/ArduinoConsole.cpp"
-        "api/ArduinoController.cpp"
-        "api/ArduinoGamepad.cpp"
-)
+        "sketch.cpp")
 
-set(requires "bluepad32" "arduino" "btstack")
-
-if(NOT CMAKE_BUILD_EARLY_EXPANSION)
-    include_directories(AFTER
-            api/include)
-endif()
+set(requires "bluepad32" "bluepad32_arduino" "arduino" "btstack")
 
 idf_component_register(SRCS "${srcs}"
                     INCLUDE_DIRS "."

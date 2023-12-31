@@ -3,4 +3,5 @@
 cmake_minimum_required(VERSION 3.13)
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
-project(bluepad32-arduino-app-template)
+
+project(bluepad32_arduino_app_template)

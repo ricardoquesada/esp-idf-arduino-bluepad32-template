@@ -42,7 +42,7 @@ CONFIG_FREERTOS_HZ=1000
 #
 # Bluepad32 Options
 #
-CONFIG_BLUEPAD32_PLATFORM_ARDUINO=y
+CONFIG_BLUEPAD32_PLATFORM_CUSTOM=y
 CONFIG_BLUEPAD32_MAX_DEVICES=4
 # Arduino Serial conflicts with the console
 # To disable replace "y" with "n"

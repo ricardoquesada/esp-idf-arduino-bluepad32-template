@@ -17,9 +17,6 @@ limitations under the License.
 ****************************************************************************/
 
 #include "sdkconfig.h"
-#ifndef CONFIG_BLUEPAD32_PLATFORM_ARDUINO
-#error "Must only be compiled when using Bluepad32 Arduino platform"
-#endif // !CONFIG_BLUEPAD32_PLATFORM_ARDUINO
 
 #include <Arduino.h>
 #include <Bluepad32.h>
@@ -29,7 +26,7 @@ limitations under the License.
 // README FIRST, README FIRST, README FIRST
 //
 // Bluepad32 has a built-in interactive console.
-// By default it is enabled (hey, this is a great feature!).
+// By default, it is enabled (hey, this is a great feature!).
 // But it is incompatible with Arduino "Serial" class.
 //
 // Instead of using "Serial" you can use Bluepad32 "Console" class instead.

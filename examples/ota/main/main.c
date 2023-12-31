@@ -16,16 +16,40 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ****************************************************************************/
 
+#include <stdlib.h>
+
+#include <btstack_port_esp32.h>
+#include <btstack_run_loop.h>
+#include <uni.h>
+#include <arduino_platform.h>
+
 #include "sdkconfig.h"
-#ifndef CONFIG_BLUEPAD32_PLATFORM_ARDUINO
 
-// Not needed in Arduino platform since it has "autostart" code defined in
-// uni_platform_arduino.
 
-#include "uni_esp32.h"
+// Sanity check
+#ifndef CONFIG_BLUEPAD32_PLATFORM_CUSTOM
+#error "Must use BLUEPAD32_PLATFORM_CUSTOM"
+#endif
+
+// Defined in my_platform.c
+struct uni_platform *get_my_platform(void);
 
 int app_main(void) {
-    return uni_esp32_main();
-}
+    // hci_dump_open(NULL, HCI_DUMP_STDOUT);
 
-#endif  //  CONFIG_BLUEPAD32_PLATFORM_ARDUINO
+    // Configure BTstack for ESP32 VHCI Controller
+    btstack_init();
+
+    // hci_dump_init(hci_dump_embedded_stdout_get_instance());
+
+    // Must be called before uni_init()
+    uni_platform_set_custom(get_arduino_platform());
+
+    // Init Bluepad32.
+    uni_init(0 /* argc */, NULL /* argv */);
+
+    // Does not return.
+    btstack_run_loop_execute();
+
+    return 0;
+}

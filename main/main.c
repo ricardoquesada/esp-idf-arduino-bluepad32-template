@@ -6,13 +6,13 @@
 
 #include <stddef.h>
 
+// BTstack related
 #include <btstack_port_esp32.h>
 #include <btstack_run_loop.h>
 
-#include "platform/uni_platform.h"
-#include "uni_init.h"
-
-#include "arduino_platform.h"
+// Bluepad32 related
+#include <arduino_platform.h>
+#include <uni.h>
 
 //
 // Autostart

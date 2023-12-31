@@ -1,14 +1,7 @@
-set(srcs "main.c")
+set(srcs "main.c" "sketch.cpp" "ble_server.cpp")
 
-set(requires "bluepad32")
+set(requires "bluepad32" "bluepad32_arduino" "arduino")
 
-# See: https://gitlab.com/ricardoquesada/bluepad32/-/issues/9
-if(DEFINED ENV{BLUEPAD32_ARDUINO})
-    list(APPEND srcs "sketch.cpp")
-    list(APPEND srcs)
-    list(APPEND requires "bluepad32_arduino" "arduino")
-endif()
-
-idf_component_register(SRCS "ble_server.cpp" "${srcs}"
+idf_component_register(SRCS "${srcs}"
                     INCLUDE_DIRS "."
                     REQUIRES "${requires}")

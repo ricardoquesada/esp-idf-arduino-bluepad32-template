@@ -7,8 +7,8 @@
 #include <Arduino.h>
 #include <freertos/FreeRTOS.h>
 
-#include "arduino_platform.h"
 #include "arduino_bootstrap.h"
+#include "arduino_platform.h"
 
 #include <esp_arduino_version.h>
 #include <esp_chip_info.h>

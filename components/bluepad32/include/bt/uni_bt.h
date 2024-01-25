@@ -1,20 +1,6 @@
-/****************************************************************************
-http://retro.moe/unijoysticle2
-
-Copyright 2019 Ricardo Quesada
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-****************************************************************************/
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2019 Ricardo Quesada
+// http://retro.moe/unijoysticle2
 
 #ifndef UNI_BT_H
 #define UNI_BT_H
@@ -46,11 +32,13 @@ void uni_bt_del_keys_unsafe(void);
 // Dump all connected devices.
 void uni_bt_dump_devices_safe(void);
 // Whether to enable new Bluetooth connections.
-// When enabled, the device enters into "discovery" mode, and new un-paired devices are accepted.
+// When enabled, the device scans for new connections, and it will try to auto-connect to supported  devices.
 // When disabled, only devices that have paired before can connect.
 void uni_bt_enable_new_connections_safe(bool enabled);
 // Must be called from BTthread
 void uni_bt_enable_new_connections_unsafe(bool enabled);
+// Returns whether new connections are accepted.
+bool uni_bt_enable_new_connections_is_enabled(void);
 
 // Disconnects a device
 void uni_bt_disconnect_device_safe(int device_idx);
@@ -62,11 +50,11 @@ void uni_bt_get_local_bd_addr_safe(bd_addr_t addr);
 void uni_bt_set_gap_security_level(int gap);
 int uni_bt_get_gap_security_level(void);
 void uni_bt_set_gap_inquiry_length(int len);
-int uni_bt_get_gap_inquiry_lenght(void);
+int uni_bt_get_gap_inquiry_length(void);
 void uni_bt_set_gap_max_peridic_length(int len);
-int uni_bt_get_gap_max_periodic_lenght(void);
+int uni_bt_get_gap_max_periodic_length(void);
 void uni_bt_set_gap_min_peridic_length(int len);
-int uni_bt_get_gap_min_periodic_lenght(void);
+int uni_bt_get_gap_min_periodic_length(void);
 
 //
 //  Private functions. Don't call them

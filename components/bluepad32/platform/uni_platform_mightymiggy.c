@@ -330,7 +330,7 @@ typedef enum {
     AST_JOY1_ONLY,       //!< We had two controllers, we lost one and we're left with port 1 only
     AST_TWO_JOYS,        //!< We have two controllers, both working as joysticks
     AST_TWO_JOYS_2IDLE,  //!< We have two controllers, the first controls joystick in port 2 and mouse in port 1, the
-                         //!< second is idle
+    //!< second is idle
 
     // States for factory reset
     AST_FACTORY_RESET_WAIT_1,
@@ -1613,9 +1613,9 @@ static void stateMachine(RuntimeControllerInfo* cinfo) {
             cinfo->state = ST_JOYSTICK;
             break;
 
-        /**********************************************************************
-         * MAIN MODES
-         **********************************************************************/
+            /**********************************************************************
+             * MAIN MODES
+             **********************************************************************/
         case ST_JOYSTICK:
             if (buttonPressed(cinfo->buttonWord, BTN_BACK)) {
                 cinfo->state = ST_SELECT_HELD;
@@ -1650,9 +1650,9 @@ static void stateMachine(RuntimeControllerInfo* cinfo) {
             }
             break;
 
-        /**********************************************************************
-         * SELECT MAPPING/SWITCH TO PROGRAMMING MODE
-         **********************************************************************/
+            /**********************************************************************
+             * SELECT MAPPING/SWITCH TO PROGRAMMING MODE
+             **********************************************************************/
         case ST_SELECT_HELD:
             if (!buttonPressed(cinfo->buttonWord, BTN_BACK)) {
                 // Select was released
@@ -1758,9 +1758,9 @@ static void stateMachine(RuntimeControllerInfo* cinfo) {
             cinfo->state = ST_JOYSTICK;
             break;
 
-        /**********************************************************************
-         * PROGRAMMING
-         **********************************************************************/
+            /**********************************************************************
+             * PROGRAMMING
+             **********************************************************************/
         case ST_WAIT_SELECT_RELEASE:
             if (!buttonPressed(cinfo->buttonWord, BTN_BACK)) {
                 cinfo->state = ST_WAIT_BUTTON_PRESS;
@@ -2760,10 +2760,9 @@ static void mightymiggy_on_gamepad_data(uni_hid_device_t* d, uni_gamepad_t* gp) 
     //~ taskYIELD ();
 }
 
-static int32_t mightymiggy_get_property(uni_platform_property_t key) {
-    // Deprecated
-    ARG_UNUSED(key);
-    return 0;
+static const uni_property_t* mightymiggy_get_property(uni_property_idx_t idx) {
+    ARG_UNUSED(idx);
+    return NULL;
 }
 
 //

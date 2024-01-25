@@ -1,20 +1,6 @@
-/****************************************************************************
-http://retro.moe/unijoysticle2
-
-Copyright 2023 Ricardo Quesada
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-****************************************************************************/
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2023 Ricardo Quesada
+// http://retro.moe/unijoysticle2
 
 #ifndef UNI_BT_ALLOWLIST_H
 #define UNI_BT_ALLOWLIST_H
@@ -44,8 +30,15 @@ bool uni_bt_allowlist_add_addr(bd_addr_t addr);
 // Remove an existing address from the allow list.
 bool uni_bt_allowlist_remove_addr(bd_addr_t addr);
 
+// Remove all entries from the allow list.
+bool uni_bt_allowlist_remove_all(void);
+
 // Print the allowed-address to the console.
 void uni_bt_allowlist_list(void);
+
+// Return a pointer to the addresses.
+// Do not modify the returned data.
+void uni_bt_allowlist_get_all(const bd_addr_t** addresses, int* total);
 
 // Whether the allowlist is enabled.
 bool uni_bt_allowlist_is_enabled(void);

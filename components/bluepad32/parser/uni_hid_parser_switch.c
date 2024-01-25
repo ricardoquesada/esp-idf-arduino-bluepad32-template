@@ -33,7 +33,9 @@ static const uint16_t NINTENDO_VID = 0x057e;
 static const uint16_t SWITCH_JOYCON_L_PID = 0x2006;
 static const uint16_t SWITCH_JOYCON_R_PID = 0x2007;
 static const uint16_t SWITCH_PRO_CONTROLLER_PID = 0x2009;
-static const uint16_t SWITCH_SNES_CONTROLLER_PID = 0x2017;
+static const uint16_t SWITCH_ONLINE_SNES_CONTROLLER_PID = 0x2017;
+// static const uint16_t SWITCH_ONLINE_N64_CONTROLLER_PID = 0x2019;
+// static const uint16_t SWITCH_ONLINE_SEGA_CONTROLLER_PID = 0x201e;
 
 #define SWITCH_FACTORY_STICK_CAL_DATA_SIZE 18
 static const uint16_t SWITCH_FACTORY_STICK_CAL_DATA_ADDR = 0x603d;
@@ -149,7 +151,7 @@ typedef struct switch_instance_s {
     int debug_fd;         // File descriptor where dump is saved
     uint32_t debug_addr;  // Current dump address
 } switch_instance_t;
-_Static_assert(sizeof(switch_instance_t) < HID_DEVICE_MAX_PARSER_DATA, "Switch intance too big");
+_Static_assert(sizeof(switch_instance_t) < HID_DEVICE_MAX_PARSER_DATA, "Switch instance too big");
 
 struct switch_subcmd_request {
     // Report related
@@ -195,7 +197,7 @@ struct switch_buttons_s {
 
 struct switch_report_30_s {
     struct switch_buttons_s buttons;
-    struct switch_imu_data_s imu[3];  // contains 3 samples differenciated by 5ms (?) each
+    struct switch_imu_data_s imu[3];  // contains 3 samples differentiated by 5ms (?) each
 } __attribute__((packed));
 
 struct switch_report_21_s {
@@ -340,7 +342,7 @@ void uni_hid_parser_switch_setup(struct uni_hid_device_s* d) {
         ins->cal_gyro.offset[i] = DEFAULT_GYRO_OFFSET;
         ins->cal_gyro.scale[i] = DEFAULT_GYRO_SCALE;
 
-        // Divisors that must be updated after calibration data is udpated.
+        // Divisors that must be updated after calibration data is updated.
         ins->imu_cal_accel_divisor[i] = ins->cal_accel.scale[i] - ins->cal_accel.offset[i];
         ins->imu_cal_gyro_divisor[i] = ins->cal_gyro.scale[i] - ins->cal_gyro.offset[i];
     }
@@ -396,7 +398,7 @@ static void process_fsm(struct uni_hid_device_s* d) {
     if (ins->state != STATE_SETUP)
         btstack_run_loop_remove_timer(&ins->setup_timer);
 
-    // But re-schdule it for the next step
+    // But re-schedule it for the next step
     if (ins->state != STATE_READY) {
         btstack_run_loop_set_timer_context(&ins->setup_timer, d);
         btstack_run_loop_set_timer_handler(&ins->setup_timer, &switch_setup_timeout_callback);
@@ -513,8 +515,11 @@ static void process_reply_read_spi_factory_stick_calibration(struct uni_hid_devi
     ins->cal_ry.max = ins->cal_ry.center + cal_ry_max;
 
     logi("Switch: Stick calibration info: x=%d,%d,%d, y=%d,%d,%d, rx=%d,%d,%d, ry=%d,%d,%d\n", ins->cal_x.min,
-         ins->cal_x.center, ins->cal_x.max, ins->cal_y.min, ins->cal_y.center, ins->cal_y.max, ins->cal_rx.min,
-         ins->cal_rx.center, ins->cal_rx.max, ins->cal_ry.min, ins->cal_ry.center, ins->cal_ry.max);
+         ins->cal_x.center, ins->cal_x.max,                     // x
+         ins->cal_y.min, ins->cal_y.center, ins->cal_y.max,     // y
+         ins->cal_rx.min, ins->cal_rx.center, ins->cal_rx.max,  // rx
+         ins->cal_ry.min, ins->cal_ry.center, ins->cal_ry.max   // ry
+    );
 }
 
 static void process_reply_read_spi_user_stick_calibration(struct uni_hid_device_s* d, const uint8_t* data, int len) {
@@ -531,22 +536,22 @@ static void process_reply_read_spi_user_stick_calibration(struct uni_hid_device_
 static void process_reply_read_spi_factory_imu_calibration(struct uni_hid_device_s* d, const uint8_t* data, int len) {
     switch_instance_t* ins = get_switch_instance(d);
 
-    if (len < SWITCH_FACTORY_IMU_CAL_DATA_SIZE + 5) {
+    if (len < SWITCH_FACTORY_IMU_CAL_DATA_SIZE) {
         loge("Switch: invalid spi factory imu calibration len; got %d, wanted %d\n", len,
-             SWITCH_FACTORY_IMU_CAL_DATA_SIZE + 5);
+             SWITCH_FACTORY_IMU_CAL_DATA_SIZE);
         return;
     }
 
     for (int i = 0; i < 3; i++) {
         int j = i * 2;
-        ins->cal_accel.offset[i] = *((int16_t*)&data[i + j]);
-        ins->cal_accel.scale[i] = *((int16_t*)&data[i + j + 6]);
-        ins->cal_accel.offset[i] = *((int16_t*)&data[i] + j + 12);
-        ins->cal_accel.scale[i] = *((int16_t*)&data[i + j + 18]);
+        ins->cal_accel.offset[i] = *((int16_t*)&data[j]);
+        ins->cal_accel.scale[i] = *((int16_t*)&data[j + 6]);
+        ins->cal_accel.offset[i] = *((int16_t*)&data[j + 12]);
+        ins->cal_accel.scale[i] = *((int16_t*)&data[j + 18]);
     }
 
     for (int i = 0; i < 3; i++) {
-        // Divisors that must be updated after calibration data is udpated.
+        // Divisors that must be updated after calibration data is updated.
         // FIXME: move to its own function
         ins->imu_cal_accel_divisor[i] = ins->cal_accel.scale[i] - ins->cal_accel.offset[i];
         ins->imu_cal_gyro_divisor[i] = ins->cal_gyro.scale[i] - ins->cal_gyro.offset[i];
@@ -555,9 +560,10 @@ static void process_reply_read_spi_factory_imu_calibration(struct uni_hid_device
     logi(
         "Switch: IMU calibration info: accel.offset=%d,%d,%d, accel.scale=%d,%d,%d, gyro.offset=%d,%d,%d, gyro."
         "scale=%d,%d,%d\n",
-        ins->cal_accel.offset[0], ins->cal_accel.offset[1], ins->cal_accel.offset[2], ins->cal_accel.scale[0],
-        ins->cal_accel.scale[1], ins->cal_accel.scale[2], ins->cal_gyro.offset[0], ins->cal_gyro.offset[1],
-        ins->cal_gyro.offset[2], ins->cal_gyro.scale[0], ins->cal_gyro.scale[1], ins->cal_gyro.scale[2]);
+        ins->cal_accel.offset[0], ins->cal_accel.offset[1], ins->cal_accel.offset[2],  // accel offset
+        ins->cal_accel.scale[0], ins->cal_accel.scale[1], ins->cal_accel.scale[2],     // accel scale
+        ins->cal_gyro.offset[0], ins->cal_gyro.offset[1], ins->cal_gyro.offset[2],     // gyro offset
+        ins->cal_gyro.scale[0], ins->cal_gyro.scale[1], ins->cal_gyro.scale[2]);       // gyro scale
 }
 
 // Reply to SUBCMD_REQ_DEV_INFO
@@ -602,16 +608,16 @@ static void process_reply_spi_flash_read(struct uni_hid_device_s* d, const struc
 
     switch (ins->state) {
         case STATE_READ_FACTORY_STICK_CALIBRATION:
-            process_reply_read_spi_factory_stick_calibration(d, r->data, mem_len + 5);
+            process_reply_read_spi_factory_stick_calibration(d, r->data, mem_len);
             break;
         case STATE_READ_USER_STICK_CALIBRATION:
-            process_reply_read_spi_user_stick_calibration(d, r->data, mem_len + 5);
+            process_reply_read_spi_user_stick_calibration(d, r->data, mem_len);
             break;
         case STATE_READ_FACTORY_IMU_CALIBRATION:
-            process_reply_read_spi_factory_imu_calibration(d, r->data, mem_len + 5);
+            process_reply_read_spi_factory_imu_calibration(d, r->data, mem_len);
             break;
         case STATE_DUMP_FLASH:
-            process_reply_read_spi_dump(d, r->data, mem_len + 5);
+            process_reply_read_spi_dump(d, r->data, mem_len);
             break;
         default:
             loge("Switch: unexpected state: %d, spi_read size reply %d at 0x%04x\n", ins->state, mem_len, addr);
@@ -1126,7 +1132,12 @@ bool uni_hid_parser_switch_does_name_match(struct uni_hid_device_s* d, const cha
         {"Pro Controller", NINTENDO_VID, SWITCH_PRO_CONTROLLER_PID},
         {"Joy-Con (L)", NINTENDO_VID, SWITCH_JOYCON_L_PID},
         {"Joy-Con (R)", NINTENDO_VID, SWITCH_JOYCON_R_PID},
-        {"SNES Controller", NINTENDO_VID, SWITCH_SNES_CONTROLLER_PID},
+        {"SNES Controller", NINTENDO_VID, SWITCH_ONLINE_SNES_CONTROLLER_PID},
+#if 0
+        // TODO: Untested. What are the real names for N64 and SEGA controllers.
+        {"N64 Controller", NINTENDO_VID, SWITCH_ONLINE_N64_CONTROLLER_PID},
+        {"SEGA Controller", NINTENDO_VID, SWITCH_ONLINE_SEGA_CONTROLLER_PID},
+#endif
     };
 
     for (long unsigned i = 0; i < ARRAY_SIZE(devices); i++) {

@@ -63,8 +63,8 @@ static void inquiry_remote_name_timeout_callback(btstack_timer_source_t* ts) {
 void uni_bt_bredr_scan_start(void) {
     uint8_t status;
 
-    status = gap_inquiry_periodic_start(uni_bt_get_gap_inquiry_lenght(), uni_bt_get_gap_max_periodic_lenght(),
-                                        uni_bt_get_gap_min_periodic_lenght());
+    status = gap_inquiry_periodic_start(uni_bt_get_gap_inquiry_length(), uni_bt_get_gap_max_periodic_length(),
+                                        uni_bt_get_gap_min_periodic_length());
     if (status)
         loge("Failed to start period inquiry, error=0x%02x\n", status);
     logi("BR/EDR scan -> 1\n");
@@ -177,8 +177,8 @@ void uni_bt_bredr_setup(void) {
     hci_set_master_slave_policy(HCI_ROLE_MASTER);
 
     logi("Gap security level: %d\n", security_level);
-    logi("Periodic Inquiry: max=%d, min=%d, len=%d\n", uni_bt_get_gap_max_periodic_lenght(),
-         uni_bt_get_gap_min_periodic_lenght(), uni_bt_get_gap_inquiry_lenght());
+    logi("Periodic Inquiry: max=%d, min=%d, len=%d\n", uni_bt_get_gap_max_periodic_length(),
+         uni_bt_get_gap_min_periodic_length(), uni_bt_get_gap_inquiry_length());
 }
 
 void uni_bt_bredr_set_enabled(bool enabled) {
@@ -415,7 +415,7 @@ void uni_bt_bredr_on_l2cap_channel_opened(uint16_t channel, const uint8_t* packe
     status = l2cap_event_channel_opened_get_status(packet);
     if (status) {
         logi("L2CAP Connection failed: 0x%02x.\n", status);
-        // Practice showed that if the connections fails, just disconnect/remove
+        // Practice showed that if the connection fails, just disconnect/remove
         // so that the connection can start again.
         if (status == L2CAP_CONNECTION_RESPONSE_RESULT_REFUSED_SECURITY) {
             logi("Probably GAP-security-related issues. Set GAP security to 2\n");

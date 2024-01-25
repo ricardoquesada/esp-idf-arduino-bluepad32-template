@@ -9,8 +9,8 @@
 extern "C" {
 #endif
 
-// A include file that includes all files.
-// Useful for 3rd party developers that only cares about including just one file.
+// An include file that includes all files.
+// Useful for 3rd party developers that only care about including just one file.
 
 #include "sdkconfig.h"
 
@@ -21,6 +21,7 @@ extern "C" {
 #include "bt/uni_bt_hci_cmd.h"
 #include "bt/uni_bt_le.h"
 #include "bt/uni_bt_sdp.h"
+#include "bt/uni_bt_service.h"
 #include "bt/uni_bt_setup.h"
 #include "controller/uni_balance_board.h"
 #include "controller/uni_controller.h"

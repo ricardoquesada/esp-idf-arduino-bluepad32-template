@@ -40,6 +40,7 @@ set(srcs
          "uni_log.c"
          "uni_property.c"
          "uni_utils.c"
+         "uni_version.c"
          "uni_virtual_device.c")
 
  if(CONFIG_IDF_TARGET_ESP32 OR PICO_SDK_VERSION_STRING OR BLUEPAD32_TARGET_LINUX)
@@ -62,6 +63,7 @@ if(IDF_TARGET)
     # so that can be called from other targets like Pico W
     list(APPEND srcs
          "arch/uni_console_esp32.c"
+         "arch/uni_log_esp32.c"
          "arch/uni_property_esp32.c"
          "arch/uni_uart_esp32.c"
          "uni_gpio.c"
@@ -69,11 +71,13 @@ if(IDF_TARGET)
 elseif(PICO_SDK_VERSION_STRING)
     list(APPEND srcs
          "arch/uni_console_pico.c"
+         "arch/uni_log_pico.c"
          "arch/uni_property_pico.c"
          "arch/uni_uart_pico.c")
 elseif(BLUEPAD32_TARGET_LINUX)
     list(APPEND srcs
          "arch/uni_console_linux.c"
+         "arch/uni_log_linux.c"
          "arch/uni_property_linux.c"
          "arch/uni_uart_linux.c")
 else()
@@ -92,6 +96,7 @@ if(CONFIG_IDF_TARGET_ESP32)
          "platform/uni_platform_unijoysticle_800xl.c"
          "platform/uni_platform_unijoysticle_a500.c"
          "platform/uni_platform_unijoysticle_c64.c"
+         "platform/uni_platform_unijoysticle_msx.c"
          "platform/uni_platform_unijoysticle_singleport.c")
 endif()
 

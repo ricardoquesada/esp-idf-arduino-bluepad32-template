@@ -1,20 +1,6 @@
-/****************************************************************************
-http://retro.moe/unijoysticle2
-
-Copyright 2019 Ricardo Quesada
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-****************************************************************************/
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2019 Ricardo Quesada
+// http://retro.moe/unijoysticle2
 
 #ifndef UNI_GAMEPAD_H
 #define UNI_GAMEPAD_H
@@ -29,6 +15,14 @@ extern "C" {
 
 extern const int AXIS_NORMALIZE_RANGE;
 extern const int AXIS_THRESHOLD;
+
+typedef enum {
+    UNI_GAMEPAD_MAPPINGS_TYPE_XBOX,    // A (south), B (east), X (west), Y (north). Default
+    UNI_GAMEPAD_MAPPINGS_TYPE_SWITCH,  // A (east), B (south), X (north), Y (west)
+    UNI_GAMEPAD_MAPPINGS_TYPE_CUSTOM,  // User provided its own mappings
+
+    UNI_GAMEPAD_MAPPINGS_TYPE_COUNT,
+} uni_gamepad_mappings_type_t;
 
 typedef enum {
     UNI_GAMEPAD_MAPPINGS_DPAD_UP,
@@ -218,6 +212,8 @@ void uni_gamepad_dump(const uni_gamepad_t* gp);
 
 uni_gamepad_t uni_gamepad_remap(const uni_gamepad_t* gp);
 void uni_gamepad_set_mappings(const uni_gamepad_mappings_t* mapping);
+void uni_gamepad_set_mappings_type(uni_gamepad_mappings_type_t type);
+uni_gamepad_mappings_type_t uni_gamepad_get_mappings_type(void);
 char* uni_gamepad_get_model_name(int type);
 
 #ifdef __cplusplus

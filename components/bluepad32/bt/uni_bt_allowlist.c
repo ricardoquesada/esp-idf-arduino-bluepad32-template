@@ -37,20 +37,18 @@ static void update_allowlist_to_property(void) {
     }
 
     val.str = str;
-    uni_property_set(UNI_PROPERTY_KEY_ALLOWLIST_LIST, UNI_PROPERTY_TYPE_STRING, val);
+    uni_property_set(UNI_PROPERTY_IDX_ALLOWLIST_LIST, val);
 }
 
 static void update_allowlist_from_property(void) {
     // Parses the list from the property and stored it locally.
-    uni_property_value_t def;
     uni_property_value_t val;
     bd_addr_t addr;
     int offset;
     int len;
 
     // Whether it is enabled.
-    def.str = NULL;
-    val = uni_property_get(UNI_PROPERTY_KEY_ALLOWLIST_LIST, UNI_PROPERTY_TYPE_STRING, def);
+    val = uni_property_get(UNI_PROPERTY_IDX_ALLOWLIST_LIST);
 
     if (val.str == NULL)
         return;
@@ -70,14 +68,7 @@ static void update_allowlist_from_property(void) {
     }
 }
 
-//
-// Public functions
-//
-bool uni_bt_allowlist_is_allowed_addr(bd_addr_t addr) {
-    // If not enforced, all addresses are allowed.
-    if (!enforced)
-        return true;
-
+static bool is_address_in_allowlist(bd_addr_t addr) {
     for (size_t i = 0; i < ARRAY_SIZE(addr_allow_list); i++) {
         if (bd_addr_cmp(addr, addr_allow_list[i]) == 0)
             return true;
@@ -86,7 +77,22 @@ bool uni_bt_allowlist_is_allowed_addr(bd_addr_t addr) {
     return false;
 }
 
+//
+// Public functions
+//
+bool uni_bt_allowlist_is_allowed_addr(bd_addr_t addr) {
+    // If not enforced, all addresses are allowed.
+    if (!enforced)
+        return true;
+
+    return is_address_in_allowlist(addr);
+}
+
 bool uni_bt_allowlist_add_addr(bd_addr_t addr) {
+    // Don't add duplicate entries
+    if (is_address_in_allowlist(addr))
+        return false;
+
     for (size_t i = 0; i < ARRAY_SIZE(addr_allow_list); i++) {
         if (bd_addr_cmp(addr_allow_list[i], zero_addr) == 0) {
             bd_addr_copy(addr_allow_list[i], addr);
@@ -108,6 +114,14 @@ bool uni_bt_allowlist_remove_addr(bd_addr_t addr) {
     return false;
 }
 
+bool uni_bt_allowlist_remove_all(void) {
+    for (size_t i = 0; i < ARRAY_SIZE(addr_allow_list); i++) {
+        bd_addr_copy(addr_allow_list[i], zero_addr);
+    }
+    update_allowlist_to_property();
+    return true;
+}
+
 void uni_bt_allowlist_list(void) {
     logi("Bluetooth allowlist addresses:\n");
     for (size_t i = 0; i < ARRAY_SIZE(addr_allow_list); i++) {
@@ -115,6 +129,11 @@ void uni_bt_allowlist_list(void) {
             continue;
         logi(" - %s\n", bd_addr_to_str(addr_allow_list[i]));
     }
+}
+
+void uni_bt_allowlist_get_all(const bd_addr_t** addresses, int* total) {
+    *addresses = addr_allow_list;
+    *total = CONFIG_BLUEPAD32_MAX_ALLOWLIST;
 }
 
 bool uni_bt_allowlist_is_enabled(void) {
@@ -128,17 +147,15 @@ void uni_bt_allowlist_set_enabled(bool enabled) {
         enforced = enabled;
 
         val.u8 = enforced;
-        uni_property_set(UNI_PROPERTY_KEY_ALLOWLIST_ENABLED, UNI_PROPERTY_TYPE_U8, val);
+        uni_property_set(UNI_PROPERTY_IDX_ALLOWLIST_ENABLED, val);
     }
 }
 
 void uni_bt_allowlist_init(void) {
-    uni_property_value_t def;
     uni_property_value_t val;
 
     // Whether it is enabled.
-    def.u8 = 0;
-    val = uni_property_get(UNI_PROPERTY_KEY_ALLOWLIST_ENABLED, UNI_PROPERTY_TYPE_U8, def);
+    val = uni_property_get(UNI_PROPERTY_IDX_ALLOWLIST_ENABLED);
     enforced = val.u8;
 
     // The list of allowed-list addresses.

@@ -100,17 +100,14 @@ static void set_c64_pot_mode_to_nvs(int mode) {
     uni_property_value_t value;
     value.u8 = mode;
 
-    uni_property_set(UNI_PROPERTY_KEY_UNI_C64_POT_MODE, UNI_PROPERTY_TYPE_U8, value);
+    uni_property_set(UNI_PROPERTY_IDX_UNI_C64_POT_MODE, value);
     logi("Done\n");
 }
 
 static int get_c64_pot_mode_from_nvs(void) {
     uni_property_value_t value;
-    uni_property_value_t def;
 
-    def.u8 = UNI_PLATFORM_UNIJOYSTICLE_C64_POT_MODE_3BUTTONS;
-
-    value = uni_property_get(UNI_PROPERTY_KEY_UNI_C64_POT_MODE, UNI_PROPERTY_TYPE_U8, def);
+    value = uni_property_get(UNI_PROPERTY_IDX_UNI_C64_POT_MODE);
     return value.u8;
 }
 
@@ -123,8 +120,7 @@ static void enable_rumble_callback(void* context) {
         if (!uni_bt_conn_is_connected(&d->conn))
             continue;
         uni_platform_unijoysticle_instance_t* ins = uni_platform_unijoysticle_get_instance(d);
-        // Use mask instead of == since Rumble should be active when
-        // gamepad is in Twin Stick Mode.
+        // Use mask instead of == since Rumble should be active when the gamepad is in Twin Stick Mode.
         if ((ins->seat & seat) == 0)
             continue;
         if (d->report_parser.set_rumble != NULL)
@@ -177,6 +173,7 @@ inline void delay_us(uint32_t delay) {
     esp_rom_delay_us(delay);
 #endif
 }
+
 static IRAM_ATTR void gpio_isr_handler_paddle(void* arg) {
     // From:
     // https://github.com/LeifBloomquist/JoystickEmulator/blob/master/Arduino/PaddleEmulator/PaddleEmulator.ino
@@ -352,9 +349,7 @@ void uni_platform_unijoysticle_c64_version(void) {
     logi("\tPot mode: %s\n", c64_pot_modes[get_c64_pot_mode_from_nvs()]);
 }
 
-static void process_5button(uni_hid_device_t* d, uni_gamepad_seat_t seat, uint8_t misc_buttons)
-
-{
+static void process_5button(uni_hid_device_t* d, uni_gamepad_seat_t seat, uint8_t misc_buttons) {
     if (misc_buttons & MISC_BUTTON_SELECT) {
         if (seat & GAMEPAD_SEAT_A) {
             uni_gpio_set_level(gpio_config_univ2c64.port_a[UNI_PLATFORM_UNIJOYSTICLE_JOY_UP], 1);

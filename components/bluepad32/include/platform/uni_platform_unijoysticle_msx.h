@@ -1,7 +1,8 @@
 /****************************************************************************
 http://retro.moe/unijoysticle2
 
-Copyright 2019 Ricardo Quesada
+Copyright 2023 Ricardo Quesada
+Copyright 2023 Albert Herranz
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,10 +17,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ****************************************************************************/
 
-#ifndef UNI_DEBUG_H
-#define UNI_DEBUG_H
+#ifndef UNI_PLATFORM_UNIJOYSTICLE_MSX_H
+#define UNI_PLATFORM_UNIJOYSTICLE_MSX_H
 
-/* uni_debug.h code moved to uni_log.h */
-#include "uni_log.h"
+#include <stdint.h>
 
-#endif  // UNI_DEBUG_H
+#include "uni_hid_device.h"
+#include "uni_platform_unijoysticle.h"
+
+const struct uni_platform_unijoysticle_variant* uni_platform_unijoysticle_msx_create_variant(void);
+
+#endif  // UNI_PLATFORM_UNIJOYSTICLE_MSX_H

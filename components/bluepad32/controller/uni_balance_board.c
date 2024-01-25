@@ -8,21 +8,19 @@
 
 // Don't compile it on PC Debug since the console is not present
 #ifdef CONFIG_BLUEPAD32_USB_CONSOLE_ENABLE
+
 #include <argtable3/argtable3.h>
 #include <esp_console.h>
+
 #endif  // CONFIG_BLUEPAD32_USB_CONSOLE_ENABLE
 
 #include "uni_log.h"
 #include "uni_property.h"
 
-// Balance Board defaults
-#define BB_MOVE_THRESHOLD_DEFAULT 1500  // Diff in weight to consider a Movement
-#define BB_FIRE_THRESHOLD_DEFAULT 5000  // Max weight before staring the "de-accel" to trigger fire.
-
 // Gets initialized at platform_init time.
 static uni_balance_board_threshold_t bb_threshold = {
-    .move = BB_MOVE_THRESHOLD_DEFAULT,
-    .fire = BB_FIRE_THRESHOLD_DEFAULT,
+    .move = UNI_BALANCE_BOARD_MOVE_THRESHOLD_DEFAULT,
+    .fire = UNI_BALANCE_BOARD_FIRE_THRESHOLD_DEFAULT,
 };
 
 #ifdef CONFIG_BLUEPAD32_USB_CONSOLE_ENABLE
@@ -40,17 +38,14 @@ static void set_bb_move_threshold_to_nvs(int threshold) {
     uni_property_value_t value;
     value.u32 = threshold;
 
-    uni_property_set(UNI_PROPERTY_KEY_UNI_BB_MOVE_THRESHOLD, UNI_PROPERTY_TYPE_U32, value);
+    uni_property_set(UNI_PROPERTY_IDX_UNI_BB_MOVE_THRESHOLD, value);
     logi("Done\n");
 }
 
 static int get_bb_move_threshold_from_nvs(void) {
     uni_property_value_t value;
-    uni_property_value_t def;
 
-    def.u32 = BB_MOVE_THRESHOLD_DEFAULT;
-
-    value = uni_property_get(UNI_PROPERTY_KEY_UNI_BB_MOVE_THRESHOLD, UNI_PROPERTY_TYPE_U32, def);
+    value = uni_property_get(UNI_PROPERTY_IDX_UNI_BB_MOVE_THRESHOLD);
     return value.u32;
 }
 
@@ -58,17 +53,14 @@ static void set_bb_fire_threshold_to_nvs(int threshold) {
     uni_property_value_t value;
     value.u32 = threshold;
 
-    uni_property_set(UNI_PROPERTY_KEY_UNI_BB_FIRE_THRESHOLD, UNI_PROPERTY_TYPE_U32, value);
+    uni_property_set(UNI_PROPERTY_IDX_UNI_BB_FIRE_THRESHOLD, value);
     logi("Done\n");
 }
 
 static int get_bb_fire_threshold_from_nvs(void) {
     uni_property_value_t value;
-    uni_property_value_t def;
 
-    def.u32 = BB_FIRE_THRESHOLD_DEFAULT;
-
-    value = uni_property_get(UNI_PROPERTY_KEY_UNI_BB_FIRE_THRESHOLD, UNI_PROPERTY_TYPE_U32, def);
+    value = uni_property_get(UNI_PROPERTY_IDX_UNI_BB_FIRE_THRESHOLD);
     return value.u32;
 }
 
@@ -142,6 +134,7 @@ void uni_balance_board_register_cmds(void) {
     ESP_ERROR_CHECK(esp_console_cmd_register(&bb_move_threshold));
     ESP_ERROR_CHECK(esp_console_cmd_register(&bb_fire_threshold));
 }
+
 #endif  // CONFIG_BLUEPAD32_USB_CONSOLE_ENABLE
 
 void uni_balance_board_init(void) {

@@ -1122,11 +1122,6 @@ static void hfp_hf_slc_established(hfp_connection_t * hfp_connection){
     hfp_connection->microphone_gain = hfp_hf_microphone_gain;
     hfp_connection->send_microphone_gain = 1;
     hfp_emit_event(hfp_connection, HFP_SUBEVENT_MICROPHONE_VOLUME, hfp_hf_microphone_gain);
-    // enable all indicators
-    for (i=0; i < hfp_hf_indicators_nr; i++){
-        hfp_connection->generic_status_indicators[i].uuid = hfp_hf_indicators[i];
-        hfp_connection->generic_status_indicators[i].state = 1;
-    }
 }
 
 static void hfp_hf_handle_suggested_codec(hfp_connection_t * hfp_connection){
@@ -1588,6 +1583,9 @@ void hfp_hf_init_hf_indicators(int indicators_nr, const uint16_t * indicators){
     for (i = 0; i < hfp_hf_indicators_nr ; i++){
         hfp_hf_indicators[i] = (uint8_t) indicators[i];
     }
+
+    // store copy in hfp to setup generic_status_indicators during SLC
+    hfp_set_hf_indicators(indicators_nr, hfp_hf_indicators);
 }
 
 uint8_t hfp_hf_establish_service_level_connection(bd_addr_t bd_addr){

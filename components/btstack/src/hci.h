@@ -981,6 +981,7 @@ typedef enum {
     LE_RESOLVING_LIST_SEND_ENABLE_ADDRESS_RESOLUTION,
     LE_RESOLVING_LIST_READ_SIZE,
     LE_RESOLVING_LIST_SEND_CLEAR,
+    LE_RESOLVING_LIST_SET_IRK,
 	LE_RESOLVING_LIST_UPDATES_ENTRIES,
     LE_RESOLVING_LIST_DONE
 } le_resolving_list_state_t;
@@ -1547,7 +1548,6 @@ void hci_release_packet_buffer(void);
 */
 void hci_set_master_slave_policy(uint8_t policy);
 
-
 /**
  * @brief Check if Controller supports BR/EDR (Bluetooth Classic)
  * @return true if supported
@@ -1562,11 +1562,23 @@ bool hci_classic_supported(void);
  */
 bool hci_le_supported(void);
 
+/**
+ * @brief Check if LE Extended Advertising is supported
+ * @return true if supported
+ */
+bool hci_le_extended_advertising_supported(void);
+
 /** @brief Check if address type corresponds to LE connection
  *  @bparam address_type
  *  @erturn true if LE connection
  */
 bool hci_is_le_connection_type(bd_addr_type_t address_type);
+
+/** @brief Check if address type corresponds to Identity Address
+ *  @bparam address_type
+ *  @erturn true if LE connection
+ */
+bool hci_is_le_identity_address_type(bd_addr_type_t address_type);
 
 /* API_END */
 

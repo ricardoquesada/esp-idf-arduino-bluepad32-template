@@ -1201,6 +1201,9 @@ static void sm_init_setup(sm_connection_t * sm_conn){
         sm_pairing_packet_set_responder_key_distribution(setup->sm_m_preq, key_distribution_flags);
     }
 
+    log_info("our  address %s type %u", bd_addr_to_str(sm_conn->sm_own_address), sm_conn->sm_own_addr_type);
+    log_info("peer address %s type %u", bd_addr_to_str(sm_conn->sm_peer_address), sm_conn->sm_peer_addr_type);
+
     uint8_t auth_req = sm_auth_req & ~SM_AUTHREQ_CT2;
     uint8_t max_encryption_key_size = sm_max_encryption_key_size;
 #ifdef ENABLE_LE_SECURE_CONNECTIONS
@@ -1291,15 +1294,16 @@ static void sm_address_resolution_handle_event(address_resolution_event_t event)
     sm_address_resolution_mode = ADDRESS_RESOLUTION_IDLE;
     sm_address_resolution_context = NULL;
     sm_address_resolution_test = -1;
-    hci_con_handle_t con_handle = 0;
 
+    hci_con_handle_t con_handle = HCI_CON_HANDLE_INVALID;
     sm_connection_t * sm_connection;
     sm_key_t ltk;
     bool have_ltk;
+    int authenticated;
 #ifdef ENABLE_LE_CENTRAL
     bool trigger_pairing;
-    int authenticated;
 #endif
+
     switch (mode){
         case ADDRESS_RESOLUTION_GENERAL:
             break;
@@ -2216,11 +2220,11 @@ static bool sm_run_rau(void){
     return false;
 }
 
-// CSRK Lookup
-static bool sm_run_csrk(void){
+// device lookup with IRK
+static bool sm_run_irk_lookup(void){
     btstack_linked_list_iterator_t it;
 
-    // -- if csrk lookup ready, find connection that require csrk lookup
+    // -- if IRK lookup ready, find connection that require csrk lookup
     if (sm_address_resolution_idle()){
         hci_connections_get_iterator(&it);
         while(btstack_linked_list_iterator_has_next(&it)){
@@ -2259,9 +2263,10 @@ static bool sm_run_csrk(void){
                 continue;
             }
 
-            log_info("LE Device Lookup: device %u of %u", sm_address_resolution_test, le_device_db_max_count());
+            log_info("LE Device Lookup: device %u of %u - type %u, %s", sm_address_resolution_test,
+                     le_device_db_max_count(), addr_type, bd_addr_to_str(addr));
 
-            // map resolved identiry addresses to regular addresses
+            // map resolved identity addresses to regular addresses
             int regular_addr_type = sm_address_resolution_addr_type & 1;
             if ((regular_addr_type == addr_type) && (memcmp(addr, sm_address_resolution_address, 6) == 0)){
                 log_info("LE Device Lookup: found by { addr_type, address} ");
@@ -2269,8 +2274,8 @@ static bool sm_run_csrk(void){
                 break;
             }
 
-            // if connection type is public, it must be a different one
-            if (sm_address_resolution_addr_type == BD_ADDR_TYPE_LE_PUBLIC){
+            // if connection type is not random (i.e. public or resolved identity), it must be a different entry
+            if (sm_address_resolution_addr_type != BD_ADDR_TYPE_LE_RANDOM){
                 sm_address_resolution_test++;
                 continue;
             }
@@ -2773,7 +2778,7 @@ static bool sm_run_non_connection_logic(void){
     done = sm_run_rau();
     if (done) return true;
 
-    done = sm_run_csrk();
+    done = sm_run_irk_lookup();
     if (done) return true;
 
     done = sm_run_oob();
@@ -3743,13 +3748,13 @@ static void sm_handle_random_result_er(void *arg){
     }
 }
 
-static void sm_connection_init(sm_connection_t * sm_conn, hci_con_handle_t con_handle, uint8_t role, uint8_t addr_type, bd_addr_t address){
+static void sm_connection_init(sm_connection_t * sm_conn, hci_con_handle_t con_handle, uint8_t role, uint8_t peer_addr_type, bd_addr_t peer_address){
 
     // connection info
     sm_conn->sm_handle = con_handle;
     sm_conn->sm_role = role;
-    sm_conn->sm_peer_addr_type = addr_type;
-    memcpy(sm_conn->sm_peer_address, address, 6);
+    sm_conn->sm_peer_addr_type = peer_addr_type;
+    memcpy(sm_conn->sm_peer_address, peer_address, 6);
 
     // security properties
     sm_conn->sm_connection_encrypted = 0;
@@ -3804,6 +3809,7 @@ static void sm_event_packet_handler (uint8_t packet_type, uint16_t channel, uint
     hci_con_handle_t  con_handle;
     uint8_t           status;
     bd_addr_t         addr;
+    bd_addr_type_t    addr_type;
 
     switch (packet_type) {
 
@@ -3909,29 +3915,46 @@ static void sm_event_packet_handler (uint8_t packet_type, uint16_t channel, uint
 			                sm_conn = sm_get_connection_for_handle(con_handle);
 			                if (!sm_conn) break;
 
-			                gap_subevent_le_connection_complete_get_peer_address(packet, addr);
+                            // Get current peer address
+                            addr_type = gap_subevent_le_connection_complete_get_peer_address_type(packet);
+                            if (hci_is_le_identity_address_type(addr_type)){
+                                addr_type = BD_ADDR_TYPE_LE_RANDOM;
+                                gap_subevent_le_connection_complete_get_peer_resolvable_private_address(packet, addr);
+                            } else {
+                                gap_subevent_le_connection_complete_get_peer_address(packet, addr);
+                            }
 			                sm_connection_init(sm_conn,
                                                con_handle,
                                                gap_subevent_le_connection_complete_get_role(packet),
-                                               gap_subevent_le_connection_complete_get_peer_address_type(packet),
+                                               addr_type,
                                                addr);
 			                sm_conn->sm_cid = L2CAP_CID_SECURITY_MANAGER_PROTOCOL;
 
 			                // track our addr used for this connection and set state
-    #ifdef ENABLE_LE_PERIPHERAL
+#ifdef ENABLE_LE_PERIPHERAL
 			                if (gap_subevent_le_connection_complete_get_role(packet) != 0){
 			                    // responder - use own address from advertisements
-			                    gap_le_get_own_advertisements_address(&sm_conn->sm_own_addr_type, sm_conn->sm_own_address);
+#ifdef ENABLE_LE_EXTENDED_ADVERTISING
+                                if (hci_le_extended_advertising_supported()){
+                                    // cache local resolvable address
+                                    // note: will be overwritten if random or private address was used in adv set by HCI_SUBEVENT_LE_ADVERTISING_SET_TERMINATED
+                                    sm_conn->sm_own_addr_type = BD_ADDR_TYPE_LE_RANDOM;
+                                    gap_subevent_le_connection_complete_get_local_resolvable_private_address(packet,sm_conn->sm_own_address);
+                                } else
+#endif
+                                {
+                                    gap_le_get_own_advertisements_address(&sm_conn->sm_own_addr_type, sm_conn->sm_own_address);
+                                }
 			                    sm_conn->sm_engine_state = SM_RESPONDER_IDLE;
 			                }
-    #endif
-    #ifdef ENABLE_LE_CENTRAL
+#endif
+#ifdef ENABLE_LE_CENTRAL
 			                if (gap_subevent_le_connection_complete_get_role(packet) == 0){
 			                    // initiator - use own address from create connection
 			                    gap_le_get_own_connection_address(&sm_conn->sm_own_addr_type, sm_conn->sm_own_address);
 			                    sm_conn->sm_engine_state = SM_INITIATOR_CONNECTED;
 			                }
-    #endif
+#endif
 			                break;
 			            default:
 			                break;
@@ -3939,6 +3962,20 @@ static void sm_event_packet_handler (uint8_t packet_type, uint16_t channel, uint
 			        break;
                 case HCI_EVENT_LE_META:
                     switch (hci_event_le_meta_get_subevent_code(packet)) {
+#ifdef ENABLE_LE_PERIPHERAL
+#ifdef ENABLE_LE_EXTENDED_ADVERTISING
+                        case HCI_SUBEVENT_LE_ADVERTISING_SET_TERMINATED:
+                            if (hci_subevent_le_advertising_set_terminated_get_status(packet) == ERROR_CODE_SUCCESS){
+                                uint8_t advertising_handle = hci_subevent_le_advertising_set_terminated_get_advertising_handle(packet);
+                                con_handle = hci_subevent_le_advertising_set_terminated_get_connection_handle(packet);
+                                sm_conn = sm_get_connection_for_handle(con_handle);
+                                gap_le_get_own_advertising_set_address(&sm_conn->sm_own_addr_type, sm_conn->sm_own_address, advertising_handle);
+                                log_info("Adv set %u terminated -> use addr type %u, addr %s for con handle 0x%04x", advertising_handle, sm_conn->sm_own_addr_type,
+                                         bd_addr_to_str(sm_conn->sm_own_address), con_handle);
+                            }
+                            break;
+#endif
+#endif
                         case HCI_SUBEVENT_LE_LONG_TERM_KEY_REQUEST:
                             con_handle = hci_subevent_le_long_term_key_request_get_connection_handle(packet);
                             sm_conn = sm_get_connection_for_handle(con_handle);
@@ -4339,6 +4376,7 @@ static void sm_pdu_handler(uint8_t packet_type, hci_con_handle_t con_handle, uin
     log_debug("sm_pdu_handler: state %u, pdu 0x%02x", sm_conn->sm_engine_state, sm_pdu_code);
 
     int err;
+    uint8_t max_encryption_key_size;
     UNUSED(err);
 
     if (sm_pdu_code == SM_CODE_KEYPRESS_NOTIFICATION){
@@ -4386,6 +4424,14 @@ static void sm_pdu_handler(uint8_t packet_type, hci_con_handle_t con_handle, uin
             // store pairing request
             (void)memcpy(&setup->sm_s_pres, packet,
                          sizeof(sm_pairing_packet_t));
+
+            // validate encryption key size
+            max_encryption_key_size = sm_pairing_packet_get_max_encryption_key_size(setup->sm_s_pres);
+            if ((max_encryption_key_size < 7) || (max_encryption_key_size > 16)){
+                sm_pairing_error(sm_conn, SM_REASON_INVALID_PARAMETERS);
+                break;
+            }
+
             err = sm_stk_generation_init(sm_conn);
 
 #ifdef ENABLE_TESTING_SUPPORT
@@ -4484,6 +4530,13 @@ static void sm_pdu_handler(uint8_t packet_type, hci_con_handle_t con_handle, uin
 
             // store pairing request
             (void)memcpy(&sm_conn->sm_m_preq, packet, sizeof(sm_pairing_packet_t));
+
+            // validation encryption key size
+            max_encryption_key_size = sm_pairing_packet_get_max_encryption_key_size(sm_conn->sm_m_preq);
+            if ((max_encryption_key_size < 7) || (max_encryption_key_size > 16)){
+                sm_pairing_error(sm_conn, SM_REASON_INVALID_PARAMETERS);
+                break;
+            }
 
             // check if IRK completed
             switch (sm_conn->sm_irk_lookup_state){
@@ -4804,7 +4857,12 @@ static void sm_pdu_handler(uint8_t packet_type, hci_con_handle_t con_handle, uin
             (void)memcpy(&setup->sm_s_pres, packet, sizeof(sm_pairing_packet_t));
 
             // validate encryption key size
-            sm_conn->sm_actual_encryption_key_size = sm_calc_actual_encryption_key_size(sm_pairing_packet_get_max_encryption_key_size(setup->sm_s_pres));
+            max_encryption_key_size = sm_pairing_packet_get_max_encryption_key_size(setup->sm_s_pres);
+            if ((max_encryption_key_size < 7) || (max_encryption_key_size > 16)){
+                sm_pairing_error(sm_conn, SM_REASON_INVALID_PARAMETERS);
+                break;
+            }
+            sm_conn->sm_actual_encryption_key_size = sm_calc_actual_encryption_key_size(max_encryption_key_size);
             // SC Only mandates 128 bit key size
             if (sm_sc_only_mode && (sm_conn->sm_actual_encryption_key_size < 16)) {
                 sm_conn->sm_actual_encryption_key_size  = 0;
@@ -4832,10 +4890,17 @@ static void sm_pdu_handler(uint8_t packet_type, hci_con_handle_t con_handle, uin
                 sm_pdu_received_in_wrong_state(sm_conn);
                 break;
             }
+
             // store pairing request
             (void)memcpy(&sm_conn->sm_m_preq, packet, sizeof(sm_pairing_packet_t));
+
             // validate encryption key size
-            sm_conn->sm_actual_encryption_key_size = sm_calc_actual_encryption_key_size(sm_pairing_packet_get_max_encryption_key_size(sm_conn->sm_m_preq));
+            max_encryption_key_size = sm_pairing_packet_get_max_encryption_key_size(setup->sm_m_preq);
+            if ((max_encryption_key_size < 7) || (max_encryption_key_size > 16)){
+                sm_pairing_error(sm_conn, SM_REASON_INVALID_PARAMETERS);
+                break;
+            }
+            sm_conn->sm_actual_encryption_key_size = sm_calc_actual_encryption_key_size(max_encryption_key_size);
             // SC Only mandates 128 bit key size
             if (sm_sc_only_mode && (sm_conn->sm_actual_encryption_key_size < 16)) {
                 sm_conn->sm_actual_encryption_key_size  = 0;

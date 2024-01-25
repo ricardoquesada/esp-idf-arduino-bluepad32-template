@@ -227,7 +227,7 @@ static void hci_trigger_remote_features_for_connection(hci_connection_t * connec
 // called from test/ble_client/advertising_data_parser.c
 void le_handle_advertisement_report(uint8_t *packet, uint16_t size);
 static uint8_t hci_whitelist_remove(bd_addr_type_t address_type, const bd_addr_t address);
-static hci_connection_t * gap_get_outgoing_connection(void);
+static hci_connection_t * gap_get_outgoing_le_connection(void);
 static void hci_le_scan_stop(void);
 static bool hci_run_general_gap_le(void);
 #endif
@@ -608,6 +608,16 @@ bool hci_is_le_connection_type(bd_addr_type_t address_type){
     switch (address_type){
         case BD_ADDR_TYPE_LE_PUBLIC:
         case BD_ADDR_TYPE_LE_RANDOM:
+        case BD_ADDR_TYPE_LE_PUBLIC_IDENTITY:
+        case BD_ADDR_TYPE_LE_RANDOM_IDENTITY:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool hci_is_le_identity_address_type(bd_addr_type_t address_type){
+    switch (address_type){
         case BD_ADDR_TYPE_LE_PUBLIC_IDENTITY:
         case BD_ADDR_TYPE_LE_RANDOM_IDENTITY:
             return true;
@@ -1483,7 +1493,7 @@ static bool hci_command_supported(uint8_t command_index){
 #ifdef ENABLE_BLE
 
 #ifdef ENABLE_LE_EXTENDED_ADVERTISING
-static bool hci_extended_advertising_supported(void){
+bool hci_le_extended_advertising_supported(void){
     return hci_command_supported(SUPPORTED_HCI_COMMAND_LE_SET_EXTENDED_ADVERTISING_ENABLE);
 }
 #endif
@@ -1506,6 +1516,33 @@ void gap_le_get_own_advertisements_address(uint8_t * addr_type, bd_addr_t addr){
     *addr_type = hci_stack->le_advertisements_own_addr_type;
     hci_get_own_address_for_addr_type(hci_stack->le_advertisements_own_addr_type, addr);
 };
+#ifdef ENABLE_LE_EXTENDED_ADVERTISING
+void gap_le_get_own_advertising_set_address(uint8_t * addr_type, bd_addr_t addr, uint8_t advertising_handle){
+    if (advertising_handle == 0){
+        gap_le_get_own_advertisements_address(addr_type, addr);
+    } else {
+        le_advertising_set_t * advertising_set = hci_advertising_set_for_handle(advertising_handle);
+        if (advertising_set != NULL){
+            switch (advertising_set->extended_params.own_address_type){
+                case BD_ADDR_TYPE_LE_PUBLIC:
+                    *addr_type = BD_ADDR_TYPE_LE_PUBLIC;
+                    memcpy(addr, hci_stack->local_bd_addr, 6);
+                    break;
+                case BD_ADDR_TYPE_LE_RANDOM:
+                    *addr_type = BD_ADDR_TYPE_LE_RANDOM;
+                    memcpy(addr, advertising_set->random_address, 6);
+                    break;
+                case BD_ADDR_TYPE_LE_PUBLIC_IDENTITY:
+                case BD_ADDR_TYPE_LE_RANDOM_IDENTITY:
+                    // do nothing as random address was already set from enhanced connection complete
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+};
+#endif
 #endif
 
 #ifdef ENABLE_LE_CENTRAL
@@ -2320,7 +2357,7 @@ static void hci_initializing_run(void){
             /* fall through */
 
         case HCI_INIT_LE_READ_MAX_ADV_DATA_LEN:
-            if (hci_extended_advertising_supported()){
+            if (hci_le_extended_advertising_supported()){
                 hci_stack->substate = HCI_INIT_W4_LE_READ_MAX_ADV_DATA_LEN;
                 hci_send_cmd(&hci_le_read_maximum_advertising_data_length);
                 break;
@@ -3265,7 +3302,7 @@ static void hci_create_gap_connection_complete_event(const uint8_t * hci_event, 
     gap_event[0] = HCI_EVENT_META_GAP;
     gap_event[1] = 36 - 2;
     gap_event[2] = GAP_SUBEVENT_LE_CONNECTION_COMPLETE;
-    switch (hci_event[2]){
+    switch (hci_event_le_meta_get_subevent_code(hci_event)){
         case HCI_SUBEVENT_LE_CONNECTION_COMPLETE:
             memcpy(&gap_event[3], &hci_event[3], 11);
             memset(&gap_event[14], 0, 12);
@@ -3285,7 +3322,7 @@ static void hci_create_gap_connection_complete_event(const uint8_t * hci_event, 
     }
 }
 
-static void event_handle_le_connection_complete(const uint8_t * hci_event){
+static void hci_handle_le_connection_complete_event(const uint8_t * hci_event){
 	bd_addr_t addr;
 	bd_addr_type_t addr_type;
 	hci_connection_t * conn;
@@ -3315,13 +3352,16 @@ static void event_handle_le_connection_complete(const uint8_t * hci_event){
 		//  In either case, the event shall be sent with the error code Unknown Connection Identifier (0x02)."
 		if (status == ERROR_CODE_UNKNOWN_CONNECTION_IDENTIFIER){
 		    // reset state
-            hci_stack->le_connecting_state   = LE_CONNECTING_IDLE;
+            hci_stack->le_connecting_state = LE_CONNECTING_IDLE;
 			// get outgoing connection conn struct for direct connect
-			conn = gap_get_outgoing_connection();
+            if (hci_stack->le_connecting_request == LE_CONNECTING_DIRECT){
+                conn = gap_get_outgoing_le_connection();
+                conn->state = SEND_CREATE_CONNECTION;
+            }
 		}
 
-		// outgoing le connection establishment is done
-		if (conn){
+		// free connection if cancelled by user (request == IDLE)
+		if ((conn != NULL) && (hci_stack->le_connecting_request == LE_CONNECTING_IDLE)){
 			// remove entry
 			btstack_linked_list_remove(&hci_stack->connections, (btstack_linked_item_t *) conn);
 			btstack_memory_hci_connection_free( conn );
@@ -3333,12 +3373,29 @@ static void event_handle_le_connection_complete(const uint8_t * hci_event){
 	// on success, both hosts receive connection complete event
     if (role == HCI_ROLE_MASTER){
 #ifdef ENABLE_LE_CENTRAL
-		// if we're master on an le connection, it was an outgoing connection and we're done with it
+		// if we're master, it was an outgoing connection
 		// note: no hci_connection_t object exists yet for connect with whitelist
-		if (hci_is_le_connection_type(addr_type)){
-			hci_stack->le_connecting_state   = LE_CONNECTING_IDLE;
-			hci_stack->le_connecting_request = LE_CONNECTING_IDLE;
-		}
+
+        // if a identity addresses was used without enhanced connection complete event,
+        // the connection complete event contains the current random address of the peer device.
+        // This random address is needed in the case of a re-pairing
+        if (hci_event_le_meta_get_subevent_code(hci_event) == HCI_SUBEVENT_LE_CONNECTION_COMPLETE){
+            conn = gap_get_outgoing_le_connection();
+            // if outgoing connection object is available, check if identity address was used.
+            // if yes, track resolved random address and provide rpa
+            // note: we don't update hci le subevent connection complete
+            if (conn != NULL){
+                if (hci_is_le_identity_address_type(conn->address_type)){
+                    memcpy(&gap_event[20], &gap_event[8], 6);
+                    gap_event[7] = conn->address_type;
+                    reverse_bd_addr(conn->address, &gap_event[8]);
+                }
+            }
+        }
+
+        // we're done with it
+        hci_stack->le_connecting_state   = LE_CONNECTING_IDLE;
+        hci_stack->le_connecting_request = LE_CONNECTING_IDLE;
 #endif
 	} else {
 #ifdef ENABLE_LE_PERIPHERAL
@@ -3691,9 +3748,11 @@ static void event_handler(uint8_t *packet, uint16_t size){
             }
             // propagate remote supported sco packet packets from existing ACL to new SCO connection
             if (addr_type == BD_ADDR_TYPE_SCO){
-                hci_connection_t * acl_conn = hci_connection_for_bd_addr_and_type(addr, BD_ADDR_TYPE_ACL);
-                btstack_assert(acl_conn != NULL);
-                conn->remote_supported_sco_packets = acl_conn->remote_supported_sco_packets;
+                const hci_connection_t * acl_conn = hci_connection_for_bd_addr_and_type(addr, BD_ADDR_TYPE_ACL);
+                // ACL exists unless fuzzing
+                if (acl_conn != NULL) {
+                    conn->remote_supported_sco_packets = acl_conn->remote_supported_sco_packets;
+                }
             }
             hci_run();
             break;
@@ -3752,7 +3811,9 @@ static void event_handler(uint8_t *packet, uint16_t size){
             reverse_bd_addr(&packet[5], addr);
             conn = hci_connection_for_bd_addr_and_type(addr, BD_ADDR_TYPE_SCO);
             log_info("Synchronous Connection Complete for %p (status=%u) %s", conn, packet[2], bd_addr_to_str(addr));
-            btstack_assert(conn != NULL);
+
+            // SCO exists unless fuzzer
+            if (conn == NULL) break;
 
             if (packet[2] != ERROR_CODE_SUCCESS){
                 // connection failed, remove entry
@@ -4295,7 +4356,7 @@ static void event_handler(uint8_t *packet, uint16_t size){
                 case HCI_SUBEVENT_LE_CONNECTION_COMPLETE:
                 case HCI_SUBEVENT_LE_ENHANCED_CONNECTION_COMPLETE_V1:
                 case HCI_SUBEVENT_LE_ENHANCED_CONNECTION_COMPLETE_V2:
-					event_handle_le_connection_complete(packet);
+                    hci_handle_le_connection_complete_event(packet);
                     break;
 
                 // log_info("LE buffer size: %u, count %u", little_endian_read_16(packet,6), packet[8]);
@@ -5458,7 +5519,7 @@ static void hci_halting_run(void) {
             stop_advertismenets = (hci_stack->le_advertisements_state & LE_ADVERTISEMENT_STATE_ACTIVE) != 0;
 
 #ifdef ENABLE_LE_EXTENDED_ADVERTISING
-            if (hci_extended_advertising_supported()){
+            if (hci_le_extended_advertising_supported()){
 #ifdef ENABLE_LE_PERIODIC_ADVERTISING
                 btstack_linked_list_iterator_t it;
                 btstack_linked_list_iterator_init(&it, &hci_stack->le_advertising_sets);
@@ -5905,7 +5966,7 @@ static uint8_t hci_le_num_phys(uint8_t phys){
 #ifdef ENABLE_LE_CENTRAL
 static void hci_le_scan_stop(void){
 #ifdef ENABLE_LE_EXTENDED_ADVERTISING
-    if (hci_extended_advertising_supported()) {
+    if (hci_le_extended_advertising_supported()) {
             hci_send_cmd(&hci_le_set_extended_scan_enable, 0, 0, 0, 0);
     } else
 #endif
@@ -5917,7 +5978,7 @@ static void hci_le_scan_stop(void){
 static void
 hci_send_le_create_connection(uint8_t initiator_filter_policy, bd_addr_type_t address_type, uint8_t *address) {
 #ifdef ENABLE_LE_EXTENDED_ADVERTISING
-    if (hci_extended_advertising_supported()) {
+    if (hci_le_extended_advertising_supported()) {
         // prepare arrays for all phys (LE Coded, LE 1M, LE 2M PHY)
         uint16_t le_connection_scan_interval[3];
         uint16_t le_connection_scan_window[3];
@@ -6158,7 +6219,7 @@ static bool hci_run_general_gap_le(void){
     }
 
 #ifdef ENABLE_LE_EXTENDED_ADVERTISING
-    if (hci_extended_advertising_supported() && (advertising_stop == false)){
+    if (hci_le_extended_advertising_supported() && (advertising_stop == false)){
         btstack_linked_list_iterator_t it;
         btstack_linked_list_iterator_init(&it, &hci_stack->le_advertising_sets);
         while (btstack_linked_list_iterator_has_next(&it)){
@@ -6256,7 +6317,7 @@ static bool hci_run_general_gap_le(void){
 #ifdef ENABLE_LE_PERIPHERAL
     if (advertising_stop){
 #ifdef ENABLE_LE_EXTENDED_ADVERTISING
-        if (hci_extended_advertising_supported()) {
+        if (hci_le_extended_advertising_supported()) {
             uint8_t advertising_stop_handle;
             if (advertising_stop_set != NULL){
                 advertising_stop_handle = advertising_stop_set->advertising_handle;
@@ -6305,7 +6366,7 @@ static bool hci_run_general_gap_le(void){
     if (hci_stack->le_scanning_param_update){
         hci_stack->le_scanning_param_update = false;
 #ifdef ENABLE_LE_EXTENDED_ADVERTISING
-        if (hci_extended_advertising_supported()){
+        if (hci_le_extended_advertising_supported()){
             // prepare arrays for all phys (LE Coded and LE 1M PHY)
             uint8_t  scan_types[2];
             uint16_t scan_intervals[2];
@@ -6335,7 +6396,7 @@ static bool hci_run_general_gap_le(void){
         hci_stack->le_advertisements_todo &= ~LE_ADVERTISEMENT_TASKS_SET_PARAMS;
         hci_stack->le_advertisements_own_addr_type = hci_stack->le_own_addr_type;
 #ifdef ENABLE_LE_EXTENDED_ADVERTISING
-        if (hci_extended_advertising_supported()){
+        if (hci_le_extended_advertising_supported()){
             // map advertisment type to advertising event properties
             uint16_t adv_event_properties = 0;
             const uint16_t mapping[] = { 0b00010011, 0b00010101, 0b00011101, 0b00010010, 0b00010000};
@@ -6393,7 +6454,7 @@ static bool hci_run_general_gap_le(void){
                      hci_stack->le_advertisements_data_len);
         btstack_replace_bd_addr_placeholder(adv_data_clean, hci_stack->le_advertisements_data_len, hci_stack->local_bd_addr);
 #ifdef ENABLE_LE_EXTENDED_ADVERTISING
-        if (hci_extended_advertising_supported()){
+        if (hci_le_extended_advertising_supported()){
             hci_stack->le_advertising_set_in_current_command = 0;
             hci_send_cmd(&hci_le_set_extended_advertising_data, 0, 0x03, 0x01, hci_stack->le_advertisements_data_len, adv_data_clean);
         } else
@@ -6412,7 +6473,7 @@ static bool hci_run_general_gap_le(void){
                      hci_stack->le_scan_response_data_len);
         btstack_replace_bd_addr_placeholder(scan_data_clean, hci_stack->le_scan_response_data_len, hci_stack->local_bd_addr);
 #ifdef ENABLE_LE_EXTENDED_ADVERTISING
-        if (hci_extended_advertising_supported()){
+        if (hci_le_extended_advertising_supported()){
             hci_stack->le_advertising_set_in_current_command = 0;
             hci_send_cmd(&hci_le_set_extended_scan_response_data, 0, 0x03, 0x01, hci_stack->le_scan_response_data_len, scan_data_clean);
         } else
@@ -6424,7 +6485,7 @@ static bool hci_run_general_gap_le(void){
     }
 
 #ifdef ENABLE_LE_EXTENDED_ADVERTISING
-    if (hci_extended_advertising_supported()) {
+    if (hci_le_extended_advertising_supported()) {
         btstack_linked_list_iterator_t it;
         btstack_linked_list_iterator_init(&it, &hci_stack->le_advertising_sets);
         while (btstack_linked_list_iterator_has_next(&it)){
@@ -6566,8 +6627,11 @@ static bool hci_run_general_gap_le(void){
 
 #ifdef ENABLE_LE_PRIVACY_ADDRESS_RESOLUTION
     // LE Resolving List Management
-    if (resolving_list_supported) {
+    if (resolving_list_modification_pending) {
 		uint16_t i;
+        uint8_t null_16[16];
+        uint8_t local_irk_flipped[16];
+        const uint8_t *local_irk;
 		switch (hci_stack->le_resolving_list_state) {
 			case LE_RESOLVING_LIST_SEND_ENABLE_ADDRESS_RESOLUTION:
 				hci_stack->le_resolving_list_state = LE_RESOLVING_LIST_READ_SIZE;
@@ -6578,7 +6642,7 @@ static bool hci_run_general_gap_le(void){
 				hci_send_cmd(&hci_le_read_resolving_list_size);
 				return true;
 			case LE_RESOLVING_LIST_SEND_CLEAR:
-				hci_stack->le_resolving_list_state = LE_RESOLVING_LIST_UPDATES_ENTRIES;
+				hci_stack->le_resolving_list_state = LE_RESOLVING_LIST_SET_IRK;
 				(void) memset(hci_stack->le_resolving_list_add_entries, 0xff,
 							  sizeof(hci_stack->le_resolving_list_add_entries));
                 (void) memset(hci_stack->le_resolving_list_set_privacy_mode, 0xff,
@@ -6587,6 +6651,15 @@ static bool hci_run_general_gap_le(void){
 							  sizeof(hci_stack->le_resolving_list_remove_entries));
 				hci_send_cmd(&hci_le_clear_resolving_list);
 				return true;
+            case LE_RESOLVING_LIST_SET_IRK:
+                // set IRK used by RPA for undirected advertising
+                hci_stack->le_resolving_list_state = LE_RESOLVING_LIST_UPDATES_ENTRIES;
+                local_irk = gap_get_persistent_irk();
+                reverse_128(local_irk, local_irk_flipped);
+                memset(null_16, 0, sizeof(null_16));
+                hci_send_cmd(&hci_le_add_device_to_resolving_list, BD_ADDR_TYPE_LE_PUBLIC, null_16,
+                             null_16, local_irk_flipped);
+                return true;
 			case LE_RESOLVING_LIST_UPDATES_ENTRIES:
                 // first remove old entries
 				for (i = 0; i < MAX_NUM_RESOLVING_LIST_ENTRIES && i < le_device_db_max_count(); i++) {
@@ -6629,9 +6702,8 @@ static bool hci_run_general_gap_le(void){
 					le_device_db_info(i, &peer_identity_addr_type, peer_identity_addreses, peer_irk);
 					if (peer_identity_addr_type == BD_ADDR_TYPE_UNKNOWN) continue;
                     if (btstack_is_null(peer_irk, 16)) continue;
-					const uint8_t *local_irk = gap_get_persistent_irk();
+					local_irk = gap_get_persistent_irk();
 					// command uses format specifier 'P' that stores 16-byte value without flip
-					uint8_t local_irk_flipped[16];
 					uint8_t peer_irk_flipped[16];
 					reverse_128(local_irk, local_irk_flipped);
 					reverse_128(peer_irk, peer_irk_flipped);
@@ -6662,14 +6734,13 @@ static bool hci_run_general_gap_le(void){
                     hci_send_cmd(&hci_le_set_privacy_mode, peer_identity_addr_type, peer_identity_address, hci_stack->le_privacy_mode);
                     return true;
                 }
-				hci_stack->le_resolving_list_state = LE_RESOLVING_LIST_DONE;
 				break;
 
 			default:
 				break;
 		}
+        hci_stack->le_resolving_list_state = LE_RESOLVING_LIST_DONE;
 	}
-    hci_stack->le_resolving_list_state = LE_RESOLVING_LIST_DONE;
 #endif
 
 #ifdef ENABLE_LE_CENTRAL
@@ -6729,7 +6800,7 @@ static bool hci_run_general_gap_le(void){
     if ((hci_stack->le_scanning_enabled && !hci_stack->le_scanning_active)){
         hci_stack->le_scanning_active = true;
 #ifdef ENABLE_LE_EXTENDED_ADVERTISING
-        if (hci_extended_advertising_supported()){
+        if (hci_le_extended_advertising_supported()){
             hci_send_cmd(&hci_le_set_extended_scan_enable, 1, hci_stack->le_scan_filter_duplicates, 0, 0);
         } else
 #endif
@@ -6780,7 +6851,7 @@ static bool hci_run_general_gap_le(void){
         hci_get_own_address_for_addr_type(hci_stack->le_advertisements_own_addr_type, hci_stack->le_advertisements_own_address);
 
 #ifdef ENABLE_LE_EXTENDED_ADVERTISING
-        if (hci_extended_advertising_supported()){
+        if (hci_le_extended_advertising_supported()){
             const uint8_t advertising_handles[] = { 0 };
             const uint16_t durations[] = { 0 };
             const uint16_t max_events[] = { 0 };
@@ -6794,7 +6865,7 @@ static bool hci_run_general_gap_le(void){
     }
 
 #ifdef ENABLE_LE_EXTENDED_ADVERTISING
-    if (hci_extended_advertising_supported()) {
+    if (hci_le_extended_advertising_supported()) {
         btstack_linked_list_iterator_t it;
         btstack_linked_list_iterator_init(&it, &hci_stack->le_advertising_sets);
         while (btstack_linked_list_iterator_has_next(&it)) {
@@ -8361,18 +8432,19 @@ uint8_t gap_connect(const bd_addr_t addr, bd_addr_type_t addr_type) {
 }
 
 // @assumption: only a single outgoing LE Connection exists
-static hci_connection_t * gap_get_outgoing_connection(void){
+static hci_connection_t * gap_get_outgoing_le_connection(void){
     btstack_linked_item_t *it;
     for (it = (btstack_linked_item_t *) hci_stack->connections; it != NULL; it = it->next){
         hci_connection_t * conn = (hci_connection_t *) it;
-        if (!hci_is_le_connection(conn)) continue;
-        switch (conn->state){
-            case SEND_CREATE_CONNECTION:
-            case SENT_CREATE_CONNECTION:
-                return conn;
-            default:
-                break;
-        };
+        if (hci_is_le_connection(conn)){
+            switch (conn->state){
+                case SEND_CREATE_CONNECTION:
+                case SENT_CREATE_CONNECTION:
+                    return conn;
+                default:
+                    break;
+            };
+        }
     }
     return NULL;
 }
@@ -8388,7 +8460,7 @@ uint8_t gap_connect_cancel(void){
             break;
         case LE_CONNECTING_DIRECT:
             hci_stack->le_connecting_request = LE_CONNECTING_IDLE;
-            conn = gap_get_outgoing_connection();
+            conn = gap_get_outgoing_le_connection();
             if (conn == NULL){
                 hci_run();
             } else {
@@ -8806,7 +8878,7 @@ void hci_le_random_address_set(const bd_addr_t random_address){
     hci_stack->le_random_address_set = true;
     hci_stack->le_advertisements_todo |= LE_ADVERTISEMENT_TASKS_SET_ADDRESS;
 #ifdef ENABLE_LE_EXTENDED_ADVERTISING
-    if (hci_extended_advertising_supported()){
+    if (hci_le_extended_advertising_supported()){
         hci_assert_advertisement_set_0_ready();
         hci_stack->le_advertisements_todo |= LE_ADVERTISEMENT_TASKS_SET_ADDRESS_SET_0;
     }

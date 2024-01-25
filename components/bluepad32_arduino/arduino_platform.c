@@ -243,10 +243,9 @@ static void arduino_on_device_oob_event(uni_platform_oob_event_t event, void* da
     // TODO: Do something ?
 }
 
-static int32_t arduino_get_property(uni_platform_property_t key) {
-    // Deprecated
-    ARG_UNUSED(key);
-    return 0;
+static const uni_property_t* arduino_get_property(uni_property_idx_t idx) {
+    ARG_UNUSED(idx);
+    return NULL;
 }
 
 //

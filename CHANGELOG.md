@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0-beta0] - 2024-02-04
+- Bluepad32 v4.0-beta0
+- BTstack develop branch: 4b3f8617054370b0e96650ee65edea1c23591ed4
+
 ## [3.10.2] - 2023-11-14
 - Bluepad32 v3.10.2
 - BTstack develop branch: d30de50130b2838470ab89e3ae004198f0188810

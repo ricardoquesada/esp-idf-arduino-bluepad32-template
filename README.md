@@ -8,7 +8,7 @@ This is a template application to be used with [Espressif IoT Development Framew
 
 Please check [ESP-IDF docs](https://docs.espressif.com/projects/esp-idf/en/latest/get-started/index.html) for getting started instructions.
 
-Requires ESP-IDF **v4.4** or newer.
+Requires ESP-IDF **v4.4**.x (don't use 5.x!)
 
 Includes the following ESP-IDF components, with a pre-configured `sdkconfig` file:
 

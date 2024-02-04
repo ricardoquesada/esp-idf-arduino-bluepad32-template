@@ -223,13 +223,15 @@ static void hci_trigger_remote_features_for_connection(hci_connection_t * connec
 #endif
 
 #ifdef ENABLE_BLE
+static bool hci_run_general_gap_le(void);
+static void gap_privacy_clients_handle_ready(void);
+static void gap_privacy_clients_notify(bd_addr_t new_random_address);
 #ifdef ENABLE_LE_CENTRAL
 // called from test/ble_client/advertising_data_parser.c
 void le_handle_advertisement_report(uint8_t *packet, uint16_t size);
 static uint8_t hci_whitelist_remove(bd_addr_type_t address_type, const bd_addr_t address);
 static hci_connection_t * gap_get_outgoing_le_connection(void);
 static void hci_le_scan_stop(void);
-static bool hci_run_general_gap_le(void);
 #endif
 #ifdef ENABLE_LE_PERIPHERAL
 #ifdef ENABLE_LE_EXTENDED_ADVERTISING
@@ -254,7 +256,6 @@ static void hci_emit_big_sync_stopped(uint8_t big_handle);
 static void hci_emit_cig_created(const le_audio_cig_t * cig, uint8_t status);
 static void hci_cis_handle_created(hci_iso_stream_t * iso_stream, uint8_t status);
 static le_audio_big_sync_t * hci_big_sync_for_handle(uint8_t big_handle);
-
 #endif /* ENABLE_LE_ISOCHRONOUS_STREAMS */
 #endif /* ENABLE_BLE */
 
@@ -278,11 +279,11 @@ static void hci_connection_init(hci_connection_t * conn){
     conn->authentication_flags = AUTH_FLAG_NONE;
     conn->bonding_flags = 0;
     conn->requested_security_level = LEVEL_0;
+    conn->link_key_type = INVALID_LINK_KEY;
 #ifdef ENABLE_CLASSIC
     conn->request_role = HCI_ROLE_INVALID;
     conn->sniff_subrating_max_latency = 0xffff;
     conn->qos_service_type = HCI_SERVICE_TYPE_INVALID;
-    conn->link_key_type = INVALID_LINK_KEY;
     btstack_run_loop_set_timer_handler(&conn->timeout, hci_connection_timeout_handler);
     btstack_run_loop_set_timer_context(&conn->timeout, conn);
     hci_connection_timestamp(conn);
@@ -814,19 +815,15 @@ bool hci_is_packet_buffer_reserved(void){
     return hci_stack->hci_packet_buffer_reserved;
 }
 
-// reserves outgoing packet buffer. 
-// @return 1 if successful
-bool hci_reserve_packet_buffer(void){
-    if (hci_stack->hci_packet_buffer_reserved) {
-        log_error("hci_reserve_packet_buffer called but buffer already reserved");
-        return false;
-    }
+void hci_reserve_packet_buffer(void){
+    btstack_assert(hci_stack->hci_packet_buffer_reserved == false);
     hci_stack->hci_packet_buffer_reserved = true;
-    return true;
 }
 
 void hci_release_packet_buffer(void){
+    btstack_assert(hci_stack->hci_packet_buffer_reserved);
     hci_stack->hci_packet_buffer_reserved = false;
+    hci_emit_transport_packet_sent();
 }
 
 // assumption: synchronous implementations don't provide can_send_packet_now as they don't keep the buffer after the call
@@ -963,7 +960,6 @@ static uint8_t hci_send_acl_packet_fragments(hci_connection_t *connection){
     if (hci_transport_synchronous()){
         hci_stack->acl_fragmentation_tx_active = 0;
         hci_release_packet_buffer();
-        hci_emit_transport_packet_sent();
     }
 
     return status;
@@ -980,7 +976,6 @@ uint8_t hci_send_acl_packet_buffer(int size){
     if (!connection) {
         log_error("hci_send_acl_packet_buffer called but no connection for handle 0x%04x", con_handle);
         hci_release_packet_buffer();
-        hci_emit_transport_packet_sent();
         return ERROR_CODE_UNKNOWN_CONNECTION_IDENTIFIER;
     }
 
@@ -988,7 +983,6 @@ uint8_t hci_send_acl_packet_buffer(int size){
     if (!hci_can_send_prepared_acl_packet_now(con_handle)) {
         log_error("hci_send_acl_packet_buffer called but no free ACL buffers on controller");
         hci_release_packet_buffer();
-        hci_emit_transport_packet_sent();
         return BTSTACK_ACL_BUFFERS_FULL;
     }
 
@@ -1020,7 +1014,6 @@ uint8_t hci_send_sco_packet_buffer(int size){
         if (!hci_can_send_prepared_sco_packet_now()) {
             log_error("hci_send_sco_packet_buffer called but no free SCO buffers on controller");
             hci_release_packet_buffer();
-            hci_emit_transport_packet_sent();
             return BTSTACK_ACL_BUFFERS_FULL;
         }
 
@@ -1029,7 +1022,6 @@ uint8_t hci_send_sco_packet_buffer(int size){
         if (!connection) {
             log_error("hci_send_sco_packet_buffer called but no connection for handle 0x%04x", con_handle);
             hci_release_packet_buffer();
-            hci_emit_transport_packet_sent();
             return ERROR_CODE_UNKNOWN_CONNECTION_IDENTIFIER;
         }
 
@@ -1057,7 +1049,6 @@ uint8_t hci_send_sco_packet_buffer(int size){
     int err = hci_stack->hci_transport->send_packet(HCI_SCO_DATA_PACKET, packet, size);
     if (hci_transport_synchronous()){
         hci_release_packet_buffer();
-        hci_emit_transport_packet_sent();
     }
 
     if (err != 0){
@@ -2018,6 +2009,7 @@ static void hci_initializing_run(void){
                 }
 
                 if (send_cmd){
+                    hci_reserve_packet_buffer();
                     int size = 3u + hci_stack->hci_packet_buffer[2u];
                     hci_stack->last_cmd_opcode = little_endian_read_16(hci_stack->hci_packet_buffer, 0);
                     hci_dump_packet(HCI_COMMAND_DATA_PACKET, 0, hci_stack->hci_packet_buffer, size);
@@ -4089,13 +4081,15 @@ static void event_handler(uint8_t *packet, uint16_t size){
 #endif
                         }
 
+#ifdef ENABLE_MUTUAL_AUTHENTICATION_FOR_LEGACY_SECURE_CONNECTIONS
                         // if AES-CCM is used, authentication used SC -> authentication was mutual and we can skip explicit authentication
                         if (connected_uses_aes_ccm){
                             conn->authentication_flags |= AUTH_FLAG_CONNECTION_AUTHENTICATED;
                         }
-
-#ifdef ENABLE_TESTING_SUPPORT
-                        // work around for issue with PTS dongle
+#else
+                        // We consider even Legacy Secure Connections as authenticated as BTstack mandates encryption
+                        // with encryption key size > hci_stack->gap_required_encyrption_key_size
+                        // for all operations that require any security. See BIAS attacks.
                         conn->authentication_flags |= AUTH_FLAG_CONNECTION_AUTHENTICATED;
 #endif
                         // validate encryption key size
@@ -4296,7 +4290,10 @@ static void event_handler(uint8_t *packet, uint16_t size){
             if (hci_stack->iso_fragmentation_total_size) break;
 #endif
             if (hci_stack->acl_fragmentation_total_size) break;
-            hci_release_packet_buffer();
+
+            // release packet buffer without HCI_EVENT_TRANSPORT_PACKET_SENT (as it will be later)
+            btstack_assert(hci_stack->hci_packet_buffer_reserved);
+            hci_stack->hci_packet_buffer_reserved = false;
 
 #ifdef ENABLE_LE_ISOCHRONOUS_STREAMS
             hci_iso_notify_can_send_now();
@@ -6352,6 +6349,18 @@ static bool hci_run_general_gap_le(void){
 
     // Phase 3: modify
 
+    if (hci_stack->le_advertisements_todo & LE_ADVERTISEMENT_TASKS_PRIVACY_NOTIFY) {
+        hci_stack->le_advertisements_todo &= ~LE_ADVERTISEMENT_TASKS_PRIVACY_NOTIFY;
+        // GAP Privacy, notify clients upon upcoming random address change
+        hci_stack->le_advertisements_state |= LE_ADVERTISEMENT_STATE_PRIVACY_PENDING;
+        gap_privacy_clients_notify(hci_stack->le_random_address);
+    }
+
+    // - wait until privacy update completed
+    if ((hci_stack->le_advertisements_state & LE_ADVERTISEMENT_STATE_PRIVACY_PENDING) != 0){
+        return false;
+    }
+
     if (hci_stack->le_advertisements_todo & LE_ADVERTISEMENT_TASKS_SET_ADDRESS){
         hci_stack->le_advertisements_todo &= ~LE_ADVERTISEMENT_TASKS_SET_ADDRESS;
         hci_send_cmd(&hci_le_set_random_address, hci_stack->le_random_address);
@@ -6982,6 +6991,7 @@ static bool hci_run_iso_tasks(void){
     }
 
     // CIG
+    bool cig_active;
     btstack_linked_list_iterator_init(&it, &hci_stack->le_audio_cigs);
     while (btstack_linked_list_iterator_has_next(&it)) {
         le_audio_cig_t *cig = (le_audio_cig_t *) btstack_linked_list_iterator_next(&it);
@@ -7067,12 +7077,30 @@ static bool hci_run_iso_tasks(void){
                 }
                 // emit done
                 cig->state = LE_AUDIO_CIG_STATE_ACTIVE;
+                break;
+            case LE_AUDIO_CIG_STATE_REMOVE:
+                // check if CIG Active
+                cig_active = false;
+                for (i = 0; i < cig->num_cis; i++) {
+                    if (cig->cis_con_handles[i] != HCI_CON_HANDLE_INVALID){
+                        hci_iso_stream_t * stream = hci_iso_stream_for_con_handle(cig->cis_con_handles[i]);
+                        if (stream != NULL){
+                            cig_active = true;
+                            break;
+                        }
+                    }
+                }
+                if (cig_active == false){
+                    btstack_linked_list_iterator_remove(&it);
+                    hci_send_cmd(&hci_le_remove_cig, cig->cig_id);
+                    return true;
+                }
             default:
                 break;
         }
     }
 
-    // CIS Accept/Reject
+    // CIS Accept/Reject/Setup ISO Path/Close
     btstack_linked_list_iterator_init(&it, &hci_stack->iso_streams);
     while (btstack_linked_list_iterator_has_next(&it)) {
         hci_iso_stream_t *iso_stream = (hci_iso_stream_t *) btstack_linked_list_iterator_next(&it);
@@ -7102,6 +7130,10 @@ static bool hci_run_iso_tasks(void){
                 hci_stack->iso_active_operation_type = HCI_ISO_TYPE_CIS;
                 iso_stream->state = HCI_ISO_STREAM_STATE_W4_ISO_SETUP_OUTPUT;
                 hci_send_cmd(&hci_le_setup_iso_data_path, iso_stream->cis_handle, 1, 0, HCI_AUDIO_CODING_FORMAT_TRANSPARENT, 0, 0, 0, 0, NULL);
+                break;
+            case HCI_ISO_STREAM_STATE_W2_CLOSE:
+                iso_stream->state = HCI_ISO_STREAM_STATE_W4_DISCONNECTED;
+                hci_send_cmd(&hci_disconnect, iso_stream->cis_handle);
                 break;
             default:
                 break;
@@ -7835,7 +7867,6 @@ uint8_t hci_send_cmd_va_arg(const hci_cmd_t * cmd, va_list argptr){
     // release packet buffer on error or for synchronous transport implementations
     if ((status != ERROR_CODE_SUCCESS) || hci_transport_synchronous()){
         hci_release_packet_buffer();
-        hci_emit_transport_packet_sent();
     }
 
     return status;
@@ -8874,9 +8905,10 @@ void hci_le_set_own_address_type(uint8_t own_address_type){
 }
 
 void hci_le_random_address_set(const bd_addr_t random_address){
+    log_info("gap_privacy: hci_le_random_address_set %s", bd_addr_to_str(random_address));
     memcpy(hci_stack->le_random_address, random_address, 6);
     hci_stack->le_random_address_set = true;
-    hci_stack->le_advertisements_todo |= LE_ADVERTISEMENT_TASKS_SET_ADDRESS;
+    hci_stack->le_advertisements_todo |= LE_ADVERTISEMENT_TASKS_SET_ADDRESS | LE_ADVERTISEMENT_TASKS_PRIVACY_NOTIFY;
 #ifdef ENABLE_LE_EXTENDED_ADVERTISING
     if (hci_le_extended_advertising_supported()){
         hci_assert_advertisement_set_0_ready();
@@ -10541,8 +10573,29 @@ uint8_t gap_cig_create(le_audio_cig_t * storage, le_audio_cig_params_t * cig_par
     return ERROR_CODE_SUCCESS;
 }
 
-uint8_t gap_cis_create(uint8_t cig_handle, hci_con_handle_t cis_con_handles [], hci_con_handle_t acl_con_handles []){
-    le_audio_cig_t * cig = hci_cig_for_id(cig_handle);
+uint8_t gap_cig_remove(uint8_t cig_id){
+    le_audio_cig_t * cig = hci_cig_for_id(cig_id);
+    if (cig == NULL){
+        return ERROR_CODE_UNKNOWN_CONNECTION_IDENTIFIER;
+    }
+
+    // close active CIS
+    uint8_t i;
+    for (i=0;i<cig->num_cis;i++){
+        hci_iso_stream_t * stream = hci_iso_stream_for_con_handle(cig->cis_con_handles[i]);
+        if (stream != NULL){
+            stream->state = HCI_ISO_STREAM_STATE_W2_CLOSE;
+        }
+    }
+    cig->state = LE_AUDIO_CIG_STATE_REMOVE;
+
+    hci_run();
+
+    return ERROR_CODE_SUCCESS;
+}
+
+uint8_t gap_cis_create(uint8_t cig_id, hci_con_handle_t cis_con_handles [], hci_con_handle_t acl_con_handles []){
+    le_audio_cig_t * cig = hci_cig_for_id(cig_id);
     if (cig == NULL){
         return ERROR_CODE_UNKNOWN_CONNECTION_IDENTIFIER;
     }
@@ -10603,8 +10656,66 @@ uint8_t gap_cis_reject(hci_con_handle_t cis_con_handle){
     return hci_cis_accept_or_reject(cis_con_handle, HCI_ISO_STREAM_W2_REJECT);
 }
 
+#endif /* ENABLE_LE_ISOCHRONOUS_STREAMS */
 
-#endif
+// GAP Privacy - notify clients before random address update
+
+static bool gap_privacy_client_all_ready(void){
+    // check if all ready
+    btstack_linked_list_iterator_t it;
+    btstack_linked_list_iterator_init(&it, &hci_stack->gap_privacy_clients);
+    while (btstack_linked_list_iterator_has_next(&it)) {
+        gap_privacy_client_t *client = (gap_privacy_client_t *) btstack_linked_list_iterator_next(&it);
+        if (client->state != GAP_PRIVACY_CLIENT_STATE_READY){
+            return false;
+        }
+    }
+    return true;
+}
+
+static void gap_privacy_clients_handle_ready(void){
+    // clear 'ready'
+    btstack_linked_list_iterator_t it;
+    btstack_linked_list_iterator_init(&it, &hci_stack->gap_privacy_clients);
+    while (btstack_linked_list_iterator_has_next(&it)) {
+        gap_privacy_client_t *client = (gap_privacy_client_t *) btstack_linked_list_iterator_next(&it);
+        client->state = GAP_PRIVACY_CLIENT_STATE_IDLE;
+    }
+    hci_stack->le_advertisements_state &= ~LE_ADVERTISEMENT_STATE_PRIVACY_PENDING;
+    hci_run();
+}
+
+static void gap_privacy_clients_notify(bd_addr_t new_random_address){
+    btstack_linked_list_iterator_t it;
+    btstack_linked_list_iterator_init(&it, &hci_stack->gap_privacy_clients);
+    while (btstack_linked_list_iterator_has_next(&it)) {
+        gap_privacy_client_t *client = (gap_privacy_client_t *) btstack_linked_list_iterator_next(&it);
+        if (client->state == GAP_PRIVACY_CLIENT_STATE_IDLE){
+            client->state = GAP_PRIVACY_CLIENT_STATE_PENDING;
+            (*client->callback)(client, new_random_address);
+        }
+    }
+    if (gap_privacy_client_all_ready()){
+        gap_privacy_clients_handle_ready();
+    }
+}
+
+void gap_privacy_client_register(gap_privacy_client_t * client){
+    client->state = GAP_PRIVACY_CLIENT_STATE_IDLE;
+    btstack_linked_list_add(&hci_stack->gap_privacy_clients, (btstack_linked_item_t *) client);
+}
+
+void gap_privacy_client_ready(gap_privacy_client_t * client){
+    client->state = GAP_PRIVACY_CLIENT_STATE_READY;
+    if (gap_privacy_client_all_ready()){
+        gap_privacy_clients_handle_ready();
+    }
+}
+
+void gap_privacy_client_unregister(gap_privacy_client_t * client){
+    btstack_linked_list_remove(&hci_stack->gap_privacy_clients, (btstack_linked_item_t *) client);
+}
+
 #endif /* ENABLE_BLE */
 
 #ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION

@@ -551,15 +551,19 @@ handle_l2cap_data_packet_for_signaling_connection(avdtp_connection_t *connection
     if (size < 2) return;
 
     uint16_t offset;
-    avdtp_message_type_t message_type = avdtp_get_signaling_packet_type(packet);
+    avdtp_message_type_t message_type = avdtp_get_signaling_message_type(packet);
     switch (message_type){
         case AVDTP_CMD_MSG:
             offset = avdtp_read_signaling_header(&connection->acceptor_signaling_packet, packet, size);
-            avdtp_acceptor_stream_config_subsm(connection, packet, size, offset);
+            if (offset > 0){
+                avdtp_acceptor_stream_config_subsm(connection, packet, size, offset);
+            }
             break;
         default:
-            offset = avdtp_read_signaling_header(&connection->initiator_signaling_packet, packet, size);
-            avdtp_initiator_stream_config_subsm(connection, packet, size, offset);
+                offset = avdtp_read_signaling_header(&connection->initiator_signaling_packet, packet, size);
+            if (offset > 0) {
+                avdtp_initiator_stream_config_subsm(connection, packet, size, offset);
+            }
             break;
     }
 }
@@ -1658,3 +1662,19 @@ void avdtp_deinit(void){
     avdtp_record_id = 0;
     avdtp_cid_counter = 0;
 }
+
+#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#define FUZZ_CID 0x44
+#define FUZZ_CON_HANDLE 0x0001
+static bd_addr_t remote_addr = { 0x33, 0x33, 0x33, 0x33, 0x33, 0x33 };
+void avdtp_init_fuzz(void){
+    // setup avdtp connections for cid
+    avdtp_connection_t * connection = avdtp_create_connection(remote_addr, FUZZ_CID);
+    connection->state = AVDTP_SIGNALING_CONNECTION_OPENED;
+    connection->l2cap_signaling_cid = FUZZ_CID;
+    connection->con_handle = FUZZ_CON_HANDLE;
+}
+void avdtp_packet_handler_fuzz(uint8_t *packet, uint16_t size){
+    avdtp_packet_handler(L2CAP_DATA_PACKET, FUZZ_CID, packet, size);
+}
+#endif

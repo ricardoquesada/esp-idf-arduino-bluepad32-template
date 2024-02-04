@@ -721,6 +721,8 @@ typedef enum{
     HCI_ISO_STREAM_STATE_W4_ISO_SETUP_INPUT,
     HCI_ISO_STREAM_STATE_W2_SETUP_ISO_OUTPUT,
     HCI_ISO_STREAM_STATE_W4_ISO_SETUP_OUTPUT,
+    HCI_ISO_STREAM_STATE_W2_CLOSE,
+    HCI_ISO_STREAM_STATE_W4_DISCONNECTED,
 } hci_iso_stream_state_t;
 
 typedef struct {
@@ -938,6 +940,7 @@ enum {
     LE_ADVERTISEMENT_TASKS_REMOVE_SET           = 1 << 5,
     LE_ADVERTISEMENT_TASKS_SET_ADDRESS          = 1 << 6,
     LE_ADVERTISEMENT_TASKS_SET_ADDRESS_SET_0    = 1 << 7,
+    LE_ADVERTISEMENT_TASKS_PRIVACY_NOTIFY       = 1 << 8,
 };
 
 enum {
@@ -947,6 +950,7 @@ enum {
     LE_ADVERTISEMENT_STATE_ENABLED          = 1 << 2,
     LE_ADVERTISEMENT_STATE_PERIODIC_ACTIVE  = 1 << 3,
     LE_ADVERTISEMENT_STATE_PERIODIC_ENABLED = 1 << 4,
+    LE_ADVERTISEMENT_STATE_PRIVACY_PENDING  = 1 << 5,
 };
 
 enum {
@@ -1210,6 +1214,9 @@ typedef struct {
     uint16_t le_minimum_ce_length;
     uint16_t le_maximum_ce_length;
 
+    // GAP Privacy
+    btstack_linked_list_t gap_privacy_clients;
+
 #ifdef ENABLE_HCI_COMMAND_STATUS_DISCARDED_FOR_FAILED_CONNECTIONS_WORKAROUND
     hci_con_handle_t hci_command_con_handle;
 #endif
@@ -1262,7 +1269,7 @@ typedef struct {
 
     // TODO: move LE_ADVERTISEMENT_TASKS_SET_ADDRESS flag which is used for both roles into
     //  some generic gap_le variable
-    uint8_t  le_advertisements_todo;
+    uint16_t  le_advertisements_todo;
 
 #ifdef ENABLE_LE_PERIPHERAL
     uint8_t  * le_advertisements_data;
@@ -1527,9 +1534,10 @@ uint8_t hci_send_iso_packet_buffer(uint16_t size);
 
 /**
  * Reserves outgoing packet buffer.
- * @return true on success
+ * @note Must only be called after a 'can send now' check or event
+ * @note Asserts if packet buffer is already reserved
  */
-bool hci_reserve_packet_buffer(void);
+void hci_reserve_packet_buffer(void);
 
 /**
  * Get pointer for outgoing packet buffer

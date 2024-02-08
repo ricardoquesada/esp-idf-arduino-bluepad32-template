@@ -236,8 +236,7 @@ void processControllers() {
             } else if (myController->isBalanceBoard()) {
                 processBalanceBoard(myController);
             } else {
-                Console.printf("Data not available yet\n");
-                continue;
+                Console.printf("Unsupported controller\n");
             }
         }
     }

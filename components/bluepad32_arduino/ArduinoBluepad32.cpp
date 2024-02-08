@@ -16,11 +16,23 @@ const char* Bluepad32::firmwareVersion() const {
     return "Bluepad32 for Arduino v" UNI_VERSION;
 }
 
-void Bluepad32::update() {
+bool Bluepad32::update() {
+    bool data_updated = false;
     int connectedControllers = 0;
+    int status;
+
     for (int i = 0; i < BP32_MAX_GAMEPADS; i++) {
-        if (arduino_get_controller_data(i, &_controllers[i]._data) == -1)
+        status = arduino_get_controller_data(i, &_controllers[i]._data);
+        if (status == UNI_ARDUINO_ERROR_INVALID_DEVICE)
             continue;
+
+        // If at least one controller has data, we return true.
+        if (status == UNI_ARDUINO_ERROR_SUCCESS)
+            data_updated = true;
+
+        // Update individual controller.
+        _controllers[i]._hasData = (status == UNI_ARDUINO_ERROR_SUCCESS);
+
         // Update Idx in case it is the first time to get updated.
         _controllers[i]._idx = i;
         connectedControllers |= (1 << i);
@@ -28,7 +40,7 @@ void Bluepad32::update() {
 
     // No changes in connected controllers. No need to call onConnected or onDisconnected.
     if (connectedControllers == _prevConnectedControllers)
-        return;
+        return data_updated;
 
     logi("connected in total: 0x%02x (flag)\n", connectedControllers);
 
@@ -54,6 +66,8 @@ void Bluepad32::update() {
     }
 
     _prevConnectedControllers = connectedControllers;
+
+    return data_updated;
 }
 
 void Bluepad32::forgetBluetoothKeys() {

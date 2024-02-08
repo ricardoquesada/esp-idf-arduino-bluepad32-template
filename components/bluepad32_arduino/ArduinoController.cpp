@@ -38,6 +38,8 @@ const struct Controller::controllerNames Controller::_controllerNames[] = {
     {Controller::CONTROLLER_TYPE_GenericController, "Generic"},
     {Controller::CONTROLLER_TYPE_NimbusController, "Nimbus"},
     {Controller::CONTROLLER_TYPE_OUYAController, "OUYA"},
+    {Controller::CONTROLLER_TYPE_PSMoveController, "PSMove"},
+    {Controller::CONTROLLER_TYPE_AtariJoystick, "Atari Joystick"},
 
     {Controller::CONTROLLER_TYPE_GenericKeyboard, "Keyboard"},
     {Controller::CONTROLLER_TYPE_GenericMouse, "Mouse"},
@@ -142,7 +144,7 @@ bool Controller::isModifierPressed(KeyboardKey key) const {
 void Controller::onConnected() {
     _connected = true;
     // Fetch properties, and have them cached.
-    if (arduino_get_controller_properties(_idx, &_properties) != UNI_ARDUINO_OK) {
+    if (arduino_get_controller_properties(_idx, &_properties) != UNI_ARDUINO_ERROR_SUCCESS) {
         loge("failed to get controller properties");
     }
 }

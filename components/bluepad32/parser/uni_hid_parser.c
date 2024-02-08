@@ -21,7 +21,7 @@ void uni_hid_parse_input_report(struct uni_hid_device_s* d, const uint8_t* repor
         rp->init_report(d);
 
     // Certain devices like Nintendo Wii U Pro doesn't support HID descriptor.
-    // For those kind of devices, just send the raw report.
+    // For those kinds of devices, send the raw report.
     if (rp->parse_input_report) {
         rp->parse_input_report(d, report, report_len);
     }

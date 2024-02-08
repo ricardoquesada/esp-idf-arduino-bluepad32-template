@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0-beta1] - ???
+- Bluepad32 v4.0-beta1 upstream
+- Arduino API:
+    - `BP32.update()` returns `true` if data was received.
+    - `Controller.hasData()` return `true` if data was received since
+      `BP32.update()` was called.
+
 ## [4.0-beta0] - 2024-02-04
 - Bluepad32 v4.0-beta0
 - BTstack develop branch: 4b3f8617054370b0e96650ee65edea1c23591ed4

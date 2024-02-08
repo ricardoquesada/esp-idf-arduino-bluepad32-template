@@ -234,6 +234,7 @@ static void arduino_on_controller_data(uni_hid_device_t* d, uni_controller_t* ct
     // Populate gamepad data on shared struct.
     xSemaphoreTake(_controller_mutex, portMAX_DELAY);
     _controllers[ins->controller_idx].data = *ctl;
+    _controllers[ins->controller_idx].data_updated = true;
     xSemaphoreGive(_controller_mutex);
 }
 
@@ -252,29 +253,43 @@ static const uni_property_t* arduino_get_property(uni_property_idx_t idx) {
 // CPU 1 - Application (Arduino) process
 //
 int arduino_get_gamepad_data(int idx, arduino_gamepad_data_t* out_data) {
-    if (idx < 0 || idx >= CONFIG_BLUEPAD32_MAX_DEVICES)
-        return UNI_ARDUINO_ERROR;
-    if (_controllers[idx].idx == UNI_ARDUINO_GAMEPAD_INVALID)
-        return UNI_ARDUINO_ERROR;
+    int ret;
 
+    if (idx < 0 || idx >= CONFIG_BLUEPAD32_MAX_DEVICES)
+        return UNI_ARDUINO_ERROR_INVALID_DEVICE;
+    if (_controllers[idx].idx == UNI_ARDUINO_GAMEPAD_INVALID)
+        return UNI_ARDUINO_ERROR_INVALID_DEVICE;
+
+    ret = UNI_ARDUINO_ERROR_NO_DATA;
     xSemaphoreTake(_controller_mutex, portMAX_DELAY);
-    *out_data = _controllers[idx].data.gamepad;
+    if (_controllers[idx].data_updated) {
+        *out_data = _controllers[idx].data.gamepad;
+        _controllers[idx].data_updated = false;
+        ret = UNI_ARDUINO_ERROR_SUCCESS;
+    }
     xSemaphoreGive(_controller_mutex);
 
-    return UNI_ARDUINO_OK;
+    return ret;
 }
 
 int arduino_get_controller_data(int idx, arduino_controller_data_t* out_data) {
-    if (idx < 0 || idx >= CONFIG_BLUEPAD32_MAX_DEVICES)
-        return UNI_ARDUINO_ERROR;
-    if (_controllers[idx].idx == UNI_ARDUINO_GAMEPAD_INVALID)
-        return UNI_ARDUINO_ERROR;
+    int ret;
 
+    if (idx < 0 || idx >= CONFIG_BLUEPAD32_MAX_DEVICES)
+        return UNI_ARDUINO_ERROR_INVALID_DEVICE;
+    if (_controllers[idx].idx == UNI_ARDUINO_GAMEPAD_INVALID)
+        return UNI_ARDUINO_ERROR_INVALID_DEVICE;
+
+    ret = UNI_ARDUINO_ERROR_NO_DATA;
     xSemaphoreTake(_controller_mutex, portMAX_DELAY);
-    *out_data = _controllers[idx].data;
+    if (_controllers[idx].data_updated) {
+        *out_data = _controllers[idx].data;
+        _controllers[idx].data_updated = false;
+        ret = UNI_ARDUINO_ERROR_SUCCESS;
+    }
     xSemaphoreGive(_controller_mutex);
 
-    return UNI_ARDUINO_OK;
+    return ret;
 }
 
 int arduino_get_gamepad_properties(int idx, arduino_gamepad_properties_t* out_properties) {
@@ -283,22 +298,22 @@ int arduino_get_gamepad_properties(int idx, arduino_gamepad_properties_t* out_pr
 
 int arduino_get_controller_properties(int idx, arduino_controller_properties_t* out_properties) {
     if (idx < 0 || idx >= CONFIG_BLUEPAD32_MAX_DEVICES)
-        return UNI_ARDUINO_ERROR;
+        return UNI_ARDUINO_ERROR_INVALID_DEVICE;
     if (_controllers[idx].idx == UNI_ARDUINO_GAMEPAD_INVALID)
-        return UNI_ARDUINO_ERROR;
+        return UNI_ARDUINO_ERROR_INVALID_DEVICE;
 
     xSemaphoreTake(_controller_mutex, portMAX_DELAY);
     *out_properties = _controllers[idx].properties;
     xSemaphoreGive(_controller_mutex);
 
-    return UNI_ARDUINO_OK;
+    return UNI_ARDUINO_ERROR_SUCCESS;
 }
 
 int arduino_set_player_leds(int idx, uint8_t leds) {
     if (idx < 0 || idx >= CONFIG_BLUEPAD32_MAX_DEVICES)
-        return UNI_ARDUINO_ERROR;
+        return UNI_ARDUINO_ERROR_INVALID_DEVICE;
     if (_controllers[idx].idx == UNI_ARDUINO_GAMEPAD_INVALID)
-        return UNI_ARDUINO_ERROR;
+        return UNI_ARDUINO_ERROR_INVALID_DEVICE;
 
     pending_request_t request = (pending_request_t){
         .controller_idx = idx,
@@ -307,14 +322,14 @@ int arduino_set_player_leds(int idx, uint8_t leds) {
     };
     xQueueSendToBack(_pending_queue, &request, (TickType_t)0);
 
-    return UNI_ARDUINO_OK;
+    return UNI_ARDUINO_ERROR_SUCCESS;
 }
 
 int arduino_set_lightbar_color(int idx, uint8_t r, uint8_t g, uint8_t b) {
     if (idx < 0 || idx >= CONFIG_BLUEPAD32_MAX_DEVICES)
-        return UNI_ARDUINO_ERROR;
+        return UNI_ARDUINO_ERROR_INVALID_DEVICE;
     if (_controllers[idx].idx == UNI_ARDUINO_GAMEPAD_INVALID)
-        return UNI_ARDUINO_ERROR;
+        return UNI_ARDUINO_ERROR_INVALID_DEVICE;
 
     pending_request_t request = (pending_request_t){
         .controller_idx = idx,
@@ -325,14 +340,14 @@ int arduino_set_lightbar_color(int idx, uint8_t r, uint8_t g, uint8_t b) {
     };
     xQueueSendToBack(_pending_queue, &request, (TickType_t)0);
 
-    return UNI_ARDUINO_OK;
+    return UNI_ARDUINO_ERROR_SUCCESS;
 }
 
 int arduino_set_rumble(int idx, uint8_t force, uint8_t duration) {
     if (idx < 0 || idx >= CONFIG_BLUEPAD32_MAX_DEVICES)
-        return UNI_ARDUINO_ERROR;
+        return UNI_ARDUINO_ERROR_INVALID_DEVICE;
     if (_controllers[idx].idx == UNI_ARDUINO_GAMEPAD_INVALID)
-        return UNI_ARDUINO_ERROR;
+        return UNI_ARDUINO_ERROR_INVALID_DEVICE;
 
     pending_request_t request = (pending_request_t){
         .controller_idx = idx,
@@ -342,14 +357,14 @@ int arduino_set_rumble(int idx, uint8_t force, uint8_t duration) {
     };
     xQueueSendToBack(_pending_queue, &request, (TickType_t)0);
 
-    return UNI_ARDUINO_OK;
+    return UNI_ARDUINO_ERROR_SUCCESS;
 }
 
 int arduino_disconnect_controller(int idx) {
     if (idx < 0 || idx >= CONFIG_BLUEPAD32_MAX_DEVICES)
-        return UNI_ARDUINO_ERROR;
+        return UNI_ARDUINO_ERROR_INVALID_DEVICE;
     if (_controllers[idx].idx == UNI_ARDUINO_GAMEPAD_INVALID)
-        return UNI_ARDUINO_ERROR;
+        return UNI_ARDUINO_ERROR_INVALID_DEVICE;
 
     pending_request_t request = (pending_request_t){
         .controller_idx = idx,
@@ -357,12 +372,12 @@ int arduino_disconnect_controller(int idx) {
     };
     xQueueSendToBack(_pending_queue, &request, (TickType_t)0);
 
-    return UNI_ARDUINO_OK;
+    return UNI_ARDUINO_ERROR_SUCCESS;
 }
 
 int arduino_forget_bluetooth_keys(void) {
     uni_bt_del_keys_safe();
-    return UNI_ARDUINO_OK;
+    return UNI_ARDUINO_ERROR_SUCCESS;
 }
 
 static void version(void) {

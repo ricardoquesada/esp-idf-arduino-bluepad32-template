@@ -53,6 +53,8 @@ class Controller {
         CONTROLLER_TYPE_GenericController = 53,        // (Bluepad32)
         CONTROLLER_TYPE_NimbusController = 54,         // (Bluepad32)
         CONTROLLER_TYPE_OUYAController = 55,           // (Bluepad32)
+        CONTROLLER_TYPE_PSMoveController = 56,         // (Bluepad32)
+        CONTROLLER_TYPE_AtariJoystick = 57,            // (Bluepad32)
 
         CONTROLLER_TYPE_LastController,  // Don't add game controllers below this
                                          // enumeration - this enumeration can
@@ -113,7 +115,7 @@ class Controller {
         return 0;
     }
 
-    // To test one button at the time.
+    // To test one button at a time.
     bool a() const { return buttons() & BUTTON_A; }
     bool b() const { return buttons() & BUTTON_B; }
     bool x() const { return buttons() & BUTTON_X; }
@@ -165,6 +167,9 @@ class Controller {
     // 255 = Battery full
     uint8_t battery() const { return _data.battery; }
 
+    // Returns whether the controller has received data since the last time BP32.updated() was called.
+    bool hasData() const { return _hasData; }
+
     bool isGamepad() const { return _data.klass == UNI_CONTROLLER_CLASS_GAMEPAD; }
     bool isMouse() const { return _data.klass == UNI_CONTROLLER_CLASS_MOUSE; }
     bool isBalanceBoard() const { return _data.klass == UNI_CONTROLLER_CLASS_BALANCE_BOARD; }
@@ -195,6 +200,7 @@ class Controller {
     int8_t _idx;
     ControllerData _data;
     ControllerProperties _properties;
+    bool _hasData;
 
     // Delete copy constructor to avoid copying the state by mistake. If so,
     // chances are that the controller won't get updated automatically.

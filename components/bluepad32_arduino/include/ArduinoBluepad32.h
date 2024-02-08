@@ -38,8 +38,10 @@ class Bluepad32 {
     const char* firmwareVersion() const;
     void setDebug(uint8_t on);
 
-    // Controller
-    void update();
+    // Request to update the controllers' data.
+    // Returns true if data was updated.
+    // False otherwise.
+    bool update();
 
     // When a controller is paired to the ESP32, the ESP32 stores keys to enable reconnection.
     // If you want to "forget" (delete) the keys from ESP32, you should call this

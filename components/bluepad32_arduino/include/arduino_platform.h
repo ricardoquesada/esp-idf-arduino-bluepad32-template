@@ -30,8 +30,9 @@ extern "C" {
 #include "uni_common.h"
 
 enum {
-    UNI_ARDUINO_OK = 0,
-    UNI_ARDUINO_ERROR = -1,
+    UNI_ARDUINO_ERROR_SUCCESS = 0,
+    UNI_ARDUINO_ERROR_INVALID_DEVICE = -1,
+    UNI_ARDUINO_ERROR_NO_DATA = -2,
 };
 
 enum {
@@ -60,6 +61,7 @@ typedef arduino_controller_properties_t arduino_gamepad_properties_t;
 typedef struct {
     int8_t idx;  // Gamepad index
     arduino_controller_data_t data;
+    bool data_updated;
 
     // TODO: To reduce RAM, the properties should be calculated at "request time", and
     // not store them "forever".

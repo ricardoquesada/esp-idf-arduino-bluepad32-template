@@ -36,7 +36,6 @@ class Bluepad32 {
      * result: version as string with this format a.b.c
      */
     const char* firmwareVersion() const;
-    void setDebug(uint8_t on);
 
     // Request to update the controllers' data.
     // Returns true if data was updated.
@@ -57,9 +56,14 @@ class Bluepad32 {
     // Enables mouse / touchpad support for gamepads that support them.
     // When enabled controllers like DualSense and DualShock4 generate two connected devices:
     // - First one: the gamepad
-    // - Second one, which is a "vritual device", is a mouse
-    // By default it is disabled.
+    // - Second one, which is a "virtual device", is a mouse,
+    // By default, it is disabled.
     void enableVirtualDevice(bool enabled);
+
+    // Enables the BLE Service in Bluepad32.
+    // This service allows clients, like a mobile app, to setup and see the state of Bluepad32.
+    // By default, it is disabled.
+    void enableBLEService(bool enabled);
 
     void setup(const ControllerCallback& onConnect, const ControllerCallback& onDisconnect);
 

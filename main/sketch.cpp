@@ -250,6 +250,11 @@ void setup() {
     // - Second one, which is a "virtual device", is a mouse.
     // By default, it is disabled.
     BP32.enableVirtualDevice(false);
+
+    // Enables the BLE Service in Bluepad32.
+    // This service allows clients, like a mobile app, to setup and see the state of Bluepad32.
+    // By default, it is disabled.
+    BP32.enableBLEService(false);
 }
 
 // Arduino loop function. Runs in CPU 1.

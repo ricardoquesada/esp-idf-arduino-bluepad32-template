@@ -404,6 +404,11 @@ static void att_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t* p
     }
 }
 
+void uni_bt_service_deinit(void) {
+    att_server_deinit();
+    gap_advertisements_enable(false);
+}
+
 /*
  * Configures the ATT Server with the pre-compiled ATT Database generated from the .gatt file.
  * Finally, it configures the advertisements.
@@ -439,8 +444,17 @@ void uni_bt_service_init(void) {
 bool uni_bt_service_is_enabled() {
     return service_enabled;
 }
+
 void uni_bt_service_set_enabled(bool enabled) {
+    if (enabled == service_enabled)
+        return;
+
     service_enabled = enabled;
+
+    if (service_enabled)
+        uni_bt_service_init();
+    else
+        uni_bt_service_deinit();
 }
 
 void uni_bt_service_on_device_ready(const uni_hid_device_t* d) {

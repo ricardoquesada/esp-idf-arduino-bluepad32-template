@@ -93,4 +93,8 @@ void Bluepad32::enableVirtualDevice(bool enabled) {
     uni_virtual_device_set_enabled(enabled);
 }
 
+void Bluepad32::enableBLEService(bool enabled) {
+    uni_bt_enable_service_safe(enabled);
+}
+
 Bluepad32 BP32;

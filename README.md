@@ -29,7 +29,7 @@ After cloning the *template* you have two options:
 * A) Using PlatformIO (easier)
 * B) or Using ESP-IDF (requires more steps)
 
-### A) Using PlatformIO
+### A) Using PlatformIO + ESP-IDF
 
 ![open_project][pio_open_project]
 
@@ -44,7 +44,7 @@ It might take a few minutes to download all dependencies. Be patient.
 
 After all dependencies were installed:
 
-1. Click on one of the pre-created boards, like *esp32-s3-devkit-1*. Or edit `platform.io` file, and add your own.
+1. Click on one of the pre-created boards, like *esp32-s3-devkit-1*. Or edit `platformio.ini` file, and add your own.
 2. Click on *build*
  
 ![monitor_project][pio_monitor_project]

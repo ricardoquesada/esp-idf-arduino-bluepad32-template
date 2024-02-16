@@ -18,7 +18,25 @@ Includes the following ESP-IDF components, with a pre-configured `sdkconfig` fil
 
 ## How to compile it
 
-### For Windows
+Clone the template project:
+
+   ```sh
+   git clone --recursive https://gitlab.com/ricardoquesada/esp-idf-arduino-bluepad32-template.git my_project
+   ```
+
+
+### A) Using PlatformIO
+
+1. Open Visual Studio Code with the PlatformIO plugin
+2. From the PlatfromIO plugin, open the `my_project` folder.
+
+That's it. The PlatformIO will download all ESP-IDF toolchain.
+
+3. To 
+
+### or B) Using ESP-IDF
+
+#### For Windows
 
 1. Install [ESP-IDF v4.4][esp-idf-windows-installer]. For further info, read: [ESP-IDF Getting Started for Windows][esp-idf-windows-setup]
 
@@ -28,13 +46,7 @@ Includes the following ESP-IDF components, with a pre-configured `sdkconfig` fil
 
 2. Launch the "ESP-IDF v4.4 CMD" (type that in the Windows search box)
 
-3. From the ESP-IDF cmd, clone the template
-
-   ```sh
-   git clone --recursive https://gitlab.com/ricardoquesada/esp-idf-arduino-bluepad32-template.git my_project
-   ```
-
-4. Compile it
+3. Compile it
 
     ```sh
     # Compile it
@@ -48,7 +60,7 @@ Includes the following ESP-IDF components, with a pre-configured `sdkconfig` fil
 [esp-idf-windows-setup]: https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/windows-setup.html
 [esp-idf-windows-installer]: https://dl.espressif.com/dl/esp-idf/?idf=4.4
 
-### For Linux / macOS
+#### For Linux / macOS
 
 1. Requirements and permissions
 

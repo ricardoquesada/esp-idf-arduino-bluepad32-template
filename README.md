@@ -24,15 +24,39 @@ Clone the template project:
    git clone --recursive https://gitlab.com/ricardoquesada/esp-idf-arduino-bluepad32-template.git my_project
    ```
 
+After cloning the *template* you have two options:
+
+* A) Using PlatformIO (easier)
+* B) or Using ESP-IDF (requires more steps)
 
 ### A) Using PlatformIO
 
-1. Open Visual Studio Code with the PlatformIO plugin
-2. From the PlatfromIO plugin, open the `my_project` folder.
+![open_project][pio_open_project]
 
-That's it. The PlatformIO will download all ESP-IDF toolchain.
+1. Open Visual Studio Code, select the PlatformIO plugin
+2. Click on "Pick a folder", a select the recently cloned "my_project" folder
 
-3. To 
+That's it. The PlatformIO will download the ESP-IDF toolchain and its dependencies.
+
+It might take a few minutes to download all dependencies. Be patient.
+
+![build_project][pio_build_project]
+
+After all dependencies were installed:
+
+1. Click on one of the pre-created boards, like *esp32-s3-devkit-1*. Or edit `platform.io` file, and add your own.
+2. Click on *build*
+ 
+![monitor_project][pio_monitor_project]
+
+Finally, click on "Upload and Monitor":
+
+* It will upload your sketch
+* And will enter into "monitor" mode: You can see and use the console. Try typing `help` on the console.
+
+[pio_open_project]: https://lh3.googleusercontent.com/pw/ABLVV85JEEjjsQqcCcfZUclYF1ItYSHPmpzP0SC4VH9Ypqp05r2ixlv9C2xv4p-r6fW_CyCNa8ylmeSjyUg_K2Sp-XUXQRTYO_6HvhQXcXxTZXgQvvNBqA8JaerwCB1UODkXgYa_6ONT19KTO52OMs0eOOeeMg=-no-gm?authuser=0
+[pio_build_project]: https://lh3.googleusercontent.com/pw/ABLVV86DiV9H-wDEv1X8ra_fJAw0OG2sBoM5d0gJElPfptzVpb6n8gzOEHDfKXLMKrivzNSt03XpMWSw-hSVJUi0aavQiwgL0t1rmQeKqfYpXkGCKKwcerrNx8BBkFR3VoKQEPMF-e-xVvKVque2pi1sTa8tWA=-no-gm?authuser=0
+[pio_monitor_project]: https://lh3.googleusercontent.com/pw/ABLVV845uPqRtJkUrv4JlODuTr7Shnw0HR7BdojRbxv3xWyiUO-V_Kv42YAKAV-XyoNRPY5vsyj0yRDsRxH0mxz8Q1NYzvhCKw5Ni9MH6UYR8IiaT8XS9hysR81APn8X2tnVgnmJ6ZkSPCgUURnE2MVYIWYrNQ=-no-gm?authuser=0
 
 ### or B) Using ESP-IDF
 

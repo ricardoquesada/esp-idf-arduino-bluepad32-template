@@ -147,7 +147,12 @@ void btstack_stdio_init() {
     fflush(stdout);
     fsync(fileno(stdout));
 
+#ifdef CONFIG_ESP_CONSOLE_UART_NONE
+    int baud_rate = 9600;
+#else
     int baud_rate = CONFIG_ESP_CONSOLE_UART_BAUDRATE;
+#endif
+
 #if SOC_UART_SUPPORT_REF_TICK
     uart_sclk_t clk_source = UART_SCLK_REF_TICK;
     // REF_TICK clock can't provide a high baudrate

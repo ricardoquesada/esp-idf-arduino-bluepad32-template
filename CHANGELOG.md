@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Arduino core: 03da972492323ca35382c7a966cf41a992fa4bb1
 - Arduino API:
     - `BP32.enableBLEService(bool)` to enable/disable the BLE service
+    - `Cosole.write()` and `Console.println(void)` added.
+- Enable Single Large APP partition by default. Before it was small
 
 ## [4.0-beta1] - 2024-02-11
 - Bluepad32 v4.0-beta1 upstream

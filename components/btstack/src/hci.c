@@ -167,6 +167,7 @@
     X( SUPPORTED_HCI_COMMAND_READ_ENCRYPTION_KEY_SIZE              , 20, 4) \
     X( SUPPORTED_HCI_COMMAND_SET_EVENT_MASK_PAGE_2                 , 22, 2) \
     X( SUPPORTED_HCI_COMMAND_WRITE_LE_HOST_SUPPORTED               , 24, 6) \
+    X( SUPPORTED_HCI_COMMAND_LE_READ_REMOTE_FEATURES               , 27, 5) \
     X( SUPPORTED_HCI_COMMAND_REMOTE_OOB_EXTENDED_DATA_REQUEST_REPLY, 32, 1) \
     X( SUPPORTED_HCI_COMMAND_WRITE_SECURE_CONNECTIONS_HOST         , 32, 3) \
     X( SUPPORTED_HCI_COMMAND_READ_LOCAL_OOB_EXTENDED_DATA_COMMAND  , 32, 6) \
@@ -216,6 +217,7 @@ static void hci_emit_event(uint8_t * event, uint16_t size, int dump);
 static void hci_emit_acl_packet(uint8_t * packet, uint16_t size);
 static void hci_run(void);
 static bool hci_is_le_connection(hci_connection_t * connection);
+static uint8_t hci_send_prepared_cmd_packet(void);
 
 #ifdef ENABLE_CLASSIC
 static int hci_have_usb_transport(void);
@@ -236,6 +238,8 @@ static void hci_le_scan_stop(void);
 #ifdef ENABLE_LE_PERIPHERAL
 #ifdef ENABLE_LE_EXTENDED_ADVERTISING
 static le_advertising_set_t * hci_advertising_set_for_handle(uint8_t advertising_handle);
+static uint8_t hci_le_extended_advertising_operation_for_chunk(uint16_t pos, uint16_t len);
+static void le_handle_extended_advertisement_report(uint8_t *packet, uint16_t size);
 #endif /* ENABLE_LE_EXTENDED_ADVERTISING */
 #endif /* ENABLE_LE_PERIPHERAL */
 #ifdef ENABLE_LE_ISOCHRONOUS_STREAMS
@@ -939,6 +943,7 @@ static uint8_t hci_send_acl_packet_fragments(hci_connection_t *connection){
         if (err != 0){
             // no error from HCI Transport expected
             status = ERROR_CODE_HARDWARE_FAILURE;
+            break;
         }
 
 #ifdef ENABLE_CONTROLLER_DUMP_PACKETS
@@ -1047,14 +1052,16 @@ uint8_t hci_send_sco_packet_buffer(int size){
     return 0;
 #else
     int err = hci_stack->hci_transport->send_packet(HCI_SCO_DATA_PACKET, packet, size);
-    if (hci_transport_synchronous()){
+    uint8_t status;
+    if (err == 0){
+        status = ERROR_CODE_SUCCESS;
+    } else {
+        status = ERROR_CODE_HARDWARE_FAILURE;
+    }
+    if ((status != ERROR_CODE_SUCCESS) || hci_transport_synchronous()){
         hci_release_packet_buffer();
     }
-
-    if (err != 0){
-        return ERROR_CODE_HARDWARE_FAILURE;
-    }
-    return ERROR_CODE_SUCCESS;
+    return status;
 #endif
 }
 #endif
@@ -1578,7 +1585,7 @@ void le_handle_advertisement_report(uint8_t *packet, uint16_t size){
 }
 
 #ifdef ENABLE_LE_EXTENDED_ADVERTISING
-void le_handle_extended_advertisement_report(uint8_t *packet, uint16_t size) {
+static void le_handle_extended_advertisement_report(uint8_t *packet, uint16_t size) {
     uint16_t offset = 3;
     uint8_t num_reports = packet[offset++];
     uint8_t event[2 + 255]; // use upper bound to avoid var size automatic var
@@ -1685,7 +1692,6 @@ static void gap_run_set_local_name(void){
     uint8_t * packet = hci_stack->hci_packet_buffer;
     // construct HCI Command and send
     uint16_t opcode = hci_write_local_name.opcode;
-    hci_stack->last_cmd_opcode = opcode;
     packet[0] = opcode & 0xff;
     packet[1] = opcode >> 8;
     packet[2] = DEVICE_NAME_LEN;
@@ -1696,7 +1702,7 @@ static void gap_run_set_local_name(void){
     (void)memcpy(&packet[3], hci_stack->local_name, bytes_to_copy);
     // expand '00:00:00:00:00:00' in name with bd_addr
     btstack_replace_bd_addr_placeholder(&packet[3], bytes_to_copy, hci_stack->local_bd_addr);
-    hci_send_cmd_packet(packet, HCI_CMD_HEADER_SIZE + DEVICE_NAME_LEN);
+    hci_send_prepared_cmd_packet();
 }
 
 static void gap_run_set_eir_data(void){
@@ -1704,7 +1710,6 @@ static void gap_run_set_eir_data(void){
     uint8_t * packet = hci_stack->hci_packet_buffer;
     // construct HCI Command in-place and send
     uint16_t opcode = hci_write_extended_inquiry_response.opcode;
-    hci_stack->last_cmd_opcode = opcode;
     uint16_t offset = 0;
     packet[offset++] = opcode & 0xff;
     packet[offset++] = opcode >> 8;
@@ -1737,7 +1742,7 @@ static void gap_run_set_eir_data(void){
         // expand '00:00:00:00:00:00' in name with bd_addr
         btstack_replace_bd_addr_placeholder(&packet[offset], bytes_to_copy, hci_stack->local_bd_addr);
     }
-    hci_send_cmd_packet(packet, HCI_CMD_HEADER_SIZE + 1 + EXTENDED_INQUIRY_RESPONSE_DATA_LEN);
+    hci_send_prepared_cmd_packet();
 }
 
 static void hci_run_gap_tasks_classic(void){
@@ -1924,19 +1929,19 @@ static void hci_initializing_run(void){
             hci_send_cmd(&hci_reset);
             break;
         case HCI_INIT_SEND_BAUD_CHANGE_BCM: {
+            hci_reserve_packet_buffer();
             uint32_t baud_rate = hci_transport_uart_get_main_baud_rate();
             hci_stack->chipset->set_baudrate_command(baud_rate, hci_stack->hci_packet_buffer);
-            hci_stack->last_cmd_opcode = little_endian_read_16(hci_stack->hci_packet_buffer, 0);
             hci_stack->substate = HCI_INIT_W4_SEND_BAUD_CHANGE_BCM;
-            hci_send_cmd_packet(hci_stack->hci_packet_buffer, 3u + hci_stack->hci_packet_buffer[2u]);
+            hci_send_prepared_cmd_packet();
             break;
         }
         case HCI_INIT_SET_BD_ADDR:
+            hci_reserve_packet_buffer();
             log_info("Set Public BD ADDR to %s", bd_addr_to_str(hci_stack->custom_bd_addr));
             hci_stack->chipset->set_bd_addr_command(hci_stack->custom_bd_addr, hci_stack->hci_packet_buffer);
-            hci_stack->last_cmd_opcode = little_endian_read_16(hci_stack->hci_packet_buffer, 0);
             hci_stack->substate = HCI_INIT_W4_SET_BD_ADDR;
-            hci_send_cmd_packet(hci_stack->hci_packet_buffer, 3u + hci_stack->hci_packet_buffer[2u]);
+            hci_send_prepared_cmd_packet();
             break;
         case HCI_INIT_SEND_READ_LOCAL_NAME:
 #ifdef ENABLE_CLASSIC
@@ -1948,11 +1953,11 @@ static void hci_initializing_run(void){
 
         case HCI_INIT_SEND_BAUD_CHANGE:
             if (need_baud_change) {
+                hci_reserve_packet_buffer();
                 uint32_t baud_rate = hci_transport_uart_get_main_baud_rate();
                 hci_stack->chipset->set_baudrate_command(baud_rate, hci_stack->hci_packet_buffer);
-                hci_stack->last_cmd_opcode = little_endian_read_16(hci_stack->hci_packet_buffer, 0);
                 hci_stack->substate = HCI_INIT_W4_SEND_BAUD_CHANGE;
-                hci_send_cmd_packet(hci_stack->hci_packet_buffer, 3u + hci_stack->hci_packet_buffer[2u]);
+                hci_send_prepared_cmd_packet();
                 // STLC25000D: baudrate change happens within 0.5 s after command was send,
                 // use timer to update baud rate after 100 ms (knowing exactly, when command was sent is non-trivial)
                 if (hci_stack->manufacturer == BLUETOOTH_COMPANY_ID_ST_MICROELECTRONICS){
@@ -1969,6 +1974,7 @@ static void hci_initializing_run(void){
         case HCI_INIT_CUSTOM_PRE_INIT:
             // Custom initialization
             if (hci_stack->chipset && hci_stack->chipset->next_command){
+                hci_reserve_packet_buffer();
                 hci_stack->chipset_result = (*hci_stack->chipset->next_command)(hci_stack->hci_packet_buffer);
                 bool send_cmd = false;
                 switch (hci_stack->chipset_result){
@@ -2009,12 +2015,10 @@ static void hci_initializing_run(void){
                 }
 
                 if (send_cmd){
-                    hci_reserve_packet_buffer();
-                    int size = 3u + hci_stack->hci_packet_buffer[2u];
-                    hci_stack->last_cmd_opcode = little_endian_read_16(hci_stack->hci_packet_buffer, 0);
-                    hci_dump_packet(HCI_COMMAND_DATA_PACKET, 0, hci_stack->hci_packet_buffer, size);
-                    hci_stack->hci_transport->send_packet(HCI_COMMAND_DATA_PACKET, hci_stack->hci_packet_buffer, size);
+                    hci_send_prepared_cmd_packet();
                     break;
+                } else {
+                    hci_release_packet_buffer();
                 }
                 log_info("Init script done");
 
@@ -3410,8 +3414,12 @@ static void hci_handle_le_connection_complete_event(const uint8_t * hci_event){
 	conn->con_handle             = gap_subevent_le_connection_complete_get_connection_handle(gap_event);
     conn->le_connection_interval = conn_interval;
 
+#ifdef ENABLE_LE_ISOCHRONOUS_STREAMS
     // workaround: PAST doesn't work without LE Read Remote Features on PacketCraft Controller with LMP 568B
-    conn->gap_connection_tasks = GAP_CONNECTION_TASK_LE_READ_REMOTE_FEATURES;
+    if (hci_command_supported(SUPPORTED_HCI_COMMAND_LE_READ_REMOTE_FEATURES)){
+        conn->gap_connection_tasks = GAP_CONNECTION_TASK_LE_READ_REMOTE_FEATURES;
+    }
+#endif
 
 #ifdef ENABLE_LE_PERIPHERAL
 	if (role == HCI_ROLE_SLAVE){
@@ -6036,7 +6044,7 @@ hci_send_le_create_connection(uint8_t initiator_filter_policy, bd_addr_type_t ad
 
 #ifdef ENABLE_LE_PERIPHERAL
 #ifdef ENABLE_LE_EXTENDED_ADVERTISING
-uint8_t hci_le_extended_advertising_operation_for_chunk(uint16_t pos, uint16_t len){
+static uint8_t hci_le_extended_advertising_operation_for_chunk(uint16_t pos, uint16_t len){
     uint8_t  operation = 0;
     if (pos == 0){
         // first fragment or complete data
@@ -6353,7 +6361,11 @@ static bool hci_run_general_gap_le(void){
         hci_stack->le_advertisements_todo &= ~LE_ADVERTISEMENT_TASKS_PRIVACY_NOTIFY;
         // GAP Privacy, notify clients upon upcoming random address change
         hci_stack->le_advertisements_state |= LE_ADVERTISEMENT_STATE_PRIVACY_PENDING;
+        // notify might cause hci_run to get executed, check if we still can send
         gap_privacy_clients_notify(hci_stack->le_random_address);
+        if (!hci_can_send_command_packet_now()) {
+            return true;
+        }
     }
 
     // - wait until privacy update completed
@@ -7587,6 +7599,22 @@ static void hci_set_sco_payload_length_for_flipped_packet_types(hci_connection_t
 }
 #endif
 
+// funnel for sending cmd packet using single outgoing buffer
+static uint8_t hci_send_prepared_cmd_packet(void) {
+    btstack_assert(hci_stack->hci_packet_buffer_reserved);
+    // cache opcode
+    hci_stack->last_cmd_opcode = little_endian_read_16(hci_stack->hci_packet_buffer, 0);
+    // get size
+    uint16_t size = 3u + hci_stack->hci_packet_buffer[2u];
+    // send packet
+    uint8_t status = hci_send_cmd_packet(hci_stack->hci_packet_buffer, size);
+    // release packet buffer on error or for synchronous transport implementations
+    if ((status != ERROR_CODE_SUCCESS) || hci_transport_synchronous()){
+        hci_release_packet_buffer();
+    }
+    return status;
+}
+
 uint8_t hci_send_cmd_packet(uint8_t *packet, int size){
     // house-keeping
     
@@ -7799,10 +7827,13 @@ uint8_t hci_send_cmd_packet(uint8_t *packet, int size){
 
     hci_dump_packet(HCI_COMMAND_DATA_PACKET, 0, packet, size);
     int err = hci_stack->hci_transport->send_packet(HCI_COMMAND_DATA_PACKET, packet, size);
-    if (err != 0){
-        return ERROR_CODE_HARDWARE_FAILURE;
+    uint8_t status;
+    if (err == 0){
+        status = ERROR_CODE_SUCCESS;
+    } else {
+        status = ERROR_CODE_HARDWARE_FAILURE;
     }
-    return ERROR_CODE_SUCCESS;
+    return status;
 }
 
 // disconnect because of security block
@@ -7855,21 +7886,9 @@ uint8_t hci_send_cmd_va_arg(const hci_cmd_t * cmd, va_list argptr){
         return ERROR_CODE_COMMAND_DISALLOWED;
     }
 
-    // for HCI INITIALIZATION
-    // log_info("hci_send_cmd: opcode %04x", cmd->opcode);
-    hci_stack->last_cmd_opcode = cmd->opcode;
-
     hci_reserve_packet_buffer();
-    uint8_t * packet = hci_stack->hci_packet_buffer;
-    uint16_t size = hci_cmd_create_from_template(packet, cmd, argptr);
-    uint8_t status = hci_send_cmd_packet(packet, size);
-
-    // release packet buffer on error or for synchronous transport implementations
-    if ((status != ERROR_CODE_SUCCESS) || hci_transport_synchronous()){
-        hci_release_packet_buffer();
-    }
-
-    return status;
+    hci_cmd_create_from_template(hci_stack->hci_packet_buffer, cmd, argptr);
+    return hci_send_prepared_cmd_packet();
 }
 
 /**

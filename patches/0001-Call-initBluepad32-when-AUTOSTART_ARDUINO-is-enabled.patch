@@ -1,0 +1,35 @@
+From f4ae1b4f6a8b5e22e12d6c29b328ee0f0223512e Mon Sep 17 00:00:00 2001
+From: Ricardo Quesada <ricardoquesada@gmail.com>
+Date: Sun, 3 Mar 2024 10:58:58 -0800
+Subject: [PATCH] Call initBluepad32() when AUTOSTART_ARDUINO is enabled
+
+---
+ cores/esp32/main.cpp | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/cores/esp32/main.cpp b/cores/esp32/main.cpp
+index 27b92948d..f1dabcc71 100644
+--- a/cores/esp32/main.cpp
++++ b/cores/esp32/main.cpp
+@@ -52,6 +52,10 @@ void loopTask(void *pvParameters)
+     }
+ }
+ 
++extern "C" {
++    void initBluepad32();
++}
++
+ extern "C" void app_main()
+ {
+ #if ARDUINO_USB_CDC_ON_BOOT && !ARDUINO_USB_MODE
+@@ -67,6 +71,7 @@ extern "C" void app_main()
+     USB.begin();
+ #endif
+     loopTaskWDTEnabled = false;
++    initBluepad32();
+     initArduino();
+     xTaskCreateUniversal(loopTask, "loopTask", getArduinoLoopTaskStackSize(), NULL, 1, &loopTaskHandle, ARDUINO_RUNNING_CORE);
+ }
+-- 
+2.44.0
+

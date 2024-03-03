@@ -23,6 +23,8 @@
 #endif
 #endif
 
+#if !CONFIG_AUTOSTART_ARDUINO
+
 // Sanity check. It seems that when Arduino is added as a component, this define is present.
 #if !defined(CONFIG_ENABLE_ARDUINO_DEPENDS)
 #error \
@@ -33,7 +35,13 @@
 #include <freertos/FreeRTOS.h>
 
 static TaskHandle_t arduino_task_handle;
-static bool loop_task_wdt_enabled;
+
+// Exported
+bool loopTaskWDTEnabled;
+
+__attribute__((weak)) size_t getArduinoLoopTaskStackSize() {
+    return ARDUINO_LOOP_STACK_SIZE;
+}
 
 #if CONFIG_FREERTOS_UNICORE
 static void yield_if_necessary(void) {
@@ -53,7 +61,7 @@ extern "C" {
 #if CONFIG_FREERTOS_UNICORE
         yield_if_necessary();
 #endif
-        if (loop_task_wdt_enabled) {
+        if (loopTaskWDTEnabled) {
             esp_task_wdt_reset();
         }
         loop();
@@ -76,9 +84,10 @@ void arduino_bootstrap() {
     USB.begin();
 #endif
 
+    loopTaskWDTEnabled = false;
     initArduino();
 
-    xTaskCreateUniversal(arduino_task, "ArduinoTask", CONFIG_ARDUINO_LOOP_STACK_SIZE, nullptr, 1, &arduino_task_handle,
+    xTaskCreateUniversal(arduino_task, "ArduinoTask", getArduinoLoopTaskStackSize(), nullptr, 1, &arduino_task_handle,
                          CONFIG_ARDUINO_RUNNING_CORE);
     assert(arduino_task_handle != nullptr);
 }
@@ -91,14 +100,14 @@ void enableLoopWDT() {
         if (esp_task_wdt_add(arduino_task_handle) != ESP_OK) {
             log_e("Failed to add loop task to WDT");
         } else {
-            loop_task_wdt_enabled = true;
+            loopTaskWDTEnabled = true;
         }
     }
 }
 
 void disableLoopWDT() {
-    if (arduino_task_handle != nullptr && loop_task_wdt_enabled) {
-        loop_task_wdt_enabled = false;
+    if (arduino_task_handle != nullptr && loopTaskWDTEnabled) {
+        loopTaskWDTEnabled = false;
         if (esp_task_wdt_delete(arduino_task_handle) != ESP_OK) {
             log_e("Failed to remove loop task from WDT");
         }
@@ -112,3 +121,4 @@ void feedLoopWDT() {
     }
 }
 
+#endif // !CONFIG_AUTOSTART_ARDUINO

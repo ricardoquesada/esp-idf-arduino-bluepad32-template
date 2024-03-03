@@ -151,7 +151,9 @@ static void arduino_on_init_complete(void) {
     // Start scanning
     uni_bt_enable_new_connections_unsafe(true);
 
+#if !CONFIG_AUTOSTART_ARDUINO
     arduino_bootstrap();
+#endif  // !CONFIG_AUTOSTART_ARDUINO
 }
 
 static void arduino_on_device_connected(uni_hid_device_t* d) {

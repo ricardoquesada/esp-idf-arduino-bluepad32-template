@@ -4556,11 +4556,9 @@ static void event_handler(uint8_t *packet, uint16_t size){
                     big_sync = hci_big_sync_for_handle(packet[4]);
                     if (big_sync != NULL){
                         uint8_t status = packet[3];
-                        uint8_t big_handle = packet[4];
                         if (status == ERROR_CODE_SUCCESS){
                             // store bis_con_handles and trigger iso path setup
                             uint8_t num_bis = btstack_min(big_sync->num_bis, packet[16]);
-                            uint8_t i;
                             for (i=0;i<num_bis;i++){
                                 hci_con_handle_t bis_handle = little_endian_read_16(packet, 17 + (2 * i));
                                 big_sync->bis_con_handles[i] = bis_handle;
@@ -4669,7 +4667,7 @@ static void sco_handler(uint8_t * packet, uint16_t size){
         // log_debug("sco flow %u, handle 0x%04x, packets sent %u, bytes send %u", hci_stack->synchronous_flow_control_enabled, (int) con_handle, conn->num_packets_sent, conn->num_sco_bytes_sent);
         if (hci_stack->synchronous_flow_control_enabled == 0){
             // ignore received SCO packets for the first 10 ms, then allow for max two HCI_SCO_2EV3_SIZE packets
-            uint16_t max_sco_packets = btstack_min(2 * HCI_SCO_2EV3_SIZE / conn->sco_payload_length, hci_stack->sco_packets_total_num);
+            uint8_t max_sco_packets = (uint8_t) btstack_min(2 * HCI_SCO_2EV3_SIZE / conn->sco_payload_length, hci_stack->sco_packets_total_num);
             if (conn->sco_tx_active == 0){
                 if (btstack_time_delta(btstack_run_loop_get_time_ms(), conn->sco_established_ms) > 10){
                     conn->sco_tx_active = 1;
@@ -4871,6 +4869,7 @@ void hci_init(const hci_transport_t *transport, const void *config){
     if (!hci_stack) {
         hci_stack = (hci_stack_t*) malloc(sizeof(hci_stack_t));
     }
+    btstack_assert(hci_stack != NULL);
 #else
     hci_stack = &hci_stack_static;
 #endif
@@ -7724,7 +7723,7 @@ uint8_t hci_send_cmd_packet(uint8_t *packet, int size){
 
             // track outgoing connection to handle command status with error
             hci_stack->outgoing_addr_type = BD_ADDR_TYPE_SCO;
-            (void) memcpy(hci_stack->outgoing_addr, addr, 6);
+            (void) memcpy(hci_stack->outgoing_addr, conn->address, 6);
 
             // setup_synchronous_connection? Voice setting at offset 22
             // TODO: compare to current setting if sco connection already active

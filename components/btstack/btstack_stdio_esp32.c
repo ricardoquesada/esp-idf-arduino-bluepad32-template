@@ -44,6 +44,10 @@
  *  Busy waits until character has been processed
  */
 
+#include "sdkconfig.h"
+
+#ifdef CONFIG_ESP_CONSOLE_UART
+
 #include "btstack_stdin.h"
 #include "btstack_run_loop.h"
 #include "btstack_defines.h"
@@ -56,7 +60,6 @@
 #include <errno.h>
 #include <reent.h>
 
-#include "sdkconfig.h"
 #include "driver/uart.h"
 
 #include "esp_vfs_dev.h"
@@ -142,17 +145,12 @@ static void btstack_stdio_task(void *arg){
 #define UART_SCLK_DEFAULT UART_SCLK_APB
 #endif
 
-void btstack_stdio_init() {
+void btstack_stdio_init(void) {
     /* Drain stdout before reconfiguring it */
     fflush(stdout);
     fsync(fileno(stdout));
 
-#ifdef CONFIG_ESP_CONSOLE_UART_NONE
-    int baud_rate = 9600;
-#else
     int baud_rate = CONFIG_ESP_CONSOLE_UART_BAUDRATE;
-#endif
-
 #if SOC_UART_SUPPORT_REF_TICK
     uart_sclk_t clk_source = UART_SCLK_REF_TICK;
     // REF_TICK clock can't provide a high baudrate
@@ -209,3 +207,12 @@ void btstack_stdin_setup(void (*handler)(char c)){
     // set handler
     stdin_handler = handler;
 }
+
+#else
+// Empty functions for backwards-compatiblitity
+void btstack_stdio_init(void) {}
+void btstack_stdin_setup(void (*handler)(char c)){
+    (void) handler;
+}
+
+#endif /* CONFIG_ESP_CONSOLE_UART */

@@ -13,6 +13,7 @@
 #include "bt/uni_bt_defines.h"
 #include "bt/uni_bt_le.h"
 #include "bt/uni_bt_service.h"
+#include "controller/uni_controller_type.h"
 #include "parser/uni_hid_parser_8bitdo.h"
 #include "parser/uni_hid_parser_android.h"
 #include "parser/uni_hid_parser_atari.h"
@@ -34,7 +35,6 @@
 #include "platform/uni_platform.h"
 #include "uni_common.h"
 #include "uni_config.h"
-#include "uni_hid_device_vendors.h"
 #include "uni_log.h"
 #include "uni_virtual_device.h"
 
@@ -88,7 +88,8 @@ uni_hid_device_t* uni_hid_device_create_virtual(uni_hid_device_t* parent) {
         if (bd_addr_cmp(g_devices[i].conn.btaddr, zero_addr) == 0) {
             logi("Creating virtual device (idx=%d)\n", i);
 
-            memset(&g_devices[i], 0, sizeof(g_devices[i]));
+            // Don't memset the device, it is already "clean".
+            // memsetting could break the initialization.
 
             // Both parent and child share the same address.
             // Seems safe to copy the address. "get_instance_by_address" skips
@@ -554,7 +555,7 @@ void uni_hid_device_guess_controller_type_from_pid_vid(uni_hid_device_t* d) {
         return;
     }
     // Try to guess it from Vendor/Product id.
-    uni_controller_type_t type = guess_controller_type(d->vendor_id, d->product_id);
+    uni_controller_type_t type = uni_guess_controller_type(d->vendor_id, d->product_id);
 
     // If it fails, try to guess it from COD
     if (type == CONTROLLER_TYPE_Unknown) {

@@ -188,7 +188,13 @@ class Controller {
     // "Output" functions.
     void setPlayerLEDs(uint8_t led) const;
     void setColorLED(uint8_t red, uint8_t green, uint8_t blue) const;
-    void setRumble(uint8_t force, uint8_t duration) const;
+    [[deprecated("Replaced by playDualRumble")]] void setRumble(uint8_t force, uint8_t duration) const {
+        playDualRumble(0, duration * 4, force, force);
+    }
+    void playDualRumble(uint16_t delayedStartMs,
+                        uint16_t durationMs,
+                        uint8_t weakMagnitude,
+                        uint8_t strongMagnitude) const;
 
    private:
     void onConnected();

@@ -148,12 +148,10 @@ void processGamepad(ControllerPtr ctl) {
     }
 
     if (ctl->x()) {
-        // Duration: 255 is ~2 seconds
-        // force: intensity
-        // Some gamepads like DS3, DS4, DualSense, Switch, Xbox One S support
-        // rumble.
+        // Some gamepads like DS3, DS4, DualSense, Switch, Xbox One S support rumble.
         // It is possible to set it by calling:
-        ctl->setRumble(0xc0 /* force */, 0xc0 /* duration */);
+        ctl->playDualRumble(0 /* delayedStartMs */, 100 /* durationMs */, 0x80 /* weakMagnitude */,
+                            0 /* strongMagnitude */);
     }
 
     // Another way to query controller data is by getting the buttons() function.

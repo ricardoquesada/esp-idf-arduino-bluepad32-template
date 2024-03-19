@@ -78,7 +78,11 @@ int arduino_get_gamepad_properties(int idx, arduino_gamepad_properties_t* out_pr
 int arduino_get_controller_properties(int idx, arduino_gamepad_properties_t* out_properties);
 int arduino_set_player_leds(int idx, uint8_t leds);
 int arduino_set_lightbar_color(int idx, uint8_t r, uint8_t g, uint8_t b);
-int arduino_set_rumble(int idx, uint8_t force, uint8_t duration);
+int arduino_play_dual_rumble(int idx,
+                             uint16_t delayed_start_ms,
+                             uint16_t duration_ms,
+                             uint8_t weak_magnitude,
+                             uint8_t strong_magnitude);
 int arduino_disconnect_controller(int idx);
 int arduino_forget_bluetooth_keys(void);
 

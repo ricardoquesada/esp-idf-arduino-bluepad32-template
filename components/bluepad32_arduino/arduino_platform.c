@@ -72,8 +72,17 @@ typedef struct {
     // Gamepad index: from 0 to CONFIG_BLUEPAD32_MAX_DEVICES-1
     uint8_t controller_idx;
     pending_request_cmd_t cmd;
-    // Must have enough space to hold at least 3 arguments: red, green, blue
-    uint8_t args[3];
+    // Must have enough space to hold at least 4 arguments: red, green, blue
+    union {
+        uint8_t player_led;
+        uint8_t leds[3];
+        struct {
+            uint16_t rumble_delayed_start;
+            uint16_t rumble_duration;
+            uint8_t rumble_weak_magnitude;
+            uint8_t rumble_strong_magnitude;
+        };
+    } args;
 } pending_request_t;
 
 //
@@ -111,16 +120,19 @@ static void process_pending_requests(void) {
         switch (request.cmd) {
             case PENDING_REQUEST_CMD_LIGHTBAR_COLOR:
                 if (d->report_parser.set_lightbar_color != NULL)
-                    d->report_parser.set_lightbar_color(d, request.args[0], request.args[1], request.args[2]);
+                    d->report_parser.set_lightbar_color(d, request.args.leds[0], request.args.leds[1],
+                                                        request.args.leds[2]);
                 break;
             case PENDING_REQUEST_CMD_PLAYER_LEDS:
                 if (d->report_parser.set_player_leds != NULL)
-                    d->report_parser.set_player_leds(d, request.args[0]);
+                    d->report_parser.set_player_leds(d, request.args.player_led);
                 break;
 
             case PENDING_REQUEST_CMD_RUMBLE:
-                if (d->report_parser.set_rumble != NULL)
-                    d->report_parser.set_rumble(d, request.args[0], request.args[1]);
+                if (d->report_parser.play_dual_rumble != NULL)
+                    d->report_parser.play_dual_rumble(d, request.args.rumble_delayed_start,
+                                                      request.args.rumble_duration, request.args.rumble_weak_magnitude,
+                                                      request.args.rumble_strong_magnitude);
                 break;
 
             case PENDING_REQUEST_CMD_DISCONNECT:
@@ -205,7 +217,7 @@ static uni_error_t arduino_on_device_ready(uni_hid_device_t* d) {
             _controllers[i].properties.product_id = d->product_id;
             _controllers[i].properties.flags =
                 (d->report_parser.set_player_leds ? ARDUINO_PROPERTY_FLAG_PLAYER_LEDS : 0) |
-                (d->report_parser.set_rumble ? ARDUINO_PROPERTY_FLAG_RUMBLE : 0) |
+                (d->report_parser.play_dual_rumble ? ARDUINO_PROPERTY_FLAG_RUMBLE : 0) |
                 (d->report_parser.set_lightbar_color ? ARDUINO_PROPERTY_FLAG_PLAYER_LIGHTBAR : 0);
 
             ins->controller_idx = i;
@@ -320,7 +332,7 @@ int arduino_set_player_leds(int idx, uint8_t leds) {
     pending_request_t request = (pending_request_t){
         .controller_idx = idx,
         .cmd = PENDING_REQUEST_CMD_PLAYER_LEDS,
-        .args[0] = leds,
+        .args.player_led = leds,
     };
     xQueueSendToBack(_pending_queue, &request, (TickType_t)0);
 
@@ -336,16 +348,20 @@ int arduino_set_lightbar_color(int idx, uint8_t r, uint8_t g, uint8_t b) {
     pending_request_t request = (pending_request_t){
         .controller_idx = idx,
         .cmd = PENDING_REQUEST_CMD_LIGHTBAR_COLOR,
-        .args[0] = r,
-        .args[1] = g,
-        .args[2] = b,
+        .args.leds[0] = r,
+        .args.leds[1] = g,
+        .args.leds[2] = b,
     };
     xQueueSendToBack(_pending_queue, &request, (TickType_t)0);
 
     return UNI_ARDUINO_ERROR_SUCCESS;
 }
 
-int arduino_set_rumble(int idx, uint8_t force, uint8_t duration) {
+int arduino_play_dual_rumble(int idx,
+                             uint16_t delayed_start_ms,
+                             uint16_t duration_ms,
+                             uint8_t weak_magnitude,
+                             uint8_t strong_magnitude) {
     if (idx < 0 || idx >= CONFIG_BLUEPAD32_MAX_DEVICES)
         return UNI_ARDUINO_ERROR_INVALID_DEVICE;
     if (_controllers[idx].idx == UNI_ARDUINO_GAMEPAD_INVALID)
@@ -354,8 +370,10 @@ int arduino_set_rumble(int idx, uint8_t force, uint8_t duration) {
     pending_request_t request = (pending_request_t){
         .controller_idx = idx,
         .cmd = PENDING_REQUEST_CMD_RUMBLE,
-        .args[0] = force,
-        .args[1] = duration,
+        .args.rumble_delayed_start = delayed_start_ms,
+        .args.rumble_duration = duration_ms,
+        .args.rumble_weak_magnitude = weak_magnitude,
+        .args.rumble_strong_magnitude = strong_magnitude,
     };
     xQueueSendToBack(_pending_queue, &request, (TickType_t)0);
 

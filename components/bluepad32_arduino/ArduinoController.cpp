@@ -80,14 +80,14 @@ void Controller::setColorLED(uint8_t red, uint8_t green, uint8_t blue) const {
         loge("error setting lightbar color");
 }
 
-void Controller::setRumble(uint8_t force, uint8_t duration) const {
+void Controller::playDualRumble(uint16_t delayedStartMs, uint16_t durationMs, uint8_t weakMagnitude, uint8_t strongMagnitude) const {
     if (!isConnected()) {
         loge("controller not connected");
         return;
     }
 
-    if (arduino_set_rumble(_idx, force, duration) == -1)
-        loge("error setting rumble");
+    if (arduino_play_dual_rumble(_idx, delayedStartMs, durationMs, weakMagnitude, strongMagnitude) == -1)
+        loge("error playing dual rumble");
 }
 
 String Controller::getModelName() const {

@@ -15,10 +15,12 @@
 #include "uni_hid_device.h"
 #include "uni_log.h"
 
-// Xbox doesn't report trigger buttons. Instead it reports throttle/brake.
+// Xbox doesn't report trigger buttons. Instead, it reports throttle/brake.
 // This threshold represents the minimum value of throttle/brake to "report"
 // the trigger buttons.
 #define TRIGGER_BUTTON_THRESHOLD 32
+
+#define XBOX_RUMBLE_REPORT_ID 0x03
 
 static const uint16_t XBOX_WIRELESS_VID = 0x045e;  // Microsoft
 static const uint16_t XBOX_WIRELESS_PID = 0x02e0;  // Xbox One (Bluetooth)
@@ -52,11 +54,35 @@ enum xboxone_firmware {
     XBOXONE_FIRMWARE_V5,    // BLE version
 };
 
-// xboxone_instance_t represents data used by the Wii driver instance.
-typedef struct wii_instance_s {
+// Actuators for the force feedback (FF).
+enum {
+    XBOXONE_FF_WEAK = BIT(0),
+    XBOXONE_FF_STRONG = BIT(1),
+    XBOXONE_FF_TRIGGER_RIGHT = BIT(2),
+    XBOXONE_FF_TRIGGER_LEFT = BIT(3),
+};
+
+struct xboxone_ff_report {
+    // Report related
+    uint8_t transaction_type;  // type of transaction
+    uint8_t report_id;         // report id, should be XBOX_RUMBLE_REPORT_ID
+
+    // Force-feedback related
+    uint8_t enable_actuators;        // LSB 0-3 for each actuator
+    uint8_t magnitude_left_trigger;  // HID descriptor says that it goes from 0-100
+    uint8_t magnitude_right_trigger;
+    uint8_t magnitude_strong;
+    uint8_t magnitude_weak;
+    uint8_t duration_10ms;
+    uint8_t start_delay_10ms;
+    uint8_t loop_count;  // how many times "duration" is repeated
+} __attribute__((packed));
+
+// xboxone_instance_t represents data used by the Xbox driver instance.
+typedef struct xboxone_instance_s {
     enum xboxone_firmware version;
 } xboxone_instance_t;
-_Static_assert(sizeof(xboxone_instance_t) < HID_DEVICE_MAX_PARSER_DATA, "Xbox one intance too big");
+_Static_assert(sizeof(xboxone_instance_t) < HID_DEVICE_MAX_PARSER_DATA, "Xbox one instance too big");
 
 static xboxone_instance_t* get_xboxone_instance(uni_hid_device_t* d);
 static void parse_usage_firmware_v3_1(uni_hid_device_t* d,
@@ -70,7 +96,7 @@ static void parse_usage_firmware_v4_v5(uni_hid_device_t* d,
                                        uint16_t usage,
                                        int32_t value);
 
-// Needed for the GameSir T3s controller when put in iOS mode, which is basically impersonates a
+// Needed for the GameSir T3s controller when put in iOS mode, which is basically impersonating an
 // Xbox Wireless controller with FW 4.8.
 bool uni_hid_parser_xboxone_does_name_match(struct uni_hid_device_s* d, const char* name) {
     if (!name)
@@ -91,8 +117,11 @@ void uni_hid_parser_xboxone_setup(uni_hid_device_t* d) {
     xboxone_instance_t* ins = get_xboxone_instance(d);
     // FIXME: Parse HID descriptor and see if it supports 0xf buttons. Checking
     // for the len is a horrible hack.
-    if (d->hid_descriptor_len > 330) {
-        logi("Xbox: Assuming it is firmware v4.8 or v5.x\n");
+    if (gap_get_connection_type(d->conn.handle) == GAP_CONNECTION_LE) {
+        logi("Xbox: Assuming it is firmware v5.x\n");
+        ins->version = XBOXONE_FIRMWARE_V5;
+    } else if (d->hid_descriptor_len > 330) {
+        logi("Xbox: Assuming it is firmware v4.8\n");
         ins->version = XBOXONE_FIRMWARE_V4_8;
     } else {
         // If it is really firmware 4.8, it will be set later.
@@ -432,55 +461,50 @@ static void parse_usage_firmware_v4_v5(uni_hid_device_t* d,
     }
 }
 
-void uni_hid_parser_xboxone_set_rumble(uni_hid_device_t* d, uint8_t value, uint8_t duration) {
+void uni_hid_parser_xboxone_play_dual_rumble(struct uni_hid_device_s* d,
+                                             uint16_t start_delay_ms,
+                                             uint16_t duration_ms,
+                                             uint8_t weak_magnitude,
+                                             uint8_t strong_magnitude) {
+    uint8_t status;
+
     if (d == NULL) {
         loge("Xbox: Invalid device\n");
         return;
     }
 
-    // Actuators for the force feedback (FF).
-    enum {
-        FF_RIGHT = 1 << 0,
-        FF_LEFT = 1 << 1,
-        FF_TRIGGER_RIGHT = 1 << 2,
-        FF_TRIGGER_LEFT = 1 << 3,
-    };
+    if ((weak_magnitude == 0 && strong_magnitude == 0) || duration_ms == 0)
+        return;
 
-    struct ff_report {
-        // Report related
-        uint8_t transaction_type;  // type of transaction
-        uint8_t report_id;         // report id
-        // Force-feedback related
-        uint8_t enable_actuators;    // LSB 0-3 for each actuator
-        uint8_t force_left_trigger;  // HID descriptor says that it goes from 0-100
-        uint8_t force_right_trigger;
-        uint8_t force_left;
-        uint8_t force_right;
-        uint8_t duration;  // unknown unit, 255 is ~second
-        uint8_t start_delay;
-        uint8_t loop_count;  // how many times "duration" is repeated
-    } __attribute__((packed));
+    xboxone_instance_t* ins = get_xboxone_instance(d);
 
-    // TODO: It seems that the max value is 127. Double check
-    value /= 2;
-
-    struct ff_report ff = {
+    struct xboxone_ff_report ff = {
         .transaction_type = (HID_MESSAGE_TYPE_DATA << 4) | HID_REPORT_TYPE_OUTPUT,
-        .report_id = 0x03,  // taken from HID descriptor
-        .enable_actuators = FF_RIGHT | FF_LEFT | FF_TRIGGER_LEFT | FF_TRIGGER_RIGHT,
-        .force_left_trigger = value,
-        .force_right_trigger = value,
-        // Don't enable force_left/force_right actuators.
+        .report_id = XBOX_RUMBLE_REPORT_ID,
+        .enable_actuators = XBOXONE_FF_STRONG | XBOXONE_FF_WEAK,
+        .magnitude_left_trigger = 0,
+        .magnitude_right_trigger = 0,
+        // Don't enable magnitude_left/magnitude_right actuators.
         // They keep vibrating forever on some 8BitDo controllers
         // https://gitlab.com/ricardoquesada/unijoysticle2/-/issues/10
-        .force_left = 0,
-        .force_right = 0,
-        .duration = duration,
-        .start_delay = 0,
+        // Magnitude is 0..100 so scale the 8-bit input here
+        .magnitude_strong = ((uint16_t)(strong_magnitude * 100)) / UINT8_MAX,
+        .magnitude_weak = ((uint16_t)(weak_magnitude * 100)) / UINT8_MAX,
+        .duration_10ms = duration_ms / 10,
+        .start_delay_10ms = start_delay_ms / 10,
         .loop_count = 0,
     };
 
-    uni_hid_device_send_intr_report(d, (uint8_t*)&ff, sizeof(ff));
+    if (ins->version == XBOXONE_FIRMWARE_V5) {
+        status = hids_client_send_write_report(d->hids_cid, XBOX_RUMBLE_REPORT_ID, HID_REPORT_TYPE_OUTPUT,
+                                               &ff.enable_actuators,  // skip the first type bytes,
+                                               sizeof(ff) - 2         // subtract the 2 bytes from total
+        );
+        if (status != ERROR_CODE_SUCCESS)
+            loge("Xbox: Failed to send rumble report, error=%#x\n", status);
+    } else {
+        uni_hid_device_send_intr_report(d, (uint8_t*)&ff, sizeof(ff));
+    }
 }
 
 void uni_hid_parser_xboxone_device_dump(uni_hid_device_t* d) {

@@ -29,7 +29,7 @@ typedef void (*report_parse_usage_fn_t)(struct uni_hid_device_s* d,
                                         uint16_t usage_page,
                                         uint16_t usage,
                                         int32_t value);
-// "parse_input_report" receives uni_hid_device_s instead of gamepad since it is needed
+// "Parse_input_report" receives uni_hid_device_s instead of gamepad since it is needed
 // for devices like Nintendo. If needed, the same thing should be done for
 // "parse_usage".
 typedef void (*report_parse_input_report_fn_t)(struct uni_hid_device_s* d, const uint8_t* report, uint16_t report_len);
@@ -38,7 +38,11 @@ typedef void (*report_parse_feature_report_fn_t)(struct uni_hid_device_s* d,
                                                  uint16_t report_len);
 typedef void (*report_set_player_leds_fn_t)(struct uni_hid_device_s* d, uint8_t leds);
 typedef void (*report_set_lightbar_color_fn_t)(struct uni_hid_device_s* d, uint8_t r, uint8_t g, uint8_t b);
-typedef void (*report_set_rumble_fn_t)(struct uni_hid_device_s* d, uint8_t force, uint8_t duration);
+typedef void (*report_play_dual_rumble_fn_t)(struct uni_hid_device_s* d,
+                                             uint16_t start_delay_ms,
+                                             uint16_t duration_ms,
+                                             uint8_t weak_magnitude,
+                                             uint8_t strong_magnitude);
 typedef void (*report_device_dump_t)(struct uni_hid_device_s* d);
 
 // Parsers should implement these optional functions:
@@ -58,7 +62,7 @@ typedef struct {
     // If implemented, changes the lightbar color (e.g.: in DS4 and DualSense)
     report_set_lightbar_color_fn_t set_lightbar_color;
     // If implemented, activates rumble in the gamepad
-    report_set_rumble_fn_t set_rumble;
+    report_play_dual_rumble_fn_t play_dual_rumble;
     // If implemented, it dumps device info
     report_device_dump_t device_dump;
 } uni_report_parser_t;

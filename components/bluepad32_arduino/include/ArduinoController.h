@@ -186,11 +186,23 @@ class Controller {
     ControllerProperties getProperties() const { return _properties; }
 
     // "Output" functions.
+
+    // Bitmap for the LEDs to turn on / off.
     void setPlayerLEDs(uint8_t led) const;
+
+    // RGB for the lightbar in controllers like DualShock 4 and DualSense.
     void setColorLED(uint8_t red, uint8_t green, uint8_t blue) const;
+
+    // force: magnitude for both the weak and strong motors.
+    // duration: 1 unit is ~ 1/4 ms.
     [[deprecated("Replaced by playDualRumble")]] void setRumble(uint8_t force, uint8_t duration) const {
         playDualRumble(0, duration * 4, force, force);
     }
+    // startDelayMs: a delayed start measured in milliseconds. Use 0 to start rumble immediately.
+    // durationMs: duration of rumble in milliseconds. The controller might limit the max duration.
+    // weakMagnitude: The magnitude for the "weak motor".
+    // strongMagnitude: The magnitude for the "strong motor".
+    // If the controller has only one motor, then the max value between "weak" and "strong" is used.
     void playDualRumble(uint16_t delayedStartMs,
                         uint16_t durationMs,
                         uint8_t weakMagnitude,

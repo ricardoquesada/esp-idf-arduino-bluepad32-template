@@ -148,10 +148,12 @@ void processGamepad(ControllerPtr ctl) {
     }
 
     if (ctl->x()) {
-        // Some gamepads like DS3, DS4, DualSense, Switch, Xbox One S support rumble.
+        // Some gamepads like DS3, DS4, DualSense, Switch, Xbox One S, Stadia support rumble.
         // It is possible to set it by calling:
-        ctl->playDualRumble(0 /* delayedStartMs */, 100 /* durationMs */, 0x80 /* weakMagnitude */,
-                            0 /* strongMagnitude */);
+        // Some controllers have two motors: "strong motor", "weak motor".
+        // It is possible to control them independently.
+        ctl->playDualRumble(0 /* delayedStartMs */, 250 /* durationMs */, 0x80 /* weakMagnitude */,
+                            0x40 /* strongMagnitude */);
     }
 
     // Another way to query controller data is by getting the buttons() function.

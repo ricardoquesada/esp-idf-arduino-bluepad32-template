@@ -99,8 +99,8 @@ void dumpKeyboard(ControllerPtr ctl) {
     for (int key = Keyboard_A; key <= Keyboard_RightMeta; ++key) {
     if (ctl->isKeyPressed(static_cast<KeyboardKey>(key))) {
       String keyName = getKeyName(static_cast<KeyboardKey>(key));
-      Serial.printf("idx=%d -> ", ctl->index());
-      Serial.println(keyName);
+      Console.printf("idx=%d -> ", ctl->index());
+      Console.println(keyName);
     }
   }
 }

@@ -559,7 +559,7 @@ static void sm_dispatch_event(uint8_t packet_type, uint16_t channel, uint8_t * p
     UNUSED(channel);
 
     // log event
-    hci_dump_packet(packet_type, 1, packet, size);
+    hci_dump_btstack_event(packet, size);
     // dispatch to all event handlers
     btstack_linked_list_iterator_t it;
     btstack_linked_list_iterator_init(&it, &sm_event_handlers);
@@ -2257,6 +2257,7 @@ static bool sm_run_irk_lookup(void){
 
     // -- Continue with device lookup by public or resolvable private address
     if (!sm_address_resolution_idle()){
+        bool started_aes128 = false;
         while (sm_address_resolution_test < le_device_db_max_count()){
             int addr_type = BD_ADDR_TYPE_UNKNOWN;
             bd_addr_t addr;
@@ -2301,6 +2302,11 @@ static bool sm_run_irk_lookup(void){
             sm_ah_r_prime(sm_address_resolution_address, sm_aes128_plaintext);
             sm_aes128_state = SM_AES128_ACTIVE;
             btstack_crypto_aes128_encrypt(&sm_crypto_aes128_request, sm_aes128_key, sm_aes128_plaintext, sm_aes128_ciphertext, sm_handle_encryption_result_address_resolution, NULL);
+            started_aes128 = true;
+            break;
+        }
+
+        if (started_aes128){
             return true;
         }
 
@@ -2599,9 +2605,6 @@ static bool sm_ctkd_from_classic(sm_connection_t * sm_connection){
     // requirements to derive ltk from BR/EDR:
     // - BR/EDR uses secure connections
     if (gap_secure_connection_for_link_key_type(hci_connection->link_key_type) == false) return false;
-    // - bonding needs to be enabled:
-    bool bonding_enabled = (sm_pairing_packet_get_auth_req(setup->sm_m_preq) & sm_pairing_packet_get_auth_req(setup->sm_s_pres) & SM_AUTHREQ_BONDING ) != 0u;
-    if (!bonding_enabled) return false;
     // - there is no stored LTK or the derived key has at least the same level of authentication (bail if LTK is authenticated but Link Key isn't)
     bool link_key_authenticated = gap_authenticated_for_link_key_type(hci_connection->link_key_type);
     if (link_key_authenticated) return true;
@@ -3739,7 +3742,7 @@ static void sm_handle_random_result_ir(void *arg){
 
 static void sm_handle_random_result_er(void *arg){
     sm_persistent_keys_random_active = false;
-    if (arg != 0){
+    if (arg != NULL){
         // key generated, store in tlv
         int status = sm_tlv_impl->store_tag(sm_tlv_context, BTSTACK_TAG32('S','M','E','R'), sm_persistent_er, 16u);
         log_info("Generated ER key. Store in TLV status: %d", status);
@@ -4365,42 +4368,13 @@ static uint8_t sm_pdu_validate_and_get_opcode(uint8_t packet_type, const uint8_t
     return sm_pdu_code;
 }
 
-static void sm_pdu_handler(uint8_t packet_type, hci_con_handle_t con_handle, uint8_t *packet, uint16_t size){
-
-    if ((packet_type == HCI_EVENT_PACKET) && (packet[0] == L2CAP_EVENT_CAN_SEND_NOW)){
-        sm_run();
-    }
-
-    uint8_t sm_pdu_code = sm_pdu_validate_and_get_opcode(packet_type, packet, size);
-    if (sm_pdu_code == 0) return;
-
-    sm_connection_t * sm_conn = sm_get_connection_for_handle(con_handle);
-    if (!sm_conn) return;
-
-    if (sm_pdu_code == SM_CODE_PAIRING_FAILED){
-        sm_reencryption_complete(sm_conn, ERROR_CODE_AUTHENTICATION_FAILURE);
-        sm_pairing_complete(sm_conn, ERROR_CODE_AUTHENTICATION_FAILURE, packet[1]);
-        sm_done_for_handle(con_handle);
-        sm_conn->sm_engine_state = sm_conn->sm_role ? SM_RESPONDER_IDLE : SM_INITIATOR_CONNECTED;
-        return;
-    }
-
+static void sm_pdu_handler(sm_connection_t *sm_conn, uint8_t sm_pdu_code, const uint8_t *packet) {
     log_debug("sm_pdu_handler: state %u, pdu 0x%02x", sm_conn->sm_engine_state, sm_pdu_code);
 
     int err;
     uint8_t max_encryption_key_size;
     UNUSED(err);
 
-    if (sm_pdu_code == SM_CODE_KEYPRESS_NOTIFICATION){
-        uint8_t buffer[5];
-        buffer[0] = SM_EVENT_KEYPRESS_NOTIFICATION;
-        buffer[1] = 3;
-        little_endian_store_16(buffer, 2, con_handle);
-        buffer[4] = packet[1];
-        sm_dispatch_event(HCI_EVENT_PACKET, 0, buffer, sizeof(buffer));
-        return;
-    }
-    
     switch (sm_conn->sm_engine_state){
 
         // a sm timeout requires a new physical connection
@@ -4678,7 +4652,7 @@ static void sm_pdu_handler(uint8_t packet_type, hci_con_handle_t con_handle, uin
             log_info("SM_SC_W4_PAIRING_RANDOM, responder: %u, just works: %u, passkey used %u, passkey entry %u",
                      IS_RESPONDER(sm_conn->sm_role), sm_just_works_or_numeric_comparison(setup->sm_stk_generation_method),
                      sm_passkey_used(setup->sm_stk_generation_method), sm_passkey_entry(setup->sm_stk_generation_method));
-            if ( (!IS_RESPONDER(sm_conn->sm_role) && sm_just_works_or_numeric_comparison(setup->sm_stk_generation_method)) 
+            if ( (!IS_RESPONDER(sm_conn->sm_role) && sm_just_works_or_numeric_comparison(setup->sm_stk_generation_method))
             ||   (sm_passkey_entry(setup->sm_stk_generation_method)) ) {
                  sm_conn->sm_engine_state = SM_SC_W2_CMAC_FOR_CHECK_CONFIRMATION;
                  break;
@@ -4908,7 +4882,7 @@ static void sm_pdu_handler(uint8_t packet_type, hci_con_handle_t con_handle, uin
             (void)memcpy(&sm_conn->sm_m_preq, packet, sizeof(sm_pairing_packet_t));
 
             // validate encryption key size
-            max_encryption_key_size = sm_pairing_packet_get_max_encryption_key_size(setup->sm_m_preq);
+            max_encryption_key_size = sm_pairing_packet_get_max_encryption_key_size(sm_conn->sm_m_preq);
             if ((max_encryption_key_size < 7) || (max_encryption_key_size > 16)){
                 sm_pairing_error(sm_conn, SM_REASON_INVALID_PARAMETERS);
                 break;
@@ -4973,6 +4947,39 @@ static void sm_pdu_handler(uint8_t packet_type, hci_con_handle_t con_handle, uin
 
     // try to send next pdu
     sm_trigger_run();
+}
+
+static void sm_channel_handler(uint8_t packet_type, hci_con_handle_t con_handle, uint8_t *packet, uint16_t size){
+
+    if ((packet_type == HCI_EVENT_PACKET) && (packet[0] == L2CAP_EVENT_CAN_SEND_NOW)){
+        sm_run();
+    }
+
+    uint8_t sm_pdu_code = sm_pdu_validate_and_get_opcode(packet_type, packet, size);
+    if (sm_pdu_code == 0) return;
+
+    sm_connection_t * sm_conn = sm_get_connection_for_handle(con_handle);
+    if (!sm_conn) return;
+
+    if (sm_pdu_code == SM_CODE_PAIRING_FAILED){
+        sm_reencryption_complete(sm_conn, ERROR_CODE_AUTHENTICATION_FAILURE);
+        sm_pairing_complete(sm_conn, ERROR_CODE_AUTHENTICATION_FAILURE, packet[1]);
+        sm_done_for_handle(con_handle);
+        sm_conn->sm_engine_state = sm_conn->sm_role ? SM_RESPONDER_IDLE : SM_INITIATOR_CONNECTED;
+        return;
+    }
+
+    if (sm_pdu_code == SM_CODE_KEYPRESS_NOTIFICATION){
+        uint8_t buffer[5];
+        buffer[0] = SM_EVENT_KEYPRESS_NOTIFICATION;
+        buffer[1] = 3;
+        little_endian_store_16(buffer, 2, con_handle);
+        buffer[4] = packet[1];
+        sm_dispatch_event(HCI_EVENT_PACKET, 0, buffer, sizeof(buffer));
+        return;
+    }
+
+    sm_pdu_handler(sm_conn, sm_pdu_code, packet);
 }
 
 // Security Manager Client API
@@ -5144,9 +5151,9 @@ void sm_init(void){
     le_device_db_init();
 
     // and L2CAP PDUs + L2CAP_EVENT_CAN_SEND_NOW
-    l2cap_register_fixed_channel(sm_pdu_handler, L2CAP_CID_SECURITY_MANAGER_PROTOCOL);
+    l2cap_register_fixed_channel(sm_channel_handler, L2CAP_CID_SECURITY_MANAGER_PROTOCOL);
 #ifdef ENABLE_CLASSIC
-    l2cap_register_fixed_channel(sm_pdu_handler, L2CAP_CID_BR_EDR_SECURITY_MANAGER);
+    l2cap_register_fixed_channel(sm_channel_handler, L2CAP_CID_BR_EDR_SECURITY_MANAGER);
 #endif
 
     // state

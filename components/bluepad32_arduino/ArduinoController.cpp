@@ -80,7 +80,10 @@ void Controller::setColorLED(uint8_t red, uint8_t green, uint8_t blue) const {
         loge("error setting lightbar color");
 }
 
-void Controller::playDualRumble(uint16_t delayedStartMs, uint16_t durationMs, uint8_t weakMagnitude, uint8_t strongMagnitude) const {
+void Controller::playDualRumble(uint16_t delayedStartMs,
+                                uint16_t durationMs,
+                                uint8_t weakMagnitude,
+                                uint8_t strongMagnitude) const {
     if (!isConnected()) {
         loge("controller not connected");
         return;
@@ -114,6 +117,17 @@ bool Controller::isKeyPressed(KeyboardKey key) const {
         if (_data.keyboard.pressed_keys[i] == key)
             return true;
     }
+    return false;
+}
+
+bool Controller::isAnyKeyPressed() const {
+    for (unsigned char pressed_key : _data.keyboard.pressed_keys) {
+        // Reserved for >= 0xe8
+        if (pressed_key >= Keyboard_A && pressed_key < 0xe8)
+            return true;
+    }
+    if (_data.keyboard.modifiers)
+        return true;
     return false;
 }
 

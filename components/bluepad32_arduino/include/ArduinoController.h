@@ -157,6 +157,7 @@ class Controller {
     // Keyboard related
     //
     bool isKeyPressed(KeyboardKey key) const;
+    bool isAnyKeyPressed() const;
 
     //
     // Shared among all

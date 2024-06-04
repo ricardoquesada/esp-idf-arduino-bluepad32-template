@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [4.1.0] - 2024-06-03
 - Bluepad32 v4.1.0
 - BTstack v1.6.1
+- Arduino Core 2.0.17
 
 ## [4.0.4] - 2024-04-20
 - Bluepad32 v4.0.4

@@ -556,7 +556,7 @@ void uni_bt_bredr_on_gap_inquiry_result(uint16_t channel, const uint8_t* packet,
     }
     logi("\n");
 
-    supported = uni_hid_device_on_device_discovered(addr, name_buffer, cod, rssi);
+    supported = uni_hid_device_on_device_discovered(addr, name_buffer, cod, rssi) == UNI_ERROR_SUCCESS;
     if (supported) {
         d = uni_hid_device_get_instance_for_address(addr);
         if (d) {
@@ -655,7 +655,7 @@ void uni_bt_bredr_on_hci_connection_complete(uint16_t channel, const uint8_t* pa
 #endif
 }
 
-void uni_bt_bredr_on_hci_diconnection_complete(uint16_t channel, const uint8_t* packet, uint16_t size) {
+void uni_bt_bredr_on_hci_disconnection_complete(uint16_t channel, const uint8_t* packet, uint16_t size) {
     ARG_UNUSED(channel);
     ARG_UNUSED(packet);
     ARG_UNUSED(size);

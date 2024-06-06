@@ -8,12 +8,12 @@ This is a template application to be used with [Espressif IoT Development Framew
 
 Please check [ESP-IDF docs](https://docs.espressif.com/projects/esp-idf/en/latest/get-started/index.html) for getting started instructions.
 
-Requires ESP-IDF **v4.4**.x (don't use 5.x!)
+Requires ESP-IDF **v5.1**.x (don't use 4.4 or 5.2!)
 
 Includes the following ESP-IDF components, with a pre-configured `sdkconfig` file:
 
 * [Arduino Core for ESP32](https://github.com/espressif/arduino-esp32) component
-* [Bluepad32](https://gitlab.com/ricardoquesada/bluepad32/) component
+* [Bluepad32](https://github.com/ricardoquesada/bluepad32/) component
 * [BTStack](https://github.com/bluekitchen/btstack) component
 
 ## How to compile it
@@ -21,7 +21,7 @@ Includes the following ESP-IDF components, with a pre-configured `sdkconfig` fil
 Clone the template project:
 
    ```sh
-   git clone --recursive https://gitlab.com/ricardoquesada/esp-idf-arduino-bluepad32-template.git my_project
+   git clone --recursive https://github.com/ricardoquesada/esp-idf-arduino-bluepad32-template.git my_project
    ```
 
 After cloning the *template* you have two options:
@@ -65,13 +65,13 @@ Further reading: [PlatformIO Espressif IoT Development Framework][pio_espidf]
 
 #### For Windows
 
-1. Install [ESP-IDF v4.4][esp-idf-windows-installer]. For further info, read: [ESP-IDF Getting Started for Windows][esp-idf-windows-setup]
+1. Install [ESP-IDF v5.1][esp-idf-windows-installer]. For further info, read: [ESP-IDF Getting Started for Windows][esp-idf-windows-setup]
 
    * Either the Online or Offline version should work
    * When asked which components to install, don't change anything. Default options are Ok.
    * When asked whether ESP can modify the system, answer "Yes"
 
-2. Launch the "ESP-IDF v4.4 CMD" (type that in the Windows search box)
+2. Launch the "ESP-IDF v5.1 CMD" (type that in the Windows search box)
 
 3. Compile it
 
@@ -85,7 +85,7 @@ Further reading: [PlatformIO Espressif IoT Development Framework][pio_espidf]
     ```
 
 [esp-idf-windows-setup]: https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/windows-setup.html
-[esp-idf-windows-installer]: https://dl.espressif.com/dl/esp-idf/?idf=4.4
+[esp-idf-windows-installer]: https://dl.espressif.com/dl/esp-idf/?idf=5.1
 
 #### For Linux / macOS
 
@@ -112,7 +112,7 @@ Further reading: [PlatformIO Espressif IoT Development Framework][pio_espidf]
     # Needs to be done just once
     # Clone the ESP-IDF git repo
     mkdir ~/esp && cd ~/esp
-    git clone -b release/v4.4 --recursive https://github.com/espressif/esp-idf.git
+    git clone -b release/v5.1 --recursive https://github.com/espressif/esp-idf.git
 
     # Then install the toolchain
     cd ~/esp/esp-idf
@@ -127,7 +127,7 @@ Further reading: [PlatformIO Espressif IoT Development Framework][pio_espidf]
     # Do it everytime you want to start a new project
     # Clone the template somewhere
     mkdir ~/src && cd ~/src
-    git clone --recursive https://gitlab.com/ricardoquesada/esp-idf-arduino-bluepad32-template.git my_project
+    git clone --recursive https://github.com/ricardoquesada/esp-idf-arduino-bluepad32-template.git my_project
     ```
 
     Export the ESP-IDF environment variables in your shell:
@@ -231,7 +231,7 @@ Subjective opinion: VSCode + ESP-IDF plugin is muuuuuch better than Arduino IDE.
 
 ## Further info
 
-* [Bluepad32 for Arduino](https://gitlab.com/ricardoquesada/bluepad32/-/blob/main/docs/plat_arduino.md)
+* [Bluepad32 for Arduino](https://bluepad32.readthedocs.io/en/latest/plat_arduino/)
 * [Arduino as ESP-IDF component](https://docs.espressif.com/projects/arduino-esp32/en/latest/esp-idf_component.html)
 * [ESP-IDF VSCode plugin](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/vscode-setup.html)
 

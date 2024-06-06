@@ -1,6 +1,9 @@
 #
 # ESP32 options
 #
+# Re-enable OPTIMIZATION_PERF when these bugs are fixed:
+# https://github.com/espressif/arduino-esp32/issues/9784
+# https://github.com/espressif/arduino-esp32/issues/9607
 #CONFIG_COMPILER_OPTIMIZATION_PERF=y
 
 CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y

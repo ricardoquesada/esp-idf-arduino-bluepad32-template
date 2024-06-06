@@ -1,5 +1,5 @@
-build-esp-idf-4.4:
-  image: espressif/idf:release-v4.4
+build-esp-idf-5.1:
+  image: espressif/idf:release-v5.1
   variables:
     GIT_SUBMODULE_STRATEGY: recursive
   stage: build

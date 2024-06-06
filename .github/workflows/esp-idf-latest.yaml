@@ -1,4 +1,4 @@
-name: Build with ESP-IDF v4.4
+name: Build with ESP-IDF v5.1
 
 on:
   push:
@@ -20,21 +20,21 @@ jobs:
     - name: Arduino build ESP32
       uses: espressif/esp-idf-ci-action@main
       with:
-        esp_idf_version: release-v4.4
+        esp_idf_version: release-v5.1
         target: esp32
         command: "idf.py set-target esp32 && idf.py build"
 
     - name: Arduino build ESP32-S3
       uses: espressif/esp-idf-ci-action@main
       with:
-        esp_idf_version: release-v4.4
+        esp_idf_version: release-v5.1
         target: esp32s3
         command: "idf.py set-target esp32s3 && idf.py build"
 
     - name: Arduino build ESP32-C3
       uses: espressif/esp-idf-ci-action@main
       with:
-        esp_idf_version: release-v4.4
+        esp_idf_version: release-v5.1
         target: esp32c3
         command: "idf.py set-target esp32c3 && idf.py build"
 

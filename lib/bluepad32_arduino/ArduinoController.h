@@ -8,7 +8,7 @@
 
 #include <cinttypes>
 
-#include <Arduino.h>
+#include "Arduino.h"
 
 #include "ArduinoControllerData.h"
 #include "ArduinoControllerProperties.h"

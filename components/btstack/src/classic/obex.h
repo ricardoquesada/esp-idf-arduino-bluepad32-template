@@ -38,6 +38,8 @@
 #ifndef OBEX_H
 #define OBEX_H
 
+#include <stdint.h>
+
 // From IR OBEX V1.5 - some opcodes have high bit always set
 #define OBEX_OPCODE_CONNECT                0x80
 #define OBEX_OPCODE_DISCONNECT             0x81
@@ -145,5 +147,6 @@
 #define PBAP_APPLICATION_PARAMETER_RESET_NEW_MISSED_CALLS 0x0F
 // PbapSupportedFeatures - 0x10 - 4 bytes
 #define PBAP_APPLICATION_PARAMETER_PBAP_SUPPORTED_FEATURES 0x10
+
 
 #endif

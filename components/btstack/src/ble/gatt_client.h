@@ -144,7 +144,7 @@ typedef enum {
     P_W2_EMIT_CONNECTED,
     P_L2CAP_CLOSED,
 } gatt_client_state_t;
-    
+
     
 typedef enum{
     SEND_MTU_EXCHANGE,
@@ -152,6 +152,20 @@ typedef enum{
     MTU_EXCHANGED,
     MTU_AUTO_EXCHANGE_DISABLED
 } gatt_client_mtu_t;
+
+typedef enum {
+    GATT_CLIENT_SERVICE_DISCOVER_W2_SEND,
+    GATT_CLIENT_SERVICE_DISCOVER_W4_DONE,
+    GATT_CLIENT_SERVICE_DISCOVER_CHARACTERISTICS_W2_SEND,
+    GATT_CLIENT_SERVICE_DISCOVER_CHARACTERISTICS_W4_DONE,
+    GATT_CLIENT_SERVICE_SERVICE_CHANGED_WRITE_CCCD_W2_SEND,
+    GATT_CLIENT_SERVICE_SERVICE_CHANGED_WRITE_CCCD_W4_DONE,
+    GATT_CLIENT_SERVICE_DATABASE_HASH_READ_W2_SEND,
+    GATT_CLIENT_SERVICE_DATABASE_HASH_READ_W4_DONE,
+    GATT_CLIENT_SERVICE_DATABASE_HASH_WRITE_CCCD_W2_SEND,
+    GATT_CLIENT_SERVICE_DATABASE_HASH_WRITE_CCCD_W4_DONE,
+    GATT_CLIENT_SERVICE_DONE,
+} gatt_client_service_state_t;
 
 #ifdef ENABLE_GATT_OVER_EATT
 typedef enum {
@@ -190,10 +204,13 @@ typedef struct gatt_client{
 
     att_bearer_type_t bearer_type;
 
-#ifdef ENABLE_GATT_OVER_CLASSIC
-    bd_addr_t addr;
-    uint16_t  l2cap_psm;
+#if defined(ENABLE_GATT_OVER_CLASSIC) || defined(ENABLE_GATT_OVER_EATT)
     uint16_t  l2cap_cid;
+    bd_addr_t addr;
+#endif
+
+#ifdef ENABLE_GATT_OVER_CLASSIC
+    uint16_t  l2cap_psm;
     btstack_context_callback_registration_t callback_request;
 #endif
 
@@ -204,8 +221,6 @@ typedef struct gatt_client{
     uint16_t eatt_storage_size;
     uint8_t  eatt_num_clients;
     uint8_t  gatt_server_supported_features;
-    uint16_t gatt_service_start_group_handle;
-    uint16_t gatt_service_end_group_handle;
     uint16_t gatt_client_supported_features_handle;
 #endif
 
@@ -252,6 +267,19 @@ typedef struct gatt_client{
     uint8_t  reencryption_result;
 
     gap_security_level_t security_level;
+
+    // GATT Service Changes
+    gatt_client_service_state_t gatt_service_state;
+    uint16_t                    gatt_service_start_group_handle;
+    uint16_t                    gatt_service_end_group_handle;
+    // - Service Changed
+    uint16_t                    gatt_service_changed_value_handle;
+    uint16_t                    gatt_service_changed_cccd_handle;
+    uint16_t                    gatt_service_changed_end_handle;
+    // - Database Hash
+    uint16_t                    gatt_service_database_hash_value_handle;
+    uint16_t                    gatt_service_database_hash_cccd_handle;
+    uint16_t                    gatt_service_database_hash_end_handle;
 
 } gatt_client_t;
 
@@ -924,6 +952,27 @@ uint8_t gatt_client_write_long_characteristic_descriptor_using_descriptor_handle
 uint8_t gatt_client_write_client_characteristic_configuration(btstack_packet_handler_t callback, hci_con_handle_t con_handle, gatt_client_characteristic_t * characteristic, uint16_t configuration);
 
 /**
+ * @brief Register for changes to the Service Changed and Database Hash Characteristics of the remote GATT Service
+ * *
+ * When configured, GATT_EVENT_QUERY_COMPLETE event is emitted
+ * If supported, the Database Hash is read as well
+ *
+ * Requires ENABLE_GATT_CLIENT_SERVICE_CHANGED
+ *
+ * @param callback
+ */
+void gatt_client_add_service_changed_handler(btstack_packet_callback_registration_t * callback);
+
+/**
+ * @brief Remove callback for service changes
+ *
+ * Requires ENABLE_GATT_CLIENT_SERVICE_CHANGED
+ *
+ * @param callback
+ */
+void gatt_client_remove_service_changed_handler(btstack_packet_callback_registration_t * callback);
+
+/**
  * @brief Register for notifications and indications of a characteristic enabled by 
  * the gatt_client_write_client_characteristic_configuration function.
  * @param notification struct used to store registration
@@ -976,6 +1025,14 @@ uint8_t gatt_client_cancel_write(btstack_packet_handler_t callback, hci_con_hand
  * @return ERROR_CODE_SUCCESS if ok, ERROR_CODE_UNKNOWN_CONNECTION_IDENTIFIER if handle unknown, and ERROR_CODE_COMMAND_DISALLOWED if callback already registered
  */
 uint8_t gatt_client_request_to_send_gatt_query(btstack_context_callback_registration_t * callback_registration, hci_con_handle_t con_handle);
+
+/**
+ * @brief Remove queued callback for regular gatt queries, to be used on disconnect for example
+ * @param callback_registration
+ * @param con_handle
+ * @return ERROR_CODE_SUCCESS if ok
+ */
+uint8_t gatt_client_remove_gatt_query(btstack_context_callback_registration_t * callback_registration, hci_con_handle_t con_handle);
 
 /**
  * @brief Request callback when writing characteristic value without response is possible

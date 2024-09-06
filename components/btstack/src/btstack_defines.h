@@ -1055,7 +1055,7 @@ typedef uint8_t sm_key_t[16];
 // data: system bluetooth on/off (bool)
 /**
  * @format 1
- * param system_bluetooth_enabled
+ * @param system_bluetooth_enabled
  */
 #define DAEMON_EVENT_SYSTEM_BLUETOOTH_ENABLED              0x64u
 
@@ -1541,6 +1541,14 @@ typedef uint8_t sm_key_t[16];
  */
 #define GATT_EVENT_DISCONNECTED                                  0xAEu
 
+/**
+ * @format H22
+ * @param handle
+ * @param attribute_handle_start
+ * @param attribute_handle_end
+ */
+#define GATT_EVENT_SERVICE_CHANGED                               0xAFu
+
 
 /** 
  * @format 1BH
@@ -1909,6 +1917,7 @@ typedef uint8_t sm_key_t[16];
 #define HCI_EVENT_BIP_META                                       0xF3u
 #define HCI_EVENT_MAP_META                                       0xF4u
 #define HCI_EVENT_MESH_META                                      0xF5u
+#define HCI_EVENT_LEAUDIO_META                                   0xF6u
 
 // Potential other meta groups
 // #define HCI_EVENT_BNEP_META                                0xxx
@@ -2471,6 +2480,43 @@ typedef uint8_t sm_key_t[16];
  * @param status 0 == OK
  */
 #define HFP_SUBEVENT_CUSTOM_AT_MESSAGE_SENT                          0x29u
+
+/**
+ * @format 1H1
+ * @param subevent_code
+ * @param acl_handle
+ * @param supported
+ */
+#define HFP_SUBEVENT_APPLE_EXTENSION_SUPPORTED                       0x2Au
+
+/**
+ * @format 1H221JV
+ * @param subevent_code
+ * @param acl_handle
+ * @param vendor_id
+ * @param product_id
+ * @param features
+ * @param version_len
+ * @param version
+ */
+#define HFP_SUBEVENT_APPLE_ACCESSORY_INFORMATION                     0x2Bu
+
+/**
+ * @format 1H1
+ * @param subevent_code
+ * @param acl_handle
+ * @param battery_level range:0..9
+ */
+#define HFP_SUBEVENT_APPLE_BATTERY_LEVEL                             0x2Cu
+
+/**
+ * @format 1H1
+ * @param subevent_code
+ * @param acl_handle
+ * @param docket 0 = undocked, 1 = docked
+ */
+#define HFP_SUBEVENT_APPLE_DOCKED_STATE                              0x2Du
+
 
 // ANCS Client
 
@@ -4099,14 +4145,21 @@ typedef uint8_t sm_key_t[16];
  * @param subevent_code
  * @param con_handle
  */
-#define GATTSERVICE_SUBEVENT_SPP_SERVICE_CONNECTED                        0x11u
+#define GATTSERVICE_SUBEVENT_SCAN_PARAMETERS_SERVICE_DISCONNECTED         0x11u
 
 /**
  * @format 1H
  * @param subevent_code
  * @param con_handle
  */
-#define GATTSERVICE_SUBEVENT_SPP_SERVICE_DISCONNECTED                     0x12u
+#define GATTSERVICE_SUBEVENT_SPP_SERVICE_CONNECTED                        0x12u
+
+/**
+ * @format 1H
+ * @param subevent_code
+ * @param con_handle
+ */
+#define GATTSERVICE_SUBEVENT_SPP_SERVICE_DISCONNECTED                     0x13u
 
 /**
  * @format 12111
@@ -4116,9 +4169,16 @@ typedef uint8_t sm_key_t[16];
  * @param protocol_mode
  * @param num_instances
 */
-#define GATTSERVICE_SUBEVENT_HID_SERVICE_CONNECTED                        0x13u
+#define GATTSERVICE_SUBEVENT_HID_SERVICE_CONNECTED                        0x14u
 
-/** 
+/**
+ * @format 12
+ * @param subevent_code
+ * @param hids_cid
+*/
+#define GATTSERVICE_SUBEVENT_HID_SERVICE_DISCONNECTED                     0x15u
+
+/**
  * @format 1211LV
  * @param subevent_code
  * @param hids_cid
@@ -4127,7 +4187,7 @@ typedef uint8_t sm_key_t[16];
  * @param report_len
  * @param report
 */
-#define GATTSERVICE_SUBEVENT_HID_REPORT                                   0x14u
+#define GATTSERVICE_SUBEVENT_HID_REPORT                                   0x16u
 
 /**
  * @format 1212111
@@ -4139,7 +4199,7 @@ typedef uint8_t sm_key_t[16];
  * @param remote_wake               Indicates whether HID Device is capable of sending a wake-signal to a HID Host
  * @param normally_connectable      Indicates whether HID Device will be advertising when bonded but not connected.
 */
-#define GATTSERVICE_SUBEVENT_HID_INFORMATION                              0x15u
+#define GATTSERVICE_SUBEVENT_HID_INFORMATION                              0x17u
 
 /**
  * @format 1211
@@ -4148,7 +4208,7 @@ typedef uint8_t sm_key_t[16];
  * @param service_index
  * @param protocol_mode    see hid_protocol_mode_t in btstack_hid.h
 */
-#define GATTSERVICE_SUBEVENT_HID_PROTOCOL_MODE                            0x16u
+#define GATTSERVICE_SUBEVENT_HID_PROTOCOL_MODE                            0x18u
 
 /**
  * @format 121
@@ -4156,7 +4216,7 @@ typedef uint8_t sm_key_t[16];
  * @param hids_cid
  * @param configuration    
 */
-#define GATTSERVICE_SUBEVENT_HID_SERVICE_REPORTS_NOTIFICATION             0x17u
+#define GATTSERVICE_SUBEVENT_HID_SERVICE_REPORTS_NOTIFICATION             0x19u
 
 /**
  * @format 1211
@@ -4165,7 +4225,7 @@ typedef uint8_t sm_key_t[16];
  * @param service_index
  * @param report_id
 */
-#define GATTSERVICE_SUBEVENT_HID_REPORT_WRITTEN                           0x18u
+#define GATTSERVICE_SUBEVENT_HID_REPORT_WRITTEN                           0x1Au
 
 /**
  * @format 1H22
@@ -4174,23 +4234,56 @@ typedef uint8_t sm_key_t[16];
  * @param max_scan_interval
  * @param min_scan_window
  */
-#define GATTSERVICE_SUBEVENT_SCAN_PARAMETERS_SERVICE_SCAN_INTERVAL_UPDATE 0x19u
+#define GATTSERVICE_SUBEVENT_SCAN_PARAMETERS_SERVICE_SCAN_INTERVAL_UPDATE 0x1Bu
+
+/**
+ * @format 1H22
+ * @param subevent_code
+ * @param con_handle
+ * @param attribute_handle_start
+ * @param attribute_handle_end
+ */
+#define GATTSERVICE_SUBEVENT_GATT_SERVICE_CHANGED                          0x1Cu
+
+/**
+ * @format 1HK
+ * @param subevent_code
+ * @param con_handle
+ * @param database_hash
+ */
+#define GATTSERVICE_SUBEVENT_GATT_DATABASE_HASH                            0x1Du
+
 
 // LE Audio
 
 /**
- * @format 1H
+ * @format 1H1
  * @param subevent_code
  * @param con_handle
+ * @param status
 */
-#define GATTSERVICE_SUBEVENT_BASS_SERVER_SCAN_STOPPED                         0x26u
+#define LEAUDIO_SUBEVENT_BASS_SERVER_CONNECTED                              0x01u
 
 /**
  * @format 1H
  * @param subevent_code
  * @param con_handle
 */
-#define GATTSERVICE_SUBEVENT_BASS_SERVER_SCAN_STARTED                          0x27u
+#define LEAUDIO_SUBEVENT_BASS_SERVER_DISCONNECTED                           0x02u
+
+/**
+ * @format 1H
+ * @param subevent_code
+ * @param con_handle
+*/
+#define LEAUDIO_SUBEVENT_BASS_SERVER_SCAN_STOPPED                         0x03u
+
+/**
+ * @format 1H
+ * @param subevent_code
+ * @param con_handle
+*/
+#define LEAUDIO_SUBEVENT_BASS_SERVER_SCAN_STARTED                          0x04u
 
 /**
  * @format 1H1K
@@ -4199,7 +4292,7 @@ typedef uint8_t sm_key_t[16];
  * @param source_id
  * @param broadcast_code
 */
-#define GATTSERVICE_SUBEVENT_BASS_SERVER_BROADCAST_CODE                               0x28u
+#define LEAUDIO_SUBEVENT_BASS_SERVER_BROADCAST_CODE                         0x05u
 
 /**
  * @format 1H11
@@ -4208,7 +4301,7 @@ typedef uint8_t sm_key_t[16];
  * @param source_id
  * @param pa_sync
  */
-#define GATTSERVICE_SUBEVENT_BASS_SERVER_SOURCE_ADDED                                 0x29u
+#define LEAUDIO_SUBEVENT_BASS_SERVER_SOURCE_ADDED                            0x06u
 
 /**
  * @format 1H11
@@ -4217,7 +4310,7 @@ typedef uint8_t sm_key_t[16];
  * @param source_id
  * @param pa_sync
  */
-#define GATTSERVICE_SUBEVENT_BASS_SERVER_SOURCE_MODIFIED                              0x30u
+#define LEAUDIO_SUBEVENT_BASS_SERVER_SOURCE_MODIFIED                         0x07u
 
 /**
  * @format 1H11
@@ -4226,7 +4319,7 @@ typedef uint8_t sm_key_t[16];
  * @param source_id
  * @param pa_sync
  */
-#define GATTSERVICE_SUBEVENT_BASS_SERVER_SOURCE_DELETED                               0x31u
+#define LEAUDIO_SUBEVENT_BASS_SERVER_SOURCE_DELETED                          0x08u
 
 /**
  * @format 1H21
@@ -4235,14 +4328,14 @@ typedef uint8_t sm_key_t[16];
  * @param bass_cid
  * @param status
 */
-#define GATTSERVICE_SUBEVENT_BASS_CLIENT_CONNECTED                                    0x43u
+#define LEAUDIO_SUBEVENT_BASS_CLIENT_CONNECTED                                0x09u
 
 /**
  * @format 12
  * @param subevent_code
  * @param bass_cid
 */
-#define GATTSERVICE_SUBEVENT_BASS_CLIENT_DISCONNECTED                                 0x44u
+#define LEAUDIO_SUBEVENT_BASS_CLIENT_DISCONNECTED                             0x0Au
 
 /**
  * @format 1211
@@ -4251,7 +4344,7 @@ typedef uint8_t sm_key_t[16];
  * @param status
  * @param opcode
 */
-#define GATTSERVICE_SUBEVENT_BASS_CLIENT_SCAN_OPERATION_COMPLETE                       0x45u
+#define LEAUDIO_SUBEVENT_BASS_CLIENT_SCAN_OPERATION_COMPLETE                   0x0Bu
 
 /**
  * @format 1211B1311P1
@@ -4267,7 +4360,7 @@ typedef uint8_t sm_key_t[16];
  * @param bad_code
  * @param subgroups_num
 */
-#define GATTSERVICE_SUBEVENT_BASS_NOTIFY_RECEIVE_STATE_BASE                     0x46u
+#define LEAUDIO_SUBEVENT_BASS_CLIENT_NOTIFY_RECEIVE_STATE_BASE                  0x0Cu
 
 /**
  * @format 1214122JV3JV1JV2JV2JV
@@ -4293,7 +4386,7 @@ typedef uint8_t sm_key_t[16];
  * @param vendor_specific_metadata_value_length
  * @param vendor_specific_metadata_value
 */
-#define GATTSERVICE_SUBEVENT_BASS_CLIENT_NOTIFY_RECEIVE_STATE_SUBGROUP                 0x47u
+#define LEAUDIO_SUBEVENT_BASS_CLIENT_NOTIFY_RECEIVE_STATE_SUBGROUP                 0x0Du
 
 /**
  * @format 121
@@ -4301,7 +4394,7 @@ typedef uint8_t sm_key_t[16];
  * @param bass_cid
  * @param source_id
 */
-#define GATTSERVICE_SUBEVENT_BASS_CLIENT_NOTIFICATION_COMPLETE                         0x48u
+#define LEAUDIO_SUBEVENT_BASS_CLIENT_NOTIFICATION_COMPLETE                         0x0Eu
 
 /**
  * @format 12111
@@ -4311,22 +4404,8 @@ typedef uint8_t sm_key_t[16];
  * @param opcode
  * @param source_id
 */
-#define GATTSERVICE_SUBEVENT_BASS_CLIENT_SOURCE_OPERATION_COMPLETE                     0x49u
+#define LEAUDIO_SUBEVENT_BASS_CLIENT_SOURCE_OPERATION_COMPLETE                     0x0Fu
 
-/**
- * @format 1H1
- * @param subevent_code
- * @param con_handle
- * @param status
-*/
-#define GATTSERVICE_SUBEVENT_BASS_SERVER_CONNECTED                              0x70u
-
-/**
- * @format 1H
- * @param subevent_code
- * @param con_handle
-*/
-#define GATTSERVICE_SUBEVENT_BASS_SERVER_DISCONNECTED                           0x71u
 
 // MESH Meta Event Group
 

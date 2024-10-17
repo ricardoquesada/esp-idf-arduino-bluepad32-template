@@ -76,7 +76,8 @@ extern "C" {
 #endif /* btstack_assert */
 #else /* HAVE_ASSERT */
 #ifdef ENABLE_BTSTACK_ASSERT
-void btstack_assert_failed(const char * file, uint16_t line_nr);
+#include <stdnoreturn.h>
+noreturn void btstack_assert_failed(const char * file, uint16_t line_nr);
 #ifndef btstack_assert
 // use btstack macro that calls btstack_assert_failed() - provided by port
 #define btstack_assert(condition)         if (condition) {} else { btstack_assert_failed(BTSTACK_FILE__, __LINE__);  }
@@ -86,6 +87,9 @@ void btstack_assert_failed(const char * file, uint16_t line_nr);
 #define btstack_assert(condition)         {(void)(condition);}
 #endif /* btstack_assert */
 #endif /* HAVE_ASSERT */
+
+/* Compile-time assert macro */
+#define STATIC_ASSERT(COND,MSG) typedef char static_assertion_##MSG[(COND)?1:-1]
 
 // mark code that should not be reached. Similar to assert, but mapped to NOP for coverage
 #ifdef UNIT_TEST

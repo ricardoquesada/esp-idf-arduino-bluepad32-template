@@ -2785,7 +2785,7 @@ static void hci_store_local_supported_commands(const uint8_t * packet){
     for (i = 0 ; i < SUPPORTED_HCI_COMMANDS_COUNT ; i++){
         if ((commands_map[supported_hci_commands_map[i].byte_offset] & (1 << supported_hci_commands_map[i].bit_position)) != 0){
 #ifdef ENABLE_LOG_DEBUG
-            log_info("Command %s (%u) supported %u/%u", command_names[i], i, supported_hci_commands_map[i].byte_offset, supported_hci_commands_map[i].bit_position);
+            log_debug("Command %s (%u) supported %u/%u", command_names[i], i, supported_hci_commands_map[i].byte_offset, supported_hci_commands_map[i].bit_position);
 #else
             log_info("Command 0x%02x supported %u/%u", i, supported_hci_commands_map[i].byte_offset, supported_hci_commands_map[i].bit_position);
 #endif
@@ -4407,24 +4407,28 @@ static void event_handler(uint8_t *packet, uint16_t size){
                     break;
                 case HCI_SUBEVENT_LE_ADVERTISING_SET_TERMINATED:
                     advertising_handle = hci_subevent_le_advertising_set_terminated_get_advertising_handle(packet);
-                    btstack_linked_list_iterator_init(&it, &hci_stack->le_advertising_sets);
-                    while (btstack_linked_list_iterator_has_next(&it)) {
-                        le_advertising_set_t *advertising_set = (le_advertising_set_t *) btstack_linked_list_iterator_next(&it);
-                        if (advertising_set->advertising_handle == advertising_handle){
-                            advertising_set->state &= ~(LE_ADVERTISEMENT_STATE_ACTIVE | LE_ADVERTISEMENT_STATE_ENABLED);
-                        }
-                    }
-                    // support legacy advertisements
-                    if (advertising_handle == 0){
+                    if (advertising_handle == LE_EXTENDED_ADVERTISING_LEGACY_HANDLE){
+                        // legacy advertisements
                         hci_stack->le_advertisements_state &= ~LE_ADVERTISEMENT_STATE_ACTIVE;
                         hci_update_advertisements_enabled_for_current_roles();
+                    } else {
+                        btstack_linked_list_iterator_init(&it, &hci_stack->le_advertising_sets);
+                        while (btstack_linked_list_iterator_has_next(&it)) {
+                            le_advertising_set_t *advertising_set = (le_advertising_set_t *) btstack_linked_list_iterator_next(&it);
+                            if (advertising_set->advertising_handle == advertising_handle){
+                                advertising_set->state &= ~(LE_ADVERTISEMENT_STATE_ACTIVE | LE_ADVERTISEMENT_STATE_ENABLED);
+                            }
+                        }
                     }
                     // event may come before le connection complete and announces new connection
                     if (hci_subevent_le_advertising_set_terminated_get_status(packet) == ERROR_CODE_SUCCESS){
                         handle = hci_subevent_le_advertising_set_terminated_get_connection_handle(packet);
                         conn = hci_connection_for_handle(handle);
                         if (conn == NULL){
-                            conn = create_connection_for_bd_addr_and_type(addr, BD_ADDR_TYPE_LE_PUBLIC, HCI_ROLE_SLAVE);
+                            // use placeholder address for peer, will be overwritten in hci_handle_le_connection_complete_event()
+                            bd_addr_t addr;
+                            memset(addr, 0, 6);
+                            conn = create_connection_for_bd_addr_and_type(addr, BD_ADDR_TYPE_UNKNOWN, HCI_ROLE_SLAVE);
                             if (conn != NULL){
                                 conn->state = ANNOUNCED;
                                 conn->con_handle = handle;
@@ -8812,9 +8816,9 @@ uint8_t gap_extended_advertising_set_resolvable_private_address_update(uint16_t 
 }
 
 uint8_t gap_extended_advertising_setup(le_advertising_set_t * storage, const le_extended_advertising_parameters_t * advertising_parameters, uint8_t * out_advertising_handle){
-    // find free advertisement handle
+    // find free advertisement handle. we use LE_EXTENDED_ADVERTISING_LEGACY_HANDLE for non-extended advertising
     uint8_t advertisement_handle;
-    for (advertisement_handle = 1; advertisement_handle <= LE_EXTENDED_ADVERTISING_MAX_HANDLE; advertisement_handle++){
+    for (advertisement_handle = LE_EXTENDED_ADVERTISING_LEGACY_HANDLE + 1; advertisement_handle <= LE_EXTENDED_ADVERTISING_MAX_HANDLE; advertisement_handle++){
         if (hci_advertising_set_for_handle(advertisement_handle) == NULL) break;
     }
     if (advertisement_handle > LE_EXTENDED_ADVERTISING_MAX_HANDLE) return ERROR_CODE_MEMORY_CAPACITY_EXCEEDED;

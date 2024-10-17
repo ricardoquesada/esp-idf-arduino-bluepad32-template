@@ -334,10 +334,10 @@ int join(char * buffer, int buffer_size, uint8_t * values, int values_nr){
     int i;
     int offset = 0;
     for (i = 0; i < (values_nr-1); i++) {
-      offset += snprintf(buffer+offset, buffer_size-offset, "%d,", values[i]); // puts string into buffer
+      offset += btstack_snprintf_assert_complete(buffer+offset, buffer_size-offset, "%d,", values[i]); // puts string into buffer
     }
     if (i<values_nr){
-        offset += snprintf(buffer+offset, buffer_size-offset, "%d", values[i]);
+        offset += btstack_snprintf_assert_complete(buffer+offset, buffer_size-offset, "%d", values[i]);
     }
     return offset;
 }
@@ -348,11 +348,11 @@ int join_bitmap(char * buffer, int buffer_size, uint32_t values, int values_nr){
     int i;
     int offset = 0;
     for (i = 0; i < (values_nr-1); i++) {
-      offset += snprintf(buffer+offset, buffer_size-offset, "%d,", get_bit(values,i)); // puts string into buffer
+      offset += btstack_snprintf_assert_complete(buffer+offset, buffer_size-offset, "%d,", get_bit(values,i)); // puts string into buffer
     }
     
     if (i<values_nr){
-        offset += snprintf(buffer+offset, buffer_size-offset, "%d", get_bit(values,i));
+        offset += btstack_snprintf_assert_complete(buffer+offset, buffer_size-offset, "%d", get_bit(values,i));
     }
     return offset;
 }
@@ -2412,6 +2412,10 @@ void hfp_log_rfcomm_message(const char * tag, uint8_t * packet, uint16_t size){
     }
     printable[i] = 0;
     log_info("%s: '%s'", tag, printable);
+#else
+    UNUSED(tag);
+    UNUSED(packet);
+    UNUSED(size);
 #endif
 }
 

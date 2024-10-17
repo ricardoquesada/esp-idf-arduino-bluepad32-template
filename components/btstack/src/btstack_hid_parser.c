@@ -211,7 +211,7 @@ bool btstack_hid_descriptor_iterator_has_more(btstack_hid_descriptor_iterator_t 
     return iterator->item_ready;
 }
 
-const hid_descriptor_item_t * const btstack_hid_descriptor_iterator_get_item(btstack_hid_descriptor_iterator_t * iterator){
+const hid_descriptor_item_t * btstack_hid_descriptor_iterator_get_item(btstack_hid_descriptor_iterator_t * iterator){
     iterator->descriptor_pos += iterator->descriptor_item.item_size;
     iterator->item_ready = false;
     return &iterator->descriptor_item;
@@ -424,7 +424,7 @@ void btstack_hid_usage_iterator_get_item(btstack_hid_usage_iterator_t * iterator
         iterator->available_usages--;
         if (iterator->usage_range && (iterator->usage_minimum > iterator->usage_maximum)){
             // usage min - max range smaller than report count, ignore remaining bit in report
-            log_debug("Ignoring %u items without Usage", parser->required_usages);
+            log_debug("Ignoring %u items without Usage", iterator->required_usages);
             iterator->report_pos_in_bit += iterator->global_report_size * iterator->required_usages;
             iterator->required_usages = 0;
         }

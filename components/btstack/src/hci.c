@@ -4017,6 +4017,11 @@ static void event_handler(uint8_t *packet, uint16_t size){
             // only store link key:
             // - if bondable enabled
             if (hci_stack->bondable == false) break;
+            // - if at least one side requests bonding during the IO Capabilities exchange.
+            // Note: we drop bonding flag in acceptor role if remote doesn't request it
+            bool bonding_local  = conn->io_cap_request_auth_req  >= SSP_IO_AUTHREQ_MITM_PROTECTION_NOT_REQUIRED_DEDICATED_BONDING;
+            bool bonding_remote = conn->io_cap_response_auth_req >= SSP_IO_AUTHREQ_MITM_PROTECTION_NOT_REQUIRED_DEDICATED_BONDING;
+            if ((bonding_local == false) && (bonding_remote == false)) break;
             // - if security level sufficient
             if (gap_security_level_for_link_key_type(link_key_type) < conn->requested_security_level) break;
             gap_store_link_key_for_bd_addr(addr, &packet[8], conn->link_key_type);
@@ -7332,9 +7337,9 @@ static bool hci_run_general_pending_commands(void){
             // set authentication requirements:
             // - MITM = ssp_authentication_requirement (USER) | requested_security_level (dynamic)
             // - BONDING MODE: dedicated if requested, bondable otherwise. Drop bondable if not set for remote
-            uint8_t authreq = hci_stack->ssp_authentication_requirement & 1;
+            connection->io_cap_request_auth_req = hci_stack->ssp_authentication_requirement & 1;
             if (gap_mitm_protection_required_for_security_level(connection->requested_security_level)){
-                authreq |= 1;
+                connection->io_cap_request_auth_req |= 1;
             }
             bool bonding = hci_stack->bondable;
             if (connection->authentication_flags & AUTH_FLAG_RECV_IO_CAPABILITIES_RESPONSE){
@@ -7347,9 +7352,9 @@ static bool hci_run_general_pending_commands(void){
             }
             if (bonding){
                 if (connection->bonding_flags & BONDING_DEDICATED){
-                    authreq |= SSP_IO_AUTHREQ_MITM_PROTECTION_NOT_REQUIRED_DEDICATED_BONDING;
+                    connection->io_cap_request_auth_req |= SSP_IO_AUTHREQ_MITM_PROTECTION_NOT_REQUIRED_DEDICATED_BONDING;
                 } else {
-                    authreq |= SSP_IO_AUTHREQ_MITM_PROTECTION_NOT_REQUIRED_GENERAL_BONDING;
+                    connection->io_cap_request_auth_req |= SSP_IO_AUTHREQ_MITM_PROTECTION_NOT_REQUIRED_GENERAL_BONDING;
                 }
             }
             uint8_t have_oob_data = 0;
@@ -7361,7 +7366,7 @@ static bool hci_run_general_pending_commands(void){
                 have_oob_data |= 2;
             }
 #endif
-            hci_send_cmd(&hci_io_capability_request_reply, &connection->address, hci_stack->ssp_io_capability, have_oob_data, authreq);
+            hci_send_cmd(&hci_io_capability_request_reply, &connection->address, hci_stack->ssp_io_capability, have_oob_data, connection->io_cap_request_auth_req);
             return true;
         }
 

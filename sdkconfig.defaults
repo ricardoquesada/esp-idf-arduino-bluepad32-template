@@ -66,3 +66,11 @@ CONFIG_ARDUINO_SELECTIVE_BluetoothSerial=n
 CONFIG_ARDUINO_SELECTIVE_ESP_SR=n
 # Cannot disable SimpleBLE since it is included from WiFiProv.cpp
 #CONFIG_ARDUINO_SELECTIVE_SimpleBLE=n
+
+#
+# BTstack
+#
+# Needs to be disabled for ESP32-C6
+# See: https://github.com/bluekitchen/btstack/issues/599
+#
+CONFIG_BTSTACK_AUDIO=n

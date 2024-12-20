@@ -192,12 +192,7 @@ static void ancs_chunk_parser_handle_byte(uint8_t data){
     }
 }
 
-static void ancs_client_handle_notification(uint8_t * packet, uint16_t size){
-    UNUSED(size);
-
-    uint16_t  value_handle = little_endian_read_16(packet, 4);
-    uint16_t  value_length = little_endian_read_16(packet, 6);
-    uint8_t * value = &packet[8];
+static void ancs_client_handle_notification(uint16_t value_handle, const uint8_t * value, uint16_t value_length){
 
     log_info("ANCS Notification, value handle %u", value_handle);
 
@@ -257,11 +252,30 @@ static void ancs_client_send_next_query(void * context){
     }
 }
 
+static void ancs_client_handle_gatt_client_event_in_w4_service_result(uint8_t* packet) {
+    switch(hci_event_packet_get_type(packet)){
+        case GATT_EVENT_SERVICE_QUERY_RESULT:
+            gatt_event_service_query_result_get_service(packet, &ancs_service);
+            ancs_service_found = 1;
+            break;
+        case GATT_EVENT_QUERY_COMPLETE:
+            if (!ancs_service_found){
+                log_info("ANCS Service not found");
+                tc_state = TC_IDLE;
+                break;
+            }
+            tc_state = TC_W2_QUERY_CARACTERISTIC;
+            break;
+        default:
+            break;
+    }
+}
 
 static void ancs_client_handle_gatt_client_event(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size){
 
     UNUSED(packet_type);
     UNUSED(channel);
+    UNUSED(size);
 
     static const uint8_t ancs_notification_source_uuid[] = {0x9F,0xBF,0x12,0x0D,0x63,0x01,0x42,0xD9,0x8C,0x58,0x25,0xE6,0x99,0xA2,0x1D,0xBD};
     static const uint8_t ancs_control_point_uuid[] =       {0x69,0xD1,0xD8,0xF3,0x45,0xE1,0x49,0xA8,0x98,0x21,0x9B,0xBD,0xFD,0xAA,0xD9,0xD9};
@@ -271,22 +285,7 @@ static void ancs_client_handle_gatt_client_event(uint8_t packet_type, uint16_t c
 
     switch(tc_state){
         case TC_W4_SERVICE_RESULT:
-            switch(hci_event_packet_get_type(packet)){
-                case GATT_EVENT_SERVICE_QUERY_RESULT:
-                    gatt_event_service_query_result_get_service(packet, &ancs_service);
-                    ancs_service_found = 1;
-                    break;
-                case GATT_EVENT_QUERY_COMPLETE:
-                    if (!ancs_service_found){
-                        log_info("ANCS Service not found");
-                        tc_state = TC_IDLE;
-                        break;
-                    }
-                    tc_state = TC_W2_QUERY_CARACTERISTIC;
-                    break;
-                default:
-                    break;
-            }
+            ancs_client_handle_gatt_client_event_in_w4_service_result(packet);
             break;
 
         case TC_W4_CHARACTERISTIC_RESULT:
@@ -348,9 +347,19 @@ static void ancs_client_handle_gatt_client_event(uint8_t packet_type, uint16_t c
         case TC_SUBSCRIBED:
             switch(hci_event_packet_get_type(packet)){
                 case GATT_EVENT_NOTIFICATION:
-                case GATT_EVENT_INDICATION:
-                    ancs_client_handle_notification(packet, size);
+                    ancs_client_handle_notification(
+                        gatt_event_notification_get_value_handle(packet),
+                        gatt_event_notification_get_value(packet),
+                        gatt_event_notification_get_value_length(packet)
+                    );
                     break;
+                case GATT_EVENT_INDICATION:
+                    ancs_client_handle_notification(
+                        gatt_event_indication_get_value_handle(packet),
+                        gatt_event_indication_get_value(packet),
+                        gatt_event_indication_get_value_length(packet)
+                    );
+                break;
                 default:
                     break;
             }

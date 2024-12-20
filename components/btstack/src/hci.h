@@ -731,6 +731,7 @@ typedef enum{
     HCI_ISO_STREAM_STATE_W4_ISO_SETUP_INPUT,
     HCI_ISO_STREAM_STATE_W2_SETUP_ISO_OUTPUT,
     HCI_ISO_STREAM_STATE_W4_ISO_SETUP_OUTPUT,
+    HCI_ISO_STREAM_STATE_ACTIVE,
     HCI_ISO_STREAM_STATE_W2_CLOSE,
     HCI_ISO_STREAM_STATE_W4_DISCONNECTED,
 } hci_iso_stream_state_t;
@@ -1880,6 +1881,7 @@ uint8_t hci_dedicated_bonding_defer_disconnect(hci_con_handle_t con_handle, bool
 // Disable automatic L2CAP disconnect if no L2CAP connection is established
 void hci_disable_l2cap_timeout_check(void);
 
+#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
 // setup test connections, used for fuzzing
 void hci_setup_test_connections_fuzz(void);
 
@@ -1889,6 +1891,10 @@ void hci_free_connections_fuzz(void);
 // simulate stack bootup
 void hci_simulate_working_fuzz(void);
 
+// get hci struct
+hci_stack_t * hci_get_stack();
+
+#endif
 
 #if defined __cplusplus
 }

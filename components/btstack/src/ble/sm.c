@@ -2408,8 +2408,6 @@ static void sm_run_activate_connection(void){
         sm_connection_t  * sm_connection = &hci_connection->sm_connection;
         // - if no connection locked and we're ready/waiting for setup context, fetch it and start
         bool done = true;
-        int err;
-        UNUSED(err);
 
 #ifdef ENABLE_LE_SECURE_CONNECTIONS
         // assert ec key is ready
@@ -2808,17 +2806,24 @@ static bool sm_run_non_connection_logic(void){
     return done;
 }
 
-static void sm_run(void){
-
-    // assert that stack has already bootet
-    if (hci_get_state() != HCI_STATE_WORKING) return;
+static bool sm_run_ready(void) {
+    // assert that stack has already booted
+    if (hci_get_state() != HCI_STATE_WORKING) return false;
 
     // assert that we can send at least commands
-    if (!hci_can_send_command_packet_now()) return;
+    if (!hci_can_send_command_packet_now()) return false;
 
     // pause until IR/ER are ready
-    if (sm_persistent_keys_random_active) return;
+    if (sm_persistent_keys_random_active) return false;
 
+    return true;
+}
+
+static void sm_run(void){
+
+    // ready
+    if (sm_run_ready() == false) return;
+    
     // non-connection related behaviour
     bool done = sm_run_non_connection_logic();
     if (done) return;
@@ -2870,7 +2875,8 @@ static void sm_run(void){
         }
 #endif
 
-        int key_distribution_flags;
+        // initialize to avoid 'maybe used uninitialized' error
+        int key_distribution_flags = 0;
         UNUSED(key_distribution_flags);
 #ifdef ENABLE_LE_PERIPHERAL
         int err;
@@ -4399,12 +4405,80 @@ static uint8_t sm_pdu_validate_and_get_opcode(uint8_t packet_type, const uint8_t
     return sm_pdu_code;
 }
 
+
+#ifdef ENABLE_LE_SECURE_CONNECTIONS
+static void sm_pdu_handler_pairing_public_key(sm_connection_t * sm_conn, const uint8_t * packet) {
+    // store public key for DH Key calculation
+    reverse_256(&packet[01], &setup->sm_peer_q[0]);
+    reverse_256(&packet[33], &setup->sm_peer_q[32]);
+
+    // CVE-2020-26558: abort pairing if remote uses the same public key
+    if (memcmp(&setup->sm_peer_q, ec_q, 64) == 0){
+        log_info("Remote PK matches ours");
+        sm_pairing_error(sm_conn, SM_REASON_DHKEY_CHECK_FAILED);
+        return;
+    }
+
+    // validate public key
+    int err = btstack_crypto_ecc_p256_validate_public_key(setup->sm_peer_q);
+    if (err != 0){
+        log_info("sm: peer public key invalid %x", err);
+        sm_pairing_error(sm_conn, SM_REASON_DHKEY_CHECK_FAILED);
+        return;
+    }
+
+    // start calculating dhkey
+    btstack_crypto_ecc_p256_calculate_dhkey(&sm_crypto_ecc_p256_request, setup->sm_peer_q, setup->sm_dhkey, sm_sc_dhkey_calculated, (void*)(uintptr_t) sm_conn->sm_handle);
+
+    log_info("public key received, generation method %u", setup->sm_stk_generation_method);
+    if (IS_RESPONDER(sm_conn->sm_role)){
+        // responder
+        sm_conn->sm_engine_state = SM_SC_SEND_PUBLIC_KEY_COMMAND;
+    } else {
+        // initiator
+        // stk generation method
+        // passkey entry: notify app to show passkey or to request passkey
+        switch (setup->sm_stk_generation_method){
+            case JUST_WORKS:
+            case NUMERIC_COMPARISON:
+                sm_conn->sm_engine_state = SM_SC_W4_CONFIRMATION;
+                break;
+            case PK_RESP_INPUT:
+                sm_sc_start_calculating_local_confirm(sm_conn);
+                break;
+            case PK_INIT_INPUT:
+            case PK_BOTH_INPUT:
+                if (setup->sm_user_response != SM_USER_RESPONSE_PASSKEY){
+                    sm_conn->sm_engine_state = SM_SC_W4_USER_RESPONSE;
+                    break;
+                }
+                sm_sc_start_calculating_local_confirm(sm_conn);
+                break;
+            case OOB:
+                if (setup->sm_have_oob_data){
+                    // if we have received rb & cb, verify Cb = f4(PKb, PKb, rb, 0)
+                    sm_conn->sm_engine_state = SM_SC_W2_CMAC_FOR_CHECK_CONFIRMATION;
+                } else {
+                    // otherwise, generate our nonce
+                    sm_sc_generate_nx_for_send_random(sm_conn);
+                }
+                break;
+            default:
+                btstack_assert(false);
+                break;
+        }
+    }
+}
+#endif
+
+
 static void sm_pdu_handler(sm_connection_t *sm_conn, uint8_t sm_pdu_code, const uint8_t *packet) {
     log_debug("sm_pdu_handler: state %u, pdu 0x%02x", sm_conn->sm_engine_state, sm_pdu_code);
 
+#ifdef ENABLE_LE_CENTRAL
     int err;
+#endif
     uint8_t max_encryption_key_size;
-    UNUSED(err);
 
     switch (sm_conn->sm_engine_state){
 
@@ -4575,68 +4649,7 @@ static void sm_pdu_handler(sm_connection_t *sm_conn, uint8_t sm_pdu_code, const 
                 sm_pdu_received_in_wrong_state(sm_conn);
                 break;
             }
-
-            // store public key for DH Key calculation
-            reverse_256(&packet[01], &setup->sm_peer_q[0]);
-            reverse_256(&packet[33], &setup->sm_peer_q[32]);
-
-            // CVE-2020-26558: abort pairing if remote uses the same public key
-            if (memcmp(&setup->sm_peer_q, ec_q, 64) == 0){
-                log_info("Remote PK matches ours");
-                sm_pairing_error(sm_conn, SM_REASON_DHKEY_CHECK_FAILED);
-                break;
-            }
-
-            // validate public key
-            err = btstack_crypto_ecc_p256_validate_public_key(setup->sm_peer_q);
-            if (err != 0){
-                log_info("sm: peer public key invalid %x", err);
-                sm_pairing_error(sm_conn, SM_REASON_DHKEY_CHECK_FAILED);
-                break;
-            }
-
-            // start calculating dhkey
-            btstack_crypto_ecc_p256_calculate_dhkey(&sm_crypto_ecc_p256_request, setup->sm_peer_q, setup->sm_dhkey, sm_sc_dhkey_calculated, (void*)(uintptr_t) sm_conn->sm_handle);
-
-
-            log_info("public key received, generation method %u", setup->sm_stk_generation_method);
-            if (IS_RESPONDER(sm_conn->sm_role)){
-                // responder
-                sm_conn->sm_engine_state = SM_SC_SEND_PUBLIC_KEY_COMMAND;
-            } else {
-                // initiator
-                // stk generation method
-                // passkey entry: notify app to show passkey or to request passkey
-                switch (setup->sm_stk_generation_method){
-                    case JUST_WORKS:
-                    case NUMERIC_COMPARISON:
-                        sm_conn->sm_engine_state = SM_SC_W4_CONFIRMATION;
-                        break;
-                    case PK_RESP_INPUT:
-                        sm_sc_start_calculating_local_confirm(sm_conn);
-                        break;
-                    case PK_INIT_INPUT:
-                    case PK_BOTH_INPUT:
-                        if (setup->sm_user_response != SM_USER_RESPONSE_PASSKEY){
-                            sm_conn->sm_engine_state = SM_SC_W4_USER_RESPONSE;
-                            break;
-                        }
-                        sm_sc_start_calculating_local_confirm(sm_conn);
-                        break;
-                    case OOB:
-                        if (setup->sm_have_oob_data){
-                            // if we have received rb & cb, verify Cb = f4(PKb, PKb, rb, 0)
-                            sm_conn->sm_engine_state = SM_SC_W2_CMAC_FOR_CHECK_CONFIRMATION;
-                        } else {
-                            // otherwise, generate our nonce
-                            sm_sc_generate_nx_for_send_random(sm_conn);
-                        }
-                        break;
-                    default:
-                        btstack_assert(false);
-                        break;
-                }
-            }
+            sm_pdu_handler_pairing_public_key(sm_conn, packet);
             break;
 
         case SM_SC_W4_CONFIRMATION:

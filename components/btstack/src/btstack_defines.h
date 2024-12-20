@@ -44,6 +44,7 @@
 #ifndef BTSTACK_DEFINES_H
 #define BTSTACK_DEFINES_H
 #include <stdint.h>
+#include "btstack_version.h"
 
 #include "btstack_linked_list.h" 
 
@@ -2667,7 +2668,7 @@ typedef uint8_t sm_key_t[16];
 #define AVDTP_SUBEVENT_SIGNALING_MEDIA_CODEC_MPEG_AUDIO_CAPABILITY   0x08u
 
 /**
- * @format 121112131
+ * @format 1211121311
  * @param subevent_code
  * @param avdtp_cid
  * @param remote_seid
@@ -2677,6 +2678,7 @@ typedef uint8_t sm_key_t[16];
  * @param channels_bitmap
  * @param bit_rate
  * @param vbr
+ * @param drc
  */
 #define AVDTP_SUBEVENT_SIGNALING_MEDIA_CODEC_MPEG_AAC_CAPABILITY     0x09u
 
@@ -2835,7 +2837,7 @@ typedef uint8_t sm_key_t[16];
 #define AVDTP_SUBEVENT_SIGNALING_MEDIA_CODEC_MPEG_AUDIO_CONFIGURATION   0x15u
 
 /**
- * @format 12111113131
+ * @format 121111131311
  * @param subevent_code
  * @param avdtp_cid
  * @param local_seid
@@ -2847,6 +2849,7 @@ typedef uint8_t sm_key_t[16];
  * @param num_channels
  * @param bit_rate
  * @param vbr
+ * @param drc
  */
 #define AVDTP_SUBEVENT_SIGNALING_MEDIA_CODEC_MPEG_AAC_CONFIGURATION     0x16u
 
@@ -2927,6 +2930,35 @@ typedef uint8_t sm_key_t[16];
  */
 #define AVDTP_SUBEVENT_SIGNALING_DELAY_REPORT               0x1Du
 
+/**
+ * @format 121114113
+ * @param subevent_code
+ * @param avdtp_cid
+ * @param remote_seid
+ * @param media_type
+ * @param object_type
+ * @param sampling_frequency_bitmap
+ * @param channels_bitmap
+ * @param vbr
+ * @param bit_rate_index_bitmap
+ */
+#define AVDTP_SUBEVENT_SIGNALING_MEDIA_CODEC_MPEG_D_USAC_CAPABILITY     0x1Eu
+
+/**
+ * @format 12111113113
+ * @param subevent_code
+ * @param avdtp_cid
+ * @param local_seid
+ * @param remote_seid
+ * @param reconfigure
+ * @param media_type
+ * @param object_type
+ * @param sampling_frequency
+ * @param num_channels
+ * @param vbr
+ * @param bit_rate
+ */
+#define AVDTP_SUBEVENT_SIGNALING_MEDIA_CODEC_MPEG_D_USAC_CONFIGURATION     0x1Fu
 
 /** A2DP Subevent */
 /* Stream goes through following states:
@@ -2987,7 +3019,7 @@ typedef uint8_t sm_key_t[16];
 #define A2DP_SUBEVENT_SIGNALING_MEDIA_CODEC_MPEG_AUDIO_CONFIGURATION   0x03u
 
 /**
- * @format 12111113131
+ * @format 121111131311
  * @param subevent_code
  * @param a2dp_cid
  * @param local_seid
@@ -2999,6 +3031,7 @@ typedef uint8_t sm_key_t[16];
  * @param num_channels
  * @param bit_rate
  * @param vbr
+ * @param drc
  */
 #define A2DP_SUBEVENT_SIGNALING_MEDIA_CODEC_MPEG_AAC_CONFIGURATION     0x04u
 
@@ -3163,7 +3196,7 @@ typedef uint8_t sm_key_t[16];
 #define A2DP_SUBEVENT_SIGNALING_MEDIA_CODEC_MPEG_AUDIO_CAPABILITY   0x14u
 
 /**
- * @format 121112131
+ * @format 1211121311
  * @param subevent_code
  * @param a2dp_cid
  * @param remote_seid
@@ -3173,6 +3206,7 @@ typedef uint8_t sm_key_t[16];
  * @param channels_bitmap
  * @param bit_rate
  * @param vbr
+ * @param drc
  */
 #define A2DP_SUBEVENT_SIGNALING_MEDIA_CODEC_MPEG_AAC_CAPABILITY     0x15u
 
@@ -4105,7 +4139,7 @@ typedef uint8_t sm_key_t[16];
 /**
  * @format 12111
  * @param subevent_code
- * @param hids_cid
+ * @param bas_cid
  * @param status
  * @param num_instances
  * @param poll_bitmap
@@ -4115,7 +4149,7 @@ typedef uint8_t sm_key_t[16];
 /**
  * @format 12111
  * @param subevent_code
- * @param hids_cid
+ * @param bas_cid
  * @param service_index
  * @param att_status  see ATT errors in bluetooth.h
  * @param level

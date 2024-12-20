@@ -653,8 +653,8 @@ static int nr_hci_connections(void){
 
 uint16_t hci_number_free_acl_slots_for_connection_type(bd_addr_type_t address_type){
     
-    unsigned int num_packets_sent_classic = 0;
-    unsigned int num_packets_sent_le = 0;
+    int num_packets_sent_classic = 0;
+    int num_packets_sent_le = 0;
 
     btstack_linked_item_t *it;
     for (it = (btstack_linked_item_t *) hci_stack->connections; it != NULL; it = it->next){
@@ -666,29 +666,18 @@ uint16_t hci_number_free_acl_slots_for_connection_type(bd_addr_type_t address_ty
             num_packets_sent_classic += connection->num_packets_sent;
         }
     }
-    log_debug("ACL classic buffers: %u used of %u", num_packets_sent_classic, hci_stack->acl_packets_total_num);
+    btstack_assert(hci_stack->acl_packets_total_num  >= num_packets_sent_classic);
     int free_slots_classic = hci_stack->acl_packets_total_num - num_packets_sent_classic;
     int free_slots_le = 0;
 
-    if (free_slots_classic < 0){
-        log_error("hci_number_free_acl_slots: outgoing classic packets (%u) > total classic packets (%u)", num_packets_sent_classic, hci_stack->acl_packets_total_num);
-        return 0;
-    }
-
     if (hci_stack->le_acl_packets_total_num){
         // if we have LE slots, they are used
+        btstack_assert( hci_stack->le_acl_packets_total_num >= num_packets_sent_le);
         free_slots_le = hci_stack->le_acl_packets_total_num - num_packets_sent_le;
-        if (free_slots_le < 0){
-            log_error("hci_number_free_acl_slots: outgoing le packets (%u) > total le packets (%u)", num_packets_sent_le, hci_stack->le_acl_packets_total_num);
-            return 0;
-        }
     } else {
         // otherwise, classic slots are used for LE, too
         free_slots_classic -= num_packets_sent_le;
-        if (free_slots_classic < 0){
-            log_error("hci_number_free_acl_slots: outgoing classic + le packets (%u + %u) > total packets (%u)", num_packets_sent_classic, num_packets_sent_le, hci_stack->acl_packets_total_num);
-            return 0;
-        }
+        btstack_assert(free_slots_classic >= num_packets_sent_le);
     }
 
     switch (address_type){
@@ -3064,19 +3053,23 @@ static void handle_command_complete_event(uint8_t * packet, uint16_t size){
             // lookup CIG
             cig = hci_cig_for_id(hci_stack->iso_active_operation_group_id);
             if (cig != NULL){
-                uint8_t i = 0;
                 if (status == ERROR_CODE_SUCCESS){
-                    // assign CIS handles to pre-allocated CIS
-                    btstack_linked_list_iterator_t it;
-                    btstack_linked_list_iterator_init(&it, &hci_stack->iso_streams);
-                    while (btstack_linked_list_iterator_has_next(&it) && (i < cig->num_cis)) {
-                        hci_iso_stream_t *iso_stream = (hci_iso_stream_t *) btstack_linked_list_iterator_next(&it);
-                        if ((iso_stream->group_id == hci_stack->iso_active_operation_group_id) &&
-                            (iso_stream->iso_type == HCI_ISO_TYPE_CIS)){
-                            hci_con_handle_t cis_handle = little_endian_read_16(packet, OFFSET_OF_DATA_IN_COMMAND_COMPLETE+3+(2*i));
-                            iso_stream->cis_handle  = cis_handle;
-                            cig->cis_con_handles[i] = cis_handle;
-                            i++;
+                    uint8_t i;
+                    for (i=0;i<cig->num_cis;i++) {
+                        // assign CIS handles to pre-allocated CIS
+                        uint8_t cis_id = cig->params->cis_params[i].cis_id;
+                        btstack_linked_list_iterator_t it;
+                        btstack_linked_list_iterator_init(&it, &hci_stack->iso_streams);
+                        while (btstack_linked_list_iterator_has_next(&it) && (i < cig->num_cis)) {
+                            hci_iso_stream_t *iso_stream = (hci_iso_stream_t *) btstack_linked_list_iterator_next(&it);
+                            if ((iso_stream->group_id == hci_stack->iso_active_operation_group_id) &&
+                                (iso_stream->iso_type == HCI_ISO_TYPE_CIS) &&
+                                (iso_stream->stream_id == cis_id)){
+                                hci_con_handle_t cis_handle = little_endian_read_16(packet, OFFSET_OF_DATA_IN_COMMAND_COMPLETE+3+(2*i));
+                                iso_stream->cis_handle  = cis_handle;
+                                cig->cis_con_handles[i] = cis_handle;
+                                break;
+                            }
                         }
                     }
                     cig->state = LE_AUDIO_CIG_STATE_W4_CIS_REQUEST;
@@ -3162,6 +3155,7 @@ static void handle_command_complete_event(uint8_t * packet, uint16_t size){
                                 }
                                 break;
                             case HCI_ISO_STREAM_STATE_W4_ISO_SETUP_OUTPUT:
+                                iso_stream->state = HCI_ISO_STREAM_STATE_ACTIVE;
                                 emit_cis_created = true;
                                 break;
                             default:
@@ -3179,6 +3173,7 @@ static void handle_command_complete_event(uint8_t * packet, uint16_t size){
                         // assume we are central
                         uint8_t cis_index     = cig->state_vars.next_cis >> 1;
                         uint8_t cis_direction = cig->state_vars.next_cis & 1;
+                        uint8_t cis_id        = cig->params->cis_params[cis_index].cis_id;
                         bool outgoing_needed  = cig->params->cis_params[cis_index].max_sdu_p_to_c > 0;
                         // if outgoing has been setup, or incoming was setup but outgoing not required
                         if ((cis_direction == 1) || (outgoing_needed == false)){
@@ -3186,7 +3181,7 @@ static void handle_command_complete_event(uint8_t * packet, uint16_t size){
                             btstack_linked_list_iterator_init(&it, &hci_stack->iso_streams);
                             while (btstack_linked_list_iterator_has_next(&it)) {
                                 hci_iso_stream_t *iso_stream = (hci_iso_stream_t *) btstack_linked_list_iterator_next(&it);
-                                if ((iso_stream->group_id == cig->cig_id) && (iso_stream->stream_id == cis_index)){
+                                if ((iso_stream->group_id == cig->cig_id) && (iso_stream->stream_id == cis_id)){
                                     hci_cis_handle_created(iso_stream, status);
                                 }
                             }
@@ -3290,10 +3285,8 @@ static void handle_command_status_event(uint8_t * packet, uint16_t size) {
             // on error
             if (status != ERROR_CODE_SUCCESS){
 #ifdef ENABLE_LE_CENTRAL
-                if (hci_is_le_connection_type(addr_type)){
-                    hci_stack->le_connecting_state = LE_CONNECTING_IDLE;
-                    hci_stack->le_connecting_request = LE_CONNECTING_IDLE;
-                }
+                hci_stack->le_connecting_state = LE_CONNECTING_IDLE;
+                hci_stack->le_connecting_request = LE_CONNECTING_IDLE;
 #endif
                 // error => outgoing connection failed
                 hci_connection_t * conn = hci_connection_for_bd_addr_and_type(addr, addr_type);
@@ -6201,8 +6194,9 @@ static bool hci_whitelist_modification_process(void){
 
 static bool hci_run_general_gap_le(void){
 
+#if defined(ENABLE_LE_EXTENDED_ADVERTISING) || defined(ENABLE_LE_WHITELIST_TOUCH_AFTER_RESOLVING_LIST_UPDATE)
     btstack_linked_list_iterator_t lit;
-    UNUSED(lit);
+#endif
 
 #ifdef ENABLE_LE_EXTENDED_ADVERTISING
     if (hci_stack->le_resolvable_private_address_update_s > 0){
@@ -6810,7 +6804,7 @@ static bool hci_run_general_gap_le(void){
 					btstack_linked_list_iterator_init(&lit, &hci_stack->le_whitelist);
 					while (btstack_linked_list_iterator_has_next(&lit)) {
 						whitelist_entry_t *entry = (whitelist_entry_t *) btstack_linked_list_iterator_next(&lit);
-						if (entry->address_type != peer_identity_addr_type) continue;
+						if ((int)entry->address_type != peer_identity_addr_type) continue;
 						if (memcmp(entry->address, peer_identity_addreses, 6) != 0) continue;
 						log_info("trigger whitelist update %s", bd_addr_to_str(peer_identity_addreses));
 						entry->state |= LE_WHITELIST_REMOVE_FROM_CONTROLLER | LE_WHITELIST_ADD_TO_CONTROLLER;
@@ -7286,8 +7280,8 @@ static bool hci_run_general_pending_commands(void){
                         log_info("sending hci_le_create_connection");
                         hci_stack->le_connection_own_addr_type =  hci_stack->le_own_addr_type;
                         hci_get_own_address_for_addr_type(hci_stack->le_connection_own_addr_type, hci_stack->le_connection_own_address);
-                        hci_send_le_create_connection(0, connection->address_type, connection->address);
                         connection->state = SENT_CREATE_CONNECTION;
+                        hci_send_le_create_connection(0, connection->address_type, connection->address);
 #endif
 #endif
                         break;
@@ -10952,4 +10946,10 @@ void hci_simulate_working_fuzz(void){
     hci_init_done();
     hci_stack->num_cmd_packets = 255;
 }
+
+// get hci struct
+hci_stack_t * hci_get_stack() {
+    return hci_stack;
+}
+
 #endif

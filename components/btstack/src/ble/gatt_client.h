@@ -51,6 +51,11 @@
 extern "C" {
 #endif
 
+// Use Find Information for CCC Discovery by default
+#if !defined(ENABLE_GATT_FIND_INFORMATION_FOR_CCC_DISCOVERY) && !defined(ENABLE_GATT_LEGACY_CCC_DISCOVERY)
+#define ENABLE_GATT_FIND_INFORMATION_FOR_CCC_DISCOVERY
+#endif
+
 typedef enum {
     P_READY,
     P_W2_EMIT_QUERY_COMPLETE_EVENT,
@@ -1287,6 +1292,9 @@ void gatt_client_deserialize_characteristic_descriptor(const uint8_t * packet, i
 void gatt_client_att_packet_handler_fuzz(uint8_t packet_type, uint16_t handle, uint8_t *packet, uint16_t size);
 uint8_t gatt_client_get_client(hci_con_handle_t con_handle, gatt_client_t ** gatt_client);
 #endif
+
+// used for testing, default is ON
+void gatt_client_le_enhanced_enable(bool enable);
 
 #if defined __cplusplus
 }

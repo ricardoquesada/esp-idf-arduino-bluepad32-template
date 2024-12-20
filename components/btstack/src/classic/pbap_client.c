@@ -59,6 +59,7 @@
 #include "classic/goep_client.h"
 #include "classic/pbap.h"
 #include "classic/pbap_client.h"
+#include "sdp_util.h"
 
 // 796135f0-f0c5-11d8-0966- 0800200c9a66
 static const uint8_t pbap_uuid[] = { 0x79, 0x61, 0x35, 0xf0, 0xf0, 0xc5, 0x11, 0xd8, 0x09, 0x66, 0x08, 0x00, 0x20, 0x0c, 0x9a, 0x66};
@@ -432,10 +433,10 @@ static void pbap_client_parser_callback_get_operation(void * user_data, uint8_t 
             switch(client->state){
                 case PBAP_CLIENT_W4_PHONEBOOK:
                 case PBAP_CLIENT_W4_GET_CARD_ENTRY_COMPLETE:
-                    client->client_handler(PBAP_DATA_PACKET, client->goep_cid, (uint8_t *) data_buffer, data_len);
                     if (data_offset + data_len == total_len){
                         client->flow_wait_for_user = true;
                     }
+                    client->client_handler(PBAP_DATA_PACKET, client->goep_cid, (uint8_t *) data_buffer, data_len);
                     break;
                 case PBAP_CLIENT_W4_GET_CARD_LIST_COMPLETE:
                     pbap_client_process_vcard_list_body(client, data_buffer, data_len);
@@ -588,9 +589,8 @@ static void pbap_client_add_application_parameters(const pbap_client_t * client,
 }
 
 static void pbap_client_prepare_srm_header(pbap_client_t * client){
-    if (client->flow_control_enabled == false){
-        obex_srm_client_prepare_header(&client->obex_srm, client->goep_cid);
-    }
+    obex_srm_client_set_waiting(&client->obex_srm, client->flow_control_enabled);
+    obex_srm_client_prepare_header(&client->obex_srm, client->goep_cid);
 }
 
 static void pbap_client_prepare_get_operation(pbap_client_t * client){
@@ -723,11 +723,13 @@ static void pbap_handle_can_send_now(pbap_client_t *pbap_client) {
                 pos += pbap_client_application_params_add_list_start_offset (pbap_client, &application_parameters[pos], pbap_client->list_start_offset);
                 pos += pbap_client_application_params_add_vcard_selector(pbap_client, &application_parameters[pos]);
                 pbap_client_add_application_parameters(pbap_client, application_parameters, pos);
+            } else {
+                pbap_client_prepare_srm_header(pbap_client);
             }
             // state
             pbap_client->state = PBAP_CLIENT_W4_PHONEBOOK;
             pbap_client->flow_next_triggered = 0;
-            pbap_client->flow_wait_for_user = 0;
+            pbap_client->flow_wait_for_user = false;
             // prepare response
             pbap_client_prepare_get_operation(pbap_client);
             // send packet
@@ -762,6 +764,8 @@ static void pbap_handle_can_send_now(pbap_client_t *pbap_client) {
                     pos += pbap_client_application_params_add_list_start_offset (pbap_client, &application_parameters[pos], pbap_client->list_start_offset);
                 }
                 pbap_client_add_application_parameters(pbap_client, application_parameters, pos);
+            } else {
+                pbap_client_prepare_srm_header(pbap_client);
             }
             // state
             pbap_client->state = PBAP_CLIENT_W4_GET_CARD_LIST_COMPLETE;
@@ -783,6 +787,8 @@ static void pbap_handle_can_send_now(pbap_client_t *pbap_client) {
                 pos = 0;
                 pos += pbap_client_application_params_add_property_selector(pbap_client, &application_parameters[pos]);
                 pbap_client_add_application_parameters(pbap_client, application_parameters, pos);
+            } else {
+                pbap_client_prepare_srm_header(pbap_client);
             }
             // state
             pbap_client->state = PBAP_CLIENT_W4_GET_CARD_ENTRY_COMPLETE;
@@ -1287,7 +1293,7 @@ uint8_t pbap_next_packet(uint16_t pbap_cid){
     if (pbap_client == NULL){
         return ERROR_CODE_UNKNOWN_CONNECTION_IDENTIFIER;
     }
-    if (!pbap_client->flow_control_enabled){
+    if (pbap_client->flow_wait_for_user == false){
         return ERROR_CODE_SUCCESS;
     }
     switch (pbap_client->state){
@@ -1308,11 +1314,14 @@ uint8_t pbap_set_flow_control_mode(uint16_t pbap_cid, int enable){
     if (pbap_client == NULL){
         return ERROR_CODE_UNKNOWN_CONNECTION_IDENTIFIER;
     }
-    if (pbap_client->state != PBAP_CLIENT_CONNECTED){
-        return BTSTACK_BUSY;
+    switch (pbap_client->state){
+        case PBAP_CLIENT_CONNECTED:
+        case PBAP_CLIENT_W4_PHONEBOOK:
+            pbap_client->flow_control_enabled = enable;
+            return ERROR_CODE_SUCCESS;
+        default:
+            return BTSTACK_BUSY;
     }
-    pbap_client->flow_control_enabled = enable;
-    return ERROR_CODE_SUCCESS;
 }
 
 uint8_t pbap_set_vcard_selector(uint16_t pbap_cid, uint32_t vcard_selector){
@@ -1409,4 +1418,38 @@ uint8_t pbap_set_search_value(uint16_t pbap_cid, const char * search_value){
     }
     pbap_client->search_value = search_value;
     return ERROR_CODE_SUCCESS;
+}
+
+void pbap_client_create_sdp_record(uint8_t *service, uint32_t service_record_handle, const char *service_name) {
+    uint8_t* attribute;
+    de_create_sequence(service);
+
+    // 0x0000 "Service Record Handle"
+    de_add_number(service, DE_UINT, DE_SIZE_16, BLUETOOTH_ATTRIBUTE_SERVICE_RECORD_HANDLE);
+    de_add_number(service, DE_UINT, DE_SIZE_32, service_record_handle);
+
+    // 0x0001 "Service Class ID List"
+    de_add_number(service,  DE_UINT, DE_SIZE_16, BLUETOOTH_ATTRIBUTE_SERVICE_CLASS_ID_LIST);
+    attribute = de_push_sequence(service);
+    {
+        de_add_number(attribute, DE_UUID, DE_SIZE_16, BLUETOOTH_SERVICE_CLASS_PHONEBOOK_ACCESS_PCE);
+    }
+    de_pop_sequence(service, attribute);
+
+    // 0x0009 "Bluetooth Profile Descriptor List"
+    de_add_number(service,  DE_UINT, DE_SIZE_16, BLUETOOTH_ATTRIBUTE_BLUETOOTH_PROFILE_DESCRIPTOR_LIST);
+    attribute = de_push_sequence(service);
+    {
+        uint8_t *pbapServerProfile = de_push_sequence(attribute);
+        {
+            de_add_number(pbapServerProfile,  DE_UUID, DE_SIZE_16, BLUETOOTH_SERVICE_CLASS_PHONEBOOK_ACCESS);
+            de_add_number(pbapServerProfile,  DE_UINT, DE_SIZE_16, 0x0102); // Verision 1.2
+        }
+        de_pop_sequence(attribute, pbapServerProfile);
+    }
+    de_pop_sequence(service, attribute);
+
+    // 0x0100 "Service Name"
+    de_add_number(service,  DE_UINT, DE_SIZE_16, 0x0100);
+    de_add_data(service,  DE_STRING, (uint16_t) strlen(service_name), (uint8_t *) service_name);
 }

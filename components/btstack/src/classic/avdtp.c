@@ -272,15 +272,38 @@ static uint8_t avdtp_get_next_local_seid(void){
     return avdtp_stream_endpoints_id_counter;
 }
 
-static void avdtp_handle_start_sdp_client_query(void * context){
-    UNUSED(context);
-
-    uint16_t uuid;
-    btstack_linked_list_iterator_t it;    
+static avdtp_connection_t * avdtp_get_next_connection_ready_for_sdp_query(void){
+    btstack_linked_list_iterator_t it;
     btstack_linked_list_iterator_init(&it, &avdtp_connections);
     while (btstack_linked_list_iterator_has_next(&it)){
         avdtp_connection_t * connection = (avdtp_connection_t *)btstack_linked_list_iterator_next(&it);
-        
+        switch (connection->state){
+            case AVDTP_SIGNALING_W2_SEND_SDP_QUERY_FOR_REMOTE_SOURCE:
+            case AVDTP_SIGNALING_W2_SEND_SDP_QUERY_FOR_REMOTE_SINK:
+                return connection;
+            case AVDTP_SIGNALING_CONNECTION_OPENED:
+                switch (connection->initiator_connection_state ){
+                    case AVDTP_SIGNALING_CONNECTION_INITIATOR_W2_SEND_SDP_QUERY_THEN_GET_ALL_CAPABILITIES_FROM_REMOTE_SOURCE:
+                    case AVDTP_SIGNALING_CONNECTION_INITIATOR_W2_SEND_SDP_QUERY_THEN_GET_ALL_CAPABILITIES_FROM_REMOTE_SINK:
+                        return connection;
+                    default:
+                        break;
+                }
+                break;
+            default:
+                break;
+        }
+    }
+    return NULL;
+}
+
+static void avdtp_handle_start_sdp_client_query(void * context){
+    UNUSED(context);
+    avdtp_connection_t * connection = avdtp_get_next_connection_ready_for_sdp_query();
+    if (connection != NULL){
+
+        // Get UUID to Query
+        uint16_t uuid;
         switch (connection->state){
             case AVDTP_SIGNALING_W2_SEND_SDP_QUERY_FOR_REMOTE_SOURCE:
                 uuid = BLUETOOTH_SERVICE_CLASS_AUDIO_SOURCE;
@@ -301,12 +324,16 @@ static void avdtp_handle_start_sdp_client_query(void * context){
                         connection->initiator_connection_state = AVDTP_SIGNALING_CONNECTION_INITIATOR_W4_SDP_QUERY_COMPLETE_THEN_GET_ALL_CAPABILITIES;
                         break;
                     default:
-                        continue;
+                        btstack_unreachable();
+                        break;
                 }
                 break;
             default:
-                continue;
+                btstack_unreachable();
+                break;
         }
+
+        // Start & track query
         avdtp_sdp_query_context_avdtp_cid = connection->avdtp_cid;
         avdtp_record_id = -1;
         sdp_client_query_uuid16(&avdtp_handle_sdp_client_query_result, (uint8_t *) connection->remote_addr, uuid);
@@ -353,7 +380,6 @@ uint8_t avdtp_connect(bd_addr_t remote, avdtp_role_t role, uint16_t * avdtp_cid)
             return ERROR_CODE_COMMAND_DISALLOWED;
     }
 
-    avdtp_handle_sdp_client_query_request.callback = &avdtp_handle_start_sdp_client_query;
     // ignore ERROR_CODE_COMMAND_DISALLOWED because in that case, we already have requested an SDP callback
     (void) sdp_client_register_query_callback(&avdtp_handle_sdp_client_query_request);
     return ERROR_CODE_SUCCESS;
@@ -708,78 +734,60 @@ static void avdtp_handle_sdp_client_query_result(uint8_t packet_type, uint16_t c
         log_error("SDP query, connection with 0x%02x cid not found", avdtp_sdp_query_context_avdtp_cid);
         return;
     }
-    
+
     uint8_t status = ERROR_CODE_SUCCESS;
-    switch (connection->state){
-        case AVDTP_SIGNALING_W4_SDP_QUERY_FOR_REMOTE_SINK_COMPLETE:
-            switch (hci_event_packet_get_type(packet)){
-                case SDP_EVENT_QUERY_ATTRIBUTE_VALUE:
-                    avdtp_handle_sdp_client_query_attribute_value(connection, packet);
-                    return;        
-                case SDP_EVENT_QUERY_COMPLETE:
-                    status = sdp_event_query_complete_get_status(packet);
-                    if (status != ERROR_CODE_SUCCESS) break;
-                    if (!connection->sink_supported || (connection->avdtp_l2cap_psm == 0)) {
-                        status = SDP_SERVICE_NOT_FOUND;
-                        break;
-                    }
-                    break;
-                default:
-                    btstack_assert(false);
-                    return;
-            }
+    switch (hci_event_packet_get_type(packet)){
+        case SDP_EVENT_QUERY_ATTRIBUTE_VALUE:
+            avdtp_handle_sdp_client_query_attribute_value(connection, packet);
+            return;
+        case SDP_EVENT_QUERY_COMPLETE:
+            status = sdp_event_query_complete_get_status(packet);
             break;
-        case AVDTP_SIGNALING_W4_SDP_QUERY_FOR_REMOTE_SOURCE_COMPLETE:
-            switch (hci_event_packet_get_type(packet)){
-                case SDP_EVENT_QUERY_ATTRIBUTE_VALUE:
-                    avdtp_handle_sdp_client_query_attribute_value(connection, packet);
-                    return;              
-                case SDP_EVENT_QUERY_COMPLETE:
-                    status = sdp_event_query_complete_get_status(packet);
-                    if (status != ERROR_CODE_SUCCESS) break;
-                    if (!connection->source_supported || (connection->avdtp_l2cap_psm == 0)) {
-                        status = SDP_SERVICE_NOT_FOUND;
-                        break;
-                    }
-                    break;
-                default:
-                    btstack_assert(false);
-                    return;
-            }
-            break;
-
-        case AVDTP_SIGNALING_CONNECTION_OPENED:
-            switch (hci_event_packet_get_type(packet)){
-                case SDP_EVENT_QUERY_ATTRIBUTE_VALUE:
-                    avdtp_handle_sdp_client_query_attribute_value(connection, packet);
-                    return;        
-                case SDP_EVENT_QUERY_COMPLETE:
-                    // without suitable SDP Record, avdtp version v0.0 is assumed
-                    status = sdp_event_query_complete_get_status(packet);
-                    break;
-                default:
-                    btstack_assert(false);
-                    return;
-            }
-            break;
-
         default:
-            // bail out, we must have had an incoming connection in the meantime; just trigger next sdp query on complete
-            if (hci_event_packet_get_type(packet) == SDP_EVENT_QUERY_COMPLETE){
-                (void) sdp_client_register_query_callback(&avdtp_handle_sdp_client_query_request);
-            }
+            btstack_assert(false);
             return;
     }
 
-    if (status == ERROR_CODE_SUCCESS){
-        avdtp_handle_sdp_query_succeeded(connection);
-    } else {
-        avdtp_handle_sdp_query_failed(connection, status);
+    // query completed with status, validate received information
+    bool handle_query_complete = true;
+    switch (connection->state){
+        case AVDTP_SIGNALING_W4_SDP_QUERY_FOR_REMOTE_SINK_COMPLETE:
+            if (status == ERROR_CODE_SUCCESS) {
+                if (!connection->sink_supported || (connection->avdtp_l2cap_psm == 0)) {
+                    status = SDP_SERVICE_NOT_FOUND;
+                }
+            }
+            break;
+        case AVDTP_SIGNALING_W4_SDP_QUERY_FOR_REMOTE_SOURCE_COMPLETE:
+            if (status == ERROR_CODE_SUCCESS) {
+                if (!connection->source_supported || (connection->avdtp_l2cap_psm == 0)) {
+                    status = SDP_SERVICE_NOT_FOUND;
+                }
+            }
+            break;
+        case AVDTP_SIGNALING_CONNECTION_OPENED:
+            // without suitable SDP Record, avdtp version v0.0 is assumed
+            break;
+        default:
+            // we must have had an incoming connection in the meantime -> bail out
+            // just trigger next sdp query on complete
+            handle_query_complete = false;
+            break;
+    }
+
+    if (handle_query_complete){
+        if (status == ERROR_CODE_SUCCESS){
+            avdtp_handle_sdp_query_succeeded(connection);
+        } else {
+            avdtp_handle_sdp_query_failed(connection, status);
+        }
     }
 
     // register the SDP Query request to check if there is another connection waiting for the query
-    // ignore ERROR_CODE_COMMAND_DISALLOWED because in that case, we already have requested an SDP callback
-    (void) sdp_client_register_query_callback(&avdtp_handle_sdp_client_query_request);
+    if (avdtp_get_next_connection_ready_for_sdp_query() != NULL){
+        // ignore ERROR_CODE_COMMAND_DISALLOWED because in that case, we already have requested an SDP callback
+        (void) sdp_client_register_query_callback(&avdtp_handle_sdp_client_query_request);
+    }
 }
 
 static avdtp_connection_t * avdtp_handle_incoming_connection(avdtp_connection_t * connection, bd_addr_t event_addr, hci_con_handle_t con_handle, uint16_t local_cid){
@@ -1395,7 +1403,6 @@ uint8_t avdtp_get_all_capabilities(uint16_t avdtp_cid, uint8_t remote_seid, avdt
                 btstack_unreachable();
                 break;
         }
-        avdtp_handle_sdp_client_query_request.callback = &avdtp_handle_start_sdp_client_query;
         // ignore ERROR_CODE_COMMAND_DISALLOWED because in that case, we already have requested an SDP callback
         (void) sdp_client_register_query_callback(&avdtp_handle_sdp_client_query_request);
         return ERROR_CODE_SUCCESS;
@@ -1651,6 +1658,7 @@ uint8_t is_avdtp_remote_seid_registered(avdtp_stream_endpoint_t * stream_endpoin
 
 void avdtp_init(void){
     if (!avdtp_l2cap_registered){
+        avdtp_handle_sdp_client_query_request.callback = &avdtp_handle_start_sdp_client_query;
         avdtp_l2cap_registered = true;
         l2cap_register_service(&avdtp_packet_handler, BLUETOOTH_PSM_AVDTP, AVDTP_L2CAP_MTU, gap_get_security_level());
     }

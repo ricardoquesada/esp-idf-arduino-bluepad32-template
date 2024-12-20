@@ -177,6 +177,7 @@
     X( SUPPORTED_HCI_COMMAND_LE_SET_DEFAULT_PHY                    , 35, 5) \
     X( SUPPORTED_HCI_COMMAND_LE_SET_EXTENDED_ADVERTISING_ENABLE    , 36, 5) \
     X( SUPPORTED_HCI_COMMAND_LE_READ_BUFFER_SIZE_V2                , 41, 5) \
+    X( SUPPORTED_HCI_COMMAND_LE_SET_HOST_FEATURE_V1                , 44, 1) \
     X( SUPPORTED_HCI_COMMAND_SET_MIN_ENCRYPTION_KEY_SIZE           , 45, 7) \
 
 // enumerate supported commands
@@ -235,12 +236,14 @@ void le_handle_advertisement_report(uint8_t *packet, uint16_t size);
 static uint8_t hci_whitelist_remove(bd_addr_type_t address_type, const bd_addr_t address);
 static hci_connection_t * gap_get_outgoing_le_connection(void);
 static void hci_le_scan_stop(void);
+#ifdef ENABLE_LE_EXTENDED_ADVERTISING
+static void le_handle_extended_advertisement_report(uint8_t *packet, uint16_t size);
+#endif
 #endif
 #ifdef ENABLE_LE_PERIPHERAL
 #ifdef ENABLE_LE_EXTENDED_ADVERTISING
 static le_advertising_set_t * hci_advertising_set_for_handle(uint8_t advertising_handle);
 static uint8_t hci_le_extended_advertising_operation_for_chunk(uint16_t pos, uint16_t len);
-static void le_handle_extended_advertisement_report(uint8_t *packet, uint16_t size);
 #endif /* ENABLE_LE_EXTENDED_ADVERTISING */
 #endif /* ENABLE_LE_PERIPHERAL */
 #ifdef ENABLE_LE_ISOCHRONOUS_STREAMS
@@ -1253,7 +1256,7 @@ static void acl_handler(uint8_t *packet, uint16_t size){
             // compare fragment size to L2CAP packet size
             if (acl_length >= (l2cap_length + 4u)){
                 // forward fragment as L2CAP packet
-                hci_emit_acl_packet(packet, acl_length + 4u);
+                hci_emit_acl_packet(packet, l2cap_length + 8u);
             } else {
 
                 if (acl_length > HCI_ACL_BUFFER_SIZE){
@@ -2362,13 +2365,22 @@ static void hci_initializing_run(void){
             /* fall through */
 
         case HCI_INIT_LE_SET_HOST_FEATURE_CONNECTED_ISO_STREAMS:
-            if (hci_le_supported()) {
+            if (hci_le_supported() && hci_command_supported(SUPPORTED_HCI_COMMAND_LE_SET_HOST_FEATURE_V1)) {
                 hci_stack->substate = HCI_INIT_W4_LE_SET_HOST_FEATURE_CONNECTED_ISO_STREAMS;
                 hci_send_cmd(&hci_le_set_host_feature, 32, 1);
                 break;
             }
 #endif
 
+#ifdef ENABLE_BLE
+            /* fall through */
+        case HCI_INIT_LE_SET_HOST_FEATURE_CONNECTION_SUBRATING:
+            if (hci_le_supported() && hci_command_supported(SUPPORTED_HCI_COMMAND_LE_SET_HOST_FEATURE_V1)) {
+                hci_stack->substate = HCI_INIT_W4_LE_SET_HOST_FEATURE_CONNECTION_SUBRATING;
+                hci_send_cmd(&hci_le_set_host_feature, 38, 1);
+                break;
+            }
+#endif
             /* fall through */
 
         case HCI_INIT_DONE:
@@ -2613,6 +2625,7 @@ static void hci_initializing_event_handler(const uint8_t * packet, uint16_t size
     hci_initializing_next_state();
 }
 
+#if defined(ENABLE_CLASSIC) || defined(ENABLE_LE_CENTRAL)
 static void hci_handle_connection_failed(hci_connection_t * conn, uint8_t status){
     // CC2564C might emit Connection Complete for rejected incoming SCO connection
     // To prevent accidentally freeing the HCI connection for the ACL connection,
@@ -2654,6 +2667,8 @@ static void hci_handle_connection_failed(hci_connection_t * conn, uint8_t status
     UNUSED(status);
 #endif
 }
+#endif
+
 
 #ifdef ENABLE_CLASSIC
 static void hci_handle_remote_features_page_0(hci_connection_t * conn, const uint8_t * features){
@@ -6042,6 +6057,7 @@ static bool hci_run_general_gap_classic(void){
 #endif
 
 #ifdef ENABLE_BLE
+#ifdef ENABLE_LE_CENTRAL
 
 #ifdef ENABLE_LE_EXTENDED_ADVERTISING
 static uint8_t hci_le_num_phys(uint8_t phys){
@@ -6051,7 +6067,6 @@ static uint8_t hci_le_num_phys(uint8_t phys){
 }
 #endif
 
-#ifdef ENABLE_LE_CENTRAL
 static void hci_le_scan_stop(void){
 #ifdef ENABLE_LE_EXTENDED_ADVERTISING
     if (hci_le_extended_advertising_supported()) {
@@ -7593,6 +7608,13 @@ static bool hci_run_general_pending_commands(void){
             hci_send_cmd(&hci_le_set_phy, connection->con_handle, all_phys, connection->le_phy_update_tx_phys, connection->le_phy_update_rx_phys, connection->le_phy_update_phy_options);
             return true;
         }
+        if (connection->le_subrate_min > 0){
+            uint16_t subrate_min = connection->le_subrate_min;
+            connection->le_subrate_min = 0;
+            hci_send_cmd(&hci_le_subrate_request, connection->con_handle, subrate_min, connection->le_subrate_max, connection->le_subrate_max_latency,
+                             connection->le_subrate_continuation_number, connection->le_supervision_timeout);
+            return true;
+        }
 #ifdef ENABLE_LE_PERIODIC_ADVERTISING
         if (connection->le_past_sync_handle != HCI_CON_HANDLE_INVALID){
             hci_con_handle_t sync_handle = connection->le_past_sync_handle;
@@ -8712,6 +8734,20 @@ int gap_request_connection_parameter_update(hci_con_handle_t con_handle, uint16_
     uint8_t l2cap_trigger_run_event[2] = { L2CAP_EVENT_TRIGGER_RUN, 0};
     hci_emit_btstack_event(l2cap_trigger_run_event, sizeof(l2cap_trigger_run_event), 0);
     return 0;
+}
+
+uint8_t gap_request_connection_subrating(hci_con_handle_t con_handle, uint16_t subrate_min, uint16_t subrate_max,
+                                         uint16_t max_latency, uint16_t continuation_number, uint16_t supervision_timeout){
+    hci_connection_t * connection = hci_connection_for_handle(con_handle);
+    if (!connection) return ERROR_CODE_UNKNOWN_CONNECTION_IDENTIFIER;
+
+    connection->le_subrate_min = subrate_min;
+    connection->le_subrate_max = subrate_max;
+    connection->le_subrate_max_latency = max_latency;
+    connection->le_subrate_continuation_number = continuation_number;
+    connection->le_supervision_timeout = supervision_timeout;
+    hci_run();
+    return ERROR_CODE_SUCCESS;
 }
 
 #ifdef ENABLE_LE_PERIPHERAL

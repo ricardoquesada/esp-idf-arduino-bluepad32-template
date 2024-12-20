@@ -1623,7 +1623,7 @@ typedef uint8_t sm_key_t[16];
  #define BNEP_EVENT_SERVICE_REGISTERED                           0xC0u
 
 /**
- * @format 12222BH
+ * @format 12222BH1
  * @param status
  * @param bnep_cid
  * @param source_uuid
@@ -1631,6 +1631,7 @@ typedef uint8_t sm_key_t[16];
  * @param mtu
  * @param remote_address
  * @param con_handle
+ * @param setup_connection_response for outgoing connections
  */
  #define BNEP_EVENT_CHANNEL_OPENED                               0xC1u
 
@@ -3618,10 +3619,12 @@ typedef uint8_t sm_key_t[16];
 #define AVRCP_SUBEVENT_BROWSING_DONE                                          0x33u
 
 /**
- * @format 1214
+ * @format 121444
  * @param subevent_code
  * @param browsing_cid
  * @param scope
+ * @param start_item
+ * @param end_item
  * @param attr_bitmap
  */
 #define AVRCP_SUBEVENT_BROWSING_GET_FOLDER_ITEMS                              0x34u
@@ -3666,6 +3669,59 @@ typedef uint8_t sm_key_t[16];
  * @param cover_art_cid
  */
 #define AVRCP_SUBEVENT_COVER_ART_CONNECTION_RELEASED                          0x39u
+
+/**
+ * @format 1221D
+ * @param subevent_code
+ * @param browsing_cid
+ * @param uid_counter
+ * @param direction
+ * @param folder_id
+ */
+#define AVRCP_SUBEVENT_BROWSING_CHANGE_PATH                                   0x40u
+
+/**
+ * @format 1221DJV
+ * @param subevent_code
+ * @param browsing_cid
+ * @param uid_counter
+ * @param scope
+ * @param item_id
+ * @param attributes_len
+ * @param attributes
+ */
+#define AVRCP_SUBEVENT_BROWSING_GET_ITEM_ATTRIBUTES                                   0x41u
+
+/**
+ * @format 122JV
+ * @param subevent_code
+ * @param browsing_cid
+ * @param characterset
+ * @param value_length
+ * @param value
+ */
+
+#define AVRCP_SUBEVENT_BROWSING_SEARCH                                                 0x42u
+
+/**
+ * @format 1221D
+ * @param subevent_code
+ * @param avrcp_cid
+ * @param uid_counter
+ * @param scope
+ * @param item_id
+ */
+#define AVRCP_SUBEVENT_PLAY_ITEM                                                       0x42u
+
+/**
+ * @format 1221D
+ * @param subevent_code
+ * @param avrcp_cid
+ * @param uid_counter
+ * @param scope
+ * @param item_id
+ */
+#define AVRCP_SUBEVENT_ADD_TO_NOW_PLAYING                                              0x43u
 
 /**
  * @format 12BH
@@ -4060,11 +4116,25 @@ typedef uint8_t sm_key_t[16];
  * @format 12111
  * @param subevent_code
  * @param hids_cid
- * @param sevice_index
- * @param att_status  see ATT errors in bluetooth.h  
+ * @param service_index
+ * @param att_status  see ATT errors in bluetooth.h
  * @param level
 */
 #define GATTSERVICE_SUBEVENT_BATTERY_SERVICE_LEVEL                         0x05u
+
+/**
+ * @format 12
+ * @param subevent_code
+ * @param service_id
+*/
+#define GATTSERVICE_SUBEVENT_BATTERY_SERVICE_LEVEL_BROADCAST_START           0x06u
+
+/**
+ * @format 12
+ * @param subevent_code
+ * @param service_id
+*/
+#define GATTSERVICE_SUBEVENT_BATTERY_SERVICE_LEVEL_BROADCAST_STOP            0x07u
 
 /**
  * @format 1H1
@@ -4072,7 +4142,7 @@ typedef uint8_t sm_key_t[16];
  * @param con_handle
  * @param att_status
  */
-#define GATTSERVICE_SUBEVENT_DEVICE_INFORMATION_DONE                       0x06u
+#define GATTSERVICE_SUBEVENT_DEVICE_INFORMATION_DONE                       0x08u
 
 /**
  * @format 1H1T
@@ -4081,7 +4151,7 @@ typedef uint8_t sm_key_t[16];
  * @param att_status
  * @param value
  */
-#define GATTSERVICE_SUBEVENT_DEVICE_INFORMATION_MANUFACTURER_NAME          0x07u
+#define GATTSERVICE_SUBEVENT_DEVICE_INFORMATION_MANUFACTURER_NAME          0x09u
 
 /**
  * @format 1H1T
@@ -4090,7 +4160,7 @@ typedef uint8_t sm_key_t[16];
  * @param att_status
  * @param value
  */
-#define GATTSERVICE_SUBEVENT_DEVICE_INFORMATION_MODEL_NUMBER               0x08u
+#define GATTSERVICE_SUBEVENT_DEVICE_INFORMATION_MODEL_NUMBER               0x0Au
 
 /**
  * @format 1H1T
@@ -4099,7 +4169,7 @@ typedef uint8_t sm_key_t[16];
  * @param att_status
  * @param value
  */
-#define GATTSERVICE_SUBEVENT_DEVICE_INFORMATION_SERIAL_NUMBER              0x09u
+#define GATTSERVICE_SUBEVENT_DEVICE_INFORMATION_SERIAL_NUMBER              0x0Bu
 
 /**
  * @format 1H1T
@@ -4108,7 +4178,7 @@ typedef uint8_t sm_key_t[16];
  * @param att_status
  * @param value
  */
-#define GATTSERVICE_SUBEVENT_DEVICE_INFORMATION_HARDWARE_REVISION          0x0Au
+#define GATTSERVICE_SUBEVENT_DEVICE_INFORMATION_HARDWARE_REVISION          0x0Cu
 
 /**
  * @format 1H1T
@@ -4117,7 +4187,7 @@ typedef uint8_t sm_key_t[16];
  * @param att_status
  * @param value
  */
-#define GATTSERVICE_SUBEVENT_DEVICE_INFORMATION_FIRMWARE_REVISION          0x0Bu
+#define GATTSERVICE_SUBEVENT_DEVICE_INFORMATION_FIRMWARE_REVISION          0x0Du
 
 /**
  * @format 1H1T
@@ -4126,7 +4196,7 @@ typedef uint8_t sm_key_t[16];
  * @param att_status
  * @param value
  */
-#define GATTSERVICE_SUBEVENT_DEVICE_INFORMATION_SOFTWARE_REVISION          0x0Cu
+#define GATTSERVICE_SUBEVENT_DEVICE_INFORMATION_SOFTWARE_REVISION          0x0Eu
 
 /**
  * @format 1H1413
@@ -4137,7 +4207,7 @@ typedef uint8_t sm_key_t[16];
  * @param manufacturer_id_high
  * @param organizationally_unique_id
  */
-#define GATTSERVICE_SUBEVENT_DEVICE_INFORMATION_SYSTEM_ID                  0x0Du
+#define GATTSERVICE_SUBEVENT_DEVICE_INFORMATION_SYSTEM_ID                  0x0Fu
 
 /**
  * @format 1H122
@@ -4147,7 +4217,7 @@ typedef uint8_t sm_key_t[16];
  * @param value_a
  * @param value_b
  */
-#define GATTSERVICE_SUBEVENT_DEVICE_INFORMATION_IEEE_REGULATORY_CERTIFICATION     0x0Eu
+#define GATTSERVICE_SUBEVENT_DEVICE_INFORMATION_IEEE_REGULATORY_CERTIFICATION     0x10u
 
 /**
  * @format 1H11222
@@ -4159,7 +4229,7 @@ typedef uint8_t sm_key_t[16];
  * @param product_id
  * @param product_version
  */
-#define GATTSERVICE_SUBEVENT_DEVICE_INFORMATION_PNP_ID                    0x0Fu
+#define GATTSERVICE_SUBEVENT_DEVICE_INFORMATION_PNP_ID                    0x11u
 
 /**
  * @format 1H1TTTT
@@ -4171,7 +4241,7 @@ typedef uint8_t sm_key_t[16];
  * @param issuer
  * @param authority
  */
-#define GATTSERVICE_SUBEVENT_DEVICE_INFORMATION_UDI_FOR_MEDICAL_DEVICES   0x10u
+#define GATTSERVICE_SUBEVENT_DEVICE_INFORMATION_UDI_FOR_MEDICAL_DEVICES   0x12u
 
 /**
  * @format 1H1
@@ -4179,28 +4249,28 @@ typedef uint8_t sm_key_t[16];
  * @param con_handle
  * @param status
  */
-#define GATTSERVICE_SUBEVENT_SCAN_PARAMETERS_SERVICE_CONNECTED            0x11u
+#define GATTSERVICE_SUBEVENT_SCAN_PARAMETERS_SERVICE_CONNECTED            0x13u
 
 /**
  * @format 1H
  * @param subevent_code
  * @param con_handle
  */
-#define GATTSERVICE_SUBEVENT_SCAN_PARAMETERS_SERVICE_DISCONNECTED         0x12u
+#define GATTSERVICE_SUBEVENT_SCAN_PARAMETERS_SERVICE_DISCONNECTED         0x14u
 
 /**
  * @format 1H
  * @param subevent_code
  * @param con_handle
  */
-#define GATTSERVICE_SUBEVENT_SPP_SERVICE_CONNECTED                        0x13u
+#define GATTSERVICE_SUBEVENT_SPP_SERVICE_CONNECTED                        0x15u
 
 /**
  * @format 1H
  * @param subevent_code
  * @param con_handle
  */
-#define GATTSERVICE_SUBEVENT_SPP_SERVICE_DISCONNECTED                     0x14u
+#define GATTSERVICE_SUBEVENT_SPP_SERVICE_DISCONNECTED                     0x16u
 
 /**
  * @format 12111
@@ -4210,14 +4280,14 @@ typedef uint8_t sm_key_t[16];
  * @param protocol_mode
  * @param num_instances
 */
-#define GATTSERVICE_SUBEVENT_HID_SERVICE_CONNECTED                        0x15u
+#define GATTSERVICE_SUBEVENT_HID_SERVICE_CONNECTED                        0x17u
 
 /**
  * @format 12
  * @param subevent_code
  * @param hids_cid
 */
-#define GATTSERVICE_SUBEVENT_HID_SERVICE_DISCONNECTED                     0x16u
+#define GATTSERVICE_SUBEVENT_HID_SERVICE_DISCONNECTED                     0x18u
 
 /**
  * @format 1211LV
@@ -4228,7 +4298,7 @@ typedef uint8_t sm_key_t[16];
  * @param report_len
  * @param report
 */
-#define GATTSERVICE_SUBEVENT_HID_REPORT                                   0x17u
+#define GATTSERVICE_SUBEVENT_HID_REPORT                                   0x19u
 
 /**
  * @format 1212111
@@ -4240,7 +4310,7 @@ typedef uint8_t sm_key_t[16];
  * @param remote_wake               Indicates whether HID Device is capable of sending a wake-signal to a HID Host
  * @param normally_connectable      Indicates whether HID Device will be advertising when bonded but not connected.
 */
-#define GATTSERVICE_SUBEVENT_HID_INFORMATION                              0x18u
+#define GATTSERVICE_SUBEVENT_HID_INFORMATION                              0x1Au
 
 /**
  * @format 1211
@@ -4249,15 +4319,15 @@ typedef uint8_t sm_key_t[16];
  * @param service_index
  * @param protocol_mode    see hid_protocol_mode_t in btstack_hid.h
 */
-#define GATTSERVICE_SUBEVENT_HID_PROTOCOL_MODE                            0x19u
+#define GATTSERVICE_SUBEVENT_HID_PROTOCOL_MODE                            0x1Bu
 
 /**
  * @format 121
  * @param subevent_code
  * @param hids_cid
- * @param configuration    
+ * @param configuration
 */
-#define GATTSERVICE_SUBEVENT_HID_SERVICE_REPORTS_NOTIFICATION             0x1Au
+#define GATTSERVICE_SUBEVENT_HID_SERVICE_REPORTS_NOTIFICATION             0x1Cu
 
 /**
  * @format 1211
@@ -4266,7 +4336,7 @@ typedef uint8_t sm_key_t[16];
  * @param service_index
  * @param report_id
 */
-#define GATTSERVICE_SUBEVENT_HID_REPORT_WRITTEN                           0x1Bu
+#define GATTSERVICE_SUBEVENT_HID_REPORT_WRITTEN                           0x1Du
 
 /**
  * @format 1H22
@@ -4275,7 +4345,7 @@ typedef uint8_t sm_key_t[16];
  * @param max_scan_interval
  * @param min_scan_window
  */
-#define GATTSERVICE_SUBEVENT_SCAN_PARAMETERS_SERVICE_SCAN_INTERVAL_UPDATE 0x1Cu
+#define GATTSERVICE_SUBEVENT_SCAN_PARAMETERS_SERVICE_SCAN_INTERVAL_UPDATE 0x1Eu
 
 /**
  * @format 1H22
@@ -4284,7 +4354,7 @@ typedef uint8_t sm_key_t[16];
  * @param attribute_handle_start
  * @param attribute_handle_end
  */
-#define GATTSERVICE_SUBEVENT_GATT_SERVICE_CHANGED                          0x1Du
+#define GATTSERVICE_SUBEVENT_GATT_SERVICE_CHANGED                          0x1Fu
 
 /**
  * @format 1HK
@@ -4292,8 +4362,7 @@ typedef uint8_t sm_key_t[16];
  * @param con_handle
  * @param database_hash
  */
-#define GATTSERVICE_SUBEVENT_GATT_DATABASE_HASH                            0x1Eu
-
+#define GATTSERVICE_SUBEVENT_GATT_DATABASE_HASH                            0x20u
 
 /**
  * @format 1H211
@@ -4303,7 +4372,7 @@ typedef uint8_t sm_key_t[16];
  * @param num_included_services
  * @param status
 */
-#define GATTSERVICE_SUBEVENT_CLIENT_CONNECTED                               0x1Fu
+#define GATTSERVICE_SUBEVENT_CLIENT_CONNECTED                              0x21u
 
 /**
  * @format 1H2
@@ -4311,8 +4380,7 @@ typedef uint8_t sm_key_t[16];
  * @param con_handle
  * @param cid
 */
-#define GATTSERVICE_SUBEVENT_CLIENT_DISCONNECTED                            0x20u
-
+#define GATTSERVICE_SUBEVENT_CLIENT_DISCONNECTED                           0x22u
 
 /**
  * @format 1H21
@@ -4321,14 +4389,14 @@ typedef uint8_t sm_key_t[16];
  * @param lls_cid
  * @param status
 */
-#define GATTSERVICE_SUBEVENT_LLS_CLIENT_CONNECTED                           0x21u
+#define GATTSERVICE_SUBEVENT_LLS_CLIENT_CONNECTED                          0x23u
 
 /**
  * @format 12
  * @param subevent_code
  * @param lls_cid
 */
-#define GATTSERVICE_SUBEVENT_LLS_CLIENT_DISCONNECTED                         0x22u
+#define GATTSERVICE_SUBEVENT_LLS_CLIENT_DISCONNECTED                       0x24u
 
 /**
  * @format 1221
@@ -4337,14 +4405,14 @@ typedef uint8_t sm_key_t[16];
  * @param characteristic_uuid
  * @param att_status
  */
-#define GATTSERVICE_SUBEVENT_LLS_CLIENT_WRITE_DONE                           0x23u
+#define GATTSERVICE_SUBEVENT_LLS_CLIENT_WRITE_DONE                         0x25u
 
 /**
  * @format 12
  * @param subevent_code
  * @param lls_cid
  */
-#define GATTSERVICE_SUBEVENT_LLS_CLIENT_START_ALERTING                       0x24u
+#define GATTSERVICE_SUBEVENT_LLS_CLIENT_START_ALERTING                     0x26u
 
 /**
  * @format 121
@@ -4352,7 +4420,7 @@ typedef uint8_t sm_key_t[16];
  * @param lls_cid
  * @param timeout
  */
-#define GATTSERVICE_SUBEVENT_LLS_CLIENT_STOP_ALERTING                        0x25u
+#define GATTSERVICE_SUBEVENT_LLS_CLIENT_STOP_ALERTING                      0x27u
 
 /**
  * @format 121
@@ -4360,7 +4428,7 @@ typedef uint8_t sm_key_t[16];
  * @param lls_cid
  * @param value
  */
- #define GATTSERVICE_SUBEVENT_LLS_CLIENT_ALERT_LEVEL                         0x26u
+#define GATTSERVICE_SUBEVENT_LLS_CLIENT_ALERT_LEVEL                        0x28u
 
 /**
  * @format 1H21
@@ -4369,21 +4437,21 @@ typedef uint8_t sm_key_t[16];
  * @param ias_cid
  * @param status
 */
-#define GATTSERVICE_SUBEVENT_IAS_CLIENT_CONNECTED                            0x27u
+#define GATTSERVICE_SUBEVENT_IAS_CLIENT_CONNECTED                          0x29u
 
 /**
  * @format 12
  * @param subevent_code
  * @param ias_cid
 */
-#define GATTSERVICE_SUBEVENT_IAS_CLIENT_DISCONNECTED                         0x28u
+#define GATTSERVICE_SUBEVENT_IAS_CLIENT_DISCONNECTED                       0x2Au
 
 /**
  * @format 12
  * @param subevent_code
  * @param ias_cid
  */
-#define GATTSERVICE_SUBEVENT_IAS_CLIENT_START_ALERTING                       0x29u
+#define GATTSERVICE_SUBEVENT_IAS_CLIENT_START_ALERTING                     0x2Bu
 
 /**
  * @format 121
@@ -4391,7 +4459,7 @@ typedef uint8_t sm_key_t[16];
  * @param ias_cid
  * @param timeout
  */
-#define GATTSERVICE_SUBEVENT_IAS_CLIENT_STOP_ALERTING                        0x2Au
+#define GATTSERVICE_SUBEVENT_IAS_CLIENT_STOP_ALERTING                      0x2Cu
 
 /**
  * @format 1H21
@@ -4400,14 +4468,14 @@ typedef uint8_t sm_key_t[16];
  * @param tpxs_cid
  * @param status
 */
-#define GATTSERVICE_SUBEVENT_TXPS_CLIENT_CONNECTED                           0x2Bu
+#define GATTSERVICE_SUBEVENT_TXPS_CLIENT_CONNECTED                         0x2Du
 
 /**
  * @format 12
  * @param subevent_code
  * @param tpxs_cid
 */
-#define GATTSERVICE_SUBEVENT_TXPS_CLIENT_DISCONNECTED                        0x2Cu
+#define GATTSERVICE_SUBEVENT_TXPS_CLIENT_DISCONNECTED                      0x2Eu
 
 /**
  * @format 121
@@ -4415,14 +4483,14 @@ typedef uint8_t sm_key_t[16];
  * @param tpxs_cid
  * @param value
  */
-#define GATTSERVICE_SUBEVENT_TXPS_CLIENT_TX_POWER_LEVEL                      0x2Du
+#define GATTSERVICE_SUBEVENT_TXPS_CLIENT_TX_POWER_LEVEL                    0x2Fu
 
 /**
  * @format 11
  * @param subevent_code
  * @param alert_level
  */
-#define GATTSERVICE_SUBEVENT_LLS_SERVER_START_ALERTING                       0x2Eu
+#define GATTSERVICE_SUBEVENT_LLS_SERVER_START_ALERTING                     0x30u
 
 /**
  * @format 111
@@ -4430,14 +4498,14 @@ typedef uint8_t sm_key_t[16];
  * @param alert_level
  * @param timeout
  */
-#define GATTSERVICE_SUBEVENT_LLS_SERVER_STOP_ALERTING                        0x2Fu
+#define GATTSERVICE_SUBEVENT_LLS_SERVER_STOP_ALERTING                      0x31u
 
 /**
  * @format 11
  * @param subevent_code
  * @param alert_level
  */
-#define GATTSERVICE_SUBEVENT_IAS_SERVER_START_ALERTING                       0x30u
+#define GATTSERVICE_SUBEVENT_IAS_SERVER_START_ALERTING                     0x32u
 
 /**
  * @format 111
@@ -4445,7 +4513,7 @@ typedef uint8_t sm_key_t[16];
  * @param alert_level
  * @param timeout
  */
-#define GATTSERVICE_SUBEVENT_IAS_SERVER_STOP_ALERTING                        0x31u
+#define GATTSERVICE_SUBEVENT_IAS_SERVER_STOP_ALERTING                      0x33u
 
 
 

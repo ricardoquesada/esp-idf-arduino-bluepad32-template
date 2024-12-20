@@ -52,6 +52,7 @@ extern "C" {
 #include "btstack_config.h"
 #include "yxml.h"
 #include "classic/obex_srm_client.h"
+#include "classic/obex_parser.h"
 
 // max len of phone number used for lookup in pbap_lookup_by_number
 #define PBAP_MAX_PHONE_NUMBER_LEN 32
@@ -231,6 +232,14 @@ uint8_t pbap_client_connect(pbap_client_t * client, l2cap_ertm_config_t *l2cap_e
  * @return status ERROR_CODE_SUCCESS on success, otherwise BTSTACK_MEMORY_ALLOC_FAILED if PBAP or GOEP connection already exists.  
  */
 uint8_t pbap_connect(btstack_packet_handler_t handler, bd_addr_t addr, uint16_t * out_cid);
+
+/**
+ * Create SDP Record for Phonebook Access Client
+ * @param service
+ * @param service_record_handle
+ * @param service_name
+ */
+void pbap_client_create_sdp_record(uint8_t *service, uint32_t service_record_handle, const char *service_name);
 
 /**
  * @brief Provide password for OBEX Authentication after receiving PBAP_SUBEVENT_AUTHENTICATION_REQUEST.

@@ -3505,6 +3505,15 @@ static inline void bnep_event_channel_opened_get_remote_address(const uint8_t * 
 static inline hci_con_handle_t bnep_event_channel_opened_get_con_handle(const uint8_t * event){
     return little_endian_read_16(event, 17);
 }
+/**
+ * @brief Get field setup_connection_response from event BNEP_EVENT_CHANNEL_OPENED
+ * @param event packet
+ * @return setup_connection_response
+ * @note: btstack_type 1
+ */
+static inline uint8_t bnep_event_channel_opened_get_setup_connection_response(const uint8_t * event){
+    return event[19];
+}
 
 /**
  * @brief Get field bnep_cid from event BNEP_EVENT_CHANNEL_CLOSED
@@ -11995,13 +12004,31 @@ static inline uint8_t avrcp_subevent_browsing_get_folder_items_get_scope(const u
     return event[5];
 }
 /**
+ * @brief Get field start_item from event AVRCP_SUBEVENT_BROWSING_GET_FOLDER_ITEMS
+ * @param event packet
+ * @return start_item
+ * @note: btstack_type 4
+ */
+static inline uint32_t avrcp_subevent_browsing_get_folder_items_get_start_item(const uint8_t * event){
+    return little_endian_read_32(event, 6);
+}
+/**
+ * @brief Get field end_item from event AVRCP_SUBEVENT_BROWSING_GET_FOLDER_ITEMS
+ * @param event packet
+ * @return end_item
+ * @note: btstack_type 4
+ */
+static inline uint32_t avrcp_subevent_browsing_get_folder_items_get_end_item(const uint8_t * event){
+    return little_endian_read_32(event, 10);
+}
+/**
  * @brief Get field attr_bitmap from event AVRCP_SUBEVENT_BROWSING_GET_FOLDER_ITEMS
  * @param event packet
  * @return attr_bitmap
  * @note: btstack_type 4
  */
 static inline uint32_t avrcp_subevent_browsing_get_folder_items_get_attr_bitmap(const uint8_t * event){
-    return little_endian_read_32(event, 6);
+    return little_endian_read_32(event, 14);
 }
 
 /**
@@ -12106,6 +12133,209 @@ static inline uint8_t avrcp_subevent_cover_art_operation_complete_get_status(con
  */
 static inline uint16_t avrcp_subevent_cover_art_connection_released_get_cover_art_cid(const uint8_t * event){
     return little_endian_read_16(event, 3);
+}
+
+/**
+ * @brief Get field browsing_cid from event AVRCP_SUBEVENT_BROWSING_CHANGE_PATH
+ * @param event packet
+ * @return browsing_cid
+ * @note: btstack_type 2
+ */
+static inline uint16_t avrcp_subevent_browsing_change_path_get_browsing_cid(const uint8_t * event){
+    return little_endian_read_16(event, 3);
+}
+/**
+ * @brief Get field uid_counter from event AVRCP_SUBEVENT_BROWSING_CHANGE_PATH
+ * @param event packet
+ * @return uid_counter
+ * @note: btstack_type 2
+ */
+static inline uint16_t avrcp_subevent_browsing_change_path_get_uid_counter(const uint8_t * event){
+    return little_endian_read_16(event, 5);
+}
+/**
+ * @brief Get field direction from event AVRCP_SUBEVENT_BROWSING_CHANGE_PATH
+ * @param event packet
+ * @return direction
+ * @note: btstack_type 1
+ */
+static inline uint8_t avrcp_subevent_browsing_change_path_get_direction(const uint8_t * event){
+    return event[7];
+}
+/**
+ * @brief Get field folder_id from event AVRCP_SUBEVENT_BROWSING_CHANGE_PATH
+ * @param event packet
+ * @return folder_id
+ * @note: btstack_type D
+ */
+static inline const uint8_t * avrcp_subevent_browsing_change_path_get_folder_id(const uint8_t * event){
+    return (const uint8_t *) &event[8];
+}
+
+/**
+ * @brief Get field browsing_cid from event AVRCP_SUBEVENT_BROWSING_GET_ITEM_ATTRIBUTES
+ * @param event packet
+ * @return browsing_cid
+ * @note: btstack_type 2
+ */
+static inline uint16_t avrcp_subevent_browsing_get_item_attributes_get_browsing_cid(const uint8_t * event){
+    return little_endian_read_16(event, 3);
+}
+/**
+ * @brief Get field uid_counter from event AVRCP_SUBEVENT_BROWSING_GET_ITEM_ATTRIBUTES
+ * @param event packet
+ * @return uid_counter
+ * @note: btstack_type 2
+ */
+static inline uint16_t avrcp_subevent_browsing_get_item_attributes_get_uid_counter(const uint8_t * event){
+    return little_endian_read_16(event, 5);
+}
+/**
+ * @brief Get field scope from event AVRCP_SUBEVENT_BROWSING_GET_ITEM_ATTRIBUTES
+ * @param event packet
+ * @return scope
+ * @note: btstack_type 1
+ */
+static inline uint8_t avrcp_subevent_browsing_get_item_attributes_get_scope(const uint8_t * event){
+    return event[7];
+}
+/**
+ * @brief Get field item_id from event AVRCP_SUBEVENT_BROWSING_GET_ITEM_ATTRIBUTES
+ * @param event packet
+ * @return item_id
+ * @note: btstack_type D
+ */
+static inline const uint8_t * avrcp_subevent_browsing_get_item_attributes_get_item_id(const uint8_t * event){
+    return (const uint8_t *) &event[8];
+}
+/**
+ * @brief Get field attributes_len from event AVRCP_SUBEVENT_BROWSING_GET_ITEM_ATTRIBUTES
+ * @param event packet
+ * @return attributes_len
+ * @note: btstack_type J
+ */
+static inline uint8_t avrcp_subevent_browsing_get_item_attributes_get_attributes_len(const uint8_t * event){
+    return event[16];
+}
+/**
+ * @brief Get field attributes from event AVRCP_SUBEVENT_BROWSING_GET_ITEM_ATTRIBUTES
+ * @param event packet
+ * @return attributes
+ * @note: btstack_type V
+ */
+static inline const uint8_t * avrcp_subevent_browsing_get_item_attributes_get_attributes(const uint8_t * event){
+    return &event[17];
+}
+
+/**
+ * @brief Get field browsing_cid from event AVRCP_SUBEVENT_BROWSING_SEARCH
+ * @param event packet
+ * @return browsing_cid
+ * @note: btstack_type 2
+ */
+static inline uint16_t avrcp_subevent_browsing_search_get_browsing_cid(const uint8_t * event){
+    return little_endian_read_16(event, 3);
+}
+/**
+ * @brief Get field characterset from event AVRCP_SUBEVENT_BROWSING_SEARCH
+ * @param event packet
+ * @return characterset
+ * @note: btstack_type 2
+ */
+static inline uint16_t avrcp_subevent_browsing_search_get_characterset(const uint8_t * event){
+    return little_endian_read_16(event, 5);
+}
+/**
+ * @brief Get field value_length from event AVRCP_SUBEVENT_BROWSING_SEARCH
+ * @param event packet
+ * @return value_length
+ * @note: btstack_type J
+ */
+static inline uint8_t avrcp_subevent_browsing_search_get_value_length(const uint8_t * event){
+    return event[7];
+}
+/**
+ * @brief Get field value from event AVRCP_SUBEVENT_BROWSING_SEARCH
+ * @param event packet
+ * @return value
+ * @note: btstack_type V
+ */
+static inline const uint8_t * avrcp_subevent_browsing_search_get_value(const uint8_t * event){
+    return &event[8];
+}
+
+/**
+ * @brief Get field avrcp_cid from event AVRCP_SUBEVENT_PLAY_ITEM
+ * @param event packet
+ * @return avrcp_cid
+ * @note: btstack_type 2
+ */
+static inline uint16_t avrcp_subevent_play_item_get_avrcp_cid(const uint8_t * event){
+    return little_endian_read_16(event, 3);
+}
+/**
+ * @brief Get field uid_counter from event AVRCP_SUBEVENT_PLAY_ITEM
+ * @param event packet
+ * @return uid_counter
+ * @note: btstack_type 2
+ */
+static inline uint16_t avrcp_subevent_play_item_get_uid_counter(const uint8_t * event){
+    return little_endian_read_16(event, 5);
+}
+/**
+ * @brief Get field scope from event AVRCP_SUBEVENT_PLAY_ITEM
+ * @param event packet
+ * @return scope
+ * @note: btstack_type 1
+ */
+static inline uint8_t avrcp_subevent_play_item_get_scope(const uint8_t * event){
+    return event[7];
+}
+/**
+ * @brief Get field item_id from event AVRCP_SUBEVENT_PLAY_ITEM
+ * @param event packet
+ * @return item_id
+ * @note: btstack_type D
+ */
+static inline const uint8_t * avrcp_subevent_play_item_get_item_id(const uint8_t * event){
+    return (const uint8_t *) &event[8];
+}
+
+/**
+ * @brief Get field avrcp_cid from event AVRCP_SUBEVENT_ADD_TO_NOW_PLAYING
+ * @param event packet
+ * @return avrcp_cid
+ * @note: btstack_type 2
+ */
+static inline uint16_t avrcp_subevent_add_to_now_playing_get_avrcp_cid(const uint8_t * event){
+    return little_endian_read_16(event, 3);
+}
+/**
+ * @brief Get field uid_counter from event AVRCP_SUBEVENT_ADD_TO_NOW_PLAYING
+ * @param event packet
+ * @return uid_counter
+ * @note: btstack_type 2
+ */
+static inline uint16_t avrcp_subevent_add_to_now_playing_get_uid_counter(const uint8_t * event){
+    return little_endian_read_16(event, 5);
+}
+/**
+ * @brief Get field scope from event AVRCP_SUBEVENT_ADD_TO_NOW_PLAYING
+ * @param event packet
+ * @return scope
+ * @note: btstack_type 1
+ */
+static inline uint8_t avrcp_subevent_add_to_now_playing_get_scope(const uint8_t * event){
+    return event[7];
+}
+/**
+ * @brief Get field item_id from event AVRCP_SUBEVENT_ADD_TO_NOW_PLAYING
+ * @param event packet
+ * @return item_id
+ * @note: btstack_type D
+ */
+static inline const uint8_t * avrcp_subevent_add_to_now_playing_get_item_id(const uint8_t * event){
+    return (const uint8_t *) &event[8];
 }
 
 /**
@@ -13295,12 +13525,12 @@ static inline uint16_t gattservice_subevent_battery_service_level_get_hids_cid(c
     return little_endian_read_16(event, 3);
 }
 /**
- * @brief Get field sevice_index from event GATTSERVICE_SUBEVENT_BATTERY_SERVICE_LEVEL
+ * @brief Get field service_index from event GATTSERVICE_SUBEVENT_BATTERY_SERVICE_LEVEL
  * @param event packet
- * @return sevice_index
+ * @return service_index
  * @note: btstack_type 1
  */
-static inline uint8_t gattservice_subevent_battery_service_level_get_sevice_index(const uint8_t * event){
+static inline uint8_t gattservice_subevent_battery_service_level_get_service_index(const uint8_t * event){
     return event[5];
 }
 /**
@@ -13320,6 +13550,26 @@ static inline uint8_t gattservice_subevent_battery_service_level_get_att_status(
  */
 static inline uint8_t gattservice_subevent_battery_service_level_get_level(const uint8_t * event){
     return event[7];
+}
+
+/**
+ * @brief Get field service_id from event GATTSERVICE_SUBEVENT_BATTERY_SERVICE_LEVEL_BROADCAST_START
+ * @param event packet
+ * @return service_id
+ * @note: btstack_type 2
+ */
+static inline uint16_t gattservice_subevent_battery_service_level_broadcast_start_get_service_id(const uint8_t * event){
+    return little_endian_read_16(event, 3);
+}
+
+/**
+ * @brief Get field service_id from event GATTSERVICE_SUBEVENT_BATTERY_SERVICE_LEVEL_BROADCAST_STOP
+ * @param event packet
+ * @return service_id
+ * @note: btstack_type 2
+ */
+static inline uint16_t gattservice_subevent_battery_service_level_broadcast_stop_get_service_id(const uint8_t * event){
+    return little_endian_read_16(event, 3);
 }
 
 /**
@@ -13648,6 +13898,34 @@ static inline uint16_t gattservice_subevent_device_information_pnp_id_get_produc
 }
 
 /**
+ * @brief Get field con_handle from event GATTSERVICE_SUBEVENT_DEVICE_INFORMATION_UDI_FOR_MEDICAL_DEVICES
+ * @param event packet
+ * @return con_handle
+ * @note: btstack_type H
+ */
+static inline hci_con_handle_t gattservice_subevent_device_information_udi_for_medical_devices_get_con_handle(const uint8_t * event){
+    return little_endian_read_16(event, 3);
+}
+/**
+ * @brief Get field att_status from event GATTSERVICE_SUBEVENT_DEVICE_INFORMATION_UDI_FOR_MEDICAL_DEVICES
+ * @param event packet
+ * @return att_status
+ * @note: btstack_type 1
+ */
+static inline uint8_t gattservice_subevent_device_information_udi_for_medical_devices_get_att_status(const uint8_t * event){
+    return event[5];
+}
+/**
+ * @brief Get field label from event GATTSERVICE_SUBEVENT_DEVICE_INFORMATION_UDI_FOR_MEDICAL_DEVICES
+ * @param event packet
+ * @return label
+ * @note: btstack_type T
+ */
+static inline const char * gattservice_subevent_device_information_udi_for_medical_devices_get_label(const uint8_t * event){
+    return (const char *) &event[6];
+}
+
+/**
  * @brief Get field con_handle from event GATTSERVICE_SUBEVENT_SCAN_PARAMETERS_SERVICE_CONNECTED
  * @param event packet
  * @return con_handle
@@ -13657,12 +13935,12 @@ static inline hci_con_handle_t gattservice_subevent_scan_parameters_service_conn
     return little_endian_read_16(event, 3);
 }
 /**
- * @brief Get field att_status from event GATTSERVICE_SUBEVENT_SCAN_PARAMETERS_SERVICE_CONNECTED
+ * @brief Get field status from event GATTSERVICE_SUBEVENT_SCAN_PARAMETERS_SERVICE_CONNECTED
  * @param event packet
- * @return att_status
+ * @return status
  * @note: btstack_type 1
  */
-static inline uint8_t gattservice_subevent_scan_parameters_service_connected_get_att_status(const uint8_t * event){
+static inline uint8_t gattservice_subevent_scan_parameters_service_connected_get_status(const uint8_t * event){
     return event[5];
 }
 
@@ -14344,34 +14622,6 @@ static inline uint8_t gattservice_subevent_ias_server_stop_alerting_get_alert_le
  */
 static inline uint8_t gattservice_subevent_ias_server_stop_alerting_get_timeout(const uint8_t * event){
     return event[4];
-}
-
-/**
- * @brief Get field con_handle from event GATTSERVICE_SUBEVENT_DEVICE_INFORMATION_UDI_FOR_MEDICAL_DEVICES
- * @param event packet
- * @return con_handle
- * @note: btstack_type H
- */
-static inline hci_con_handle_t gattservice_subevent_device_information_udi_for_medical_devices_get_con_handle(const uint8_t * event){
-    return little_endian_read_16(event, 3);
-}
-/**
- * @brief Get field att_status from event GATTSERVICE_SUBEVENT_DEVICE_INFORMATION_UDI_FOR_MEDICAL_DEVICES
- * @param event packet
- * @return att_status
- * @note: btstack_type 1
- */
-static inline uint8_t gattservice_subevent_device_information_udi_for_medical_devices_get_att_status(const uint8_t * event){
-    return event[5];
-}
-/**
- * @brief Get field label from event GATTSERVICE_SUBEVENT_DEVICE_INFORMATION_UDI_FOR_MEDICAL_DEVICES
- * @param event packet
- * @return label
- * @note: btstack_type T
- */
-static inline const char * gattservice_subevent_device_information_udi_for_medical_devices_get_label(const uint8_t * event){
-    return (const char *) &event[6];
 }
 
 /**

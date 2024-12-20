@@ -200,7 +200,7 @@ typedef enum {
     CON_PARAMETER_UPDATE_SEND_RESPONSE,
     CON_PARAMETER_UPDATE_CHANGE_HCI_CON_PARAMETERS,
     CON_PARAMETER_UPDATE_DENY,
-    // HCI - in respnose to HCI_SUBEVENT_LE_REMOTE_CONNECTION_PARAMETER_REQUEST
+    // HCI - in response to HCI_SUBEVENT_LE_REMOTE_CONNECTION_PARAMETER_REQUEST
     CON_PARAMETER_UPDATE_REPLY,
     CON_PARAMETER_UPDATE_NEGATIVE_REPLY,
 } le_con_parameter_update_state_t;
@@ -668,6 +668,13 @@ typedef struct {
     uint8_t le_phy_update_rx_phys;
     int8_t  le_phy_update_phy_options;
 
+    // LE Subrating
+    uint16_t le_subrate_min;
+    uint16_t le_subrate_max;
+    uint16_t le_subrate_max_latency;
+    uint16_t le_subrate_continuation_number;
+    uint16_t le_subrate_supervision_timeout;
+
     // LE Security Manager
     sm_connection_t sm_connection;
 
@@ -899,9 +906,15 @@ typedef enum hci_init_state{
     HCI_INIT_W4_LE_READ_MAX_ADV_DATA_LEN,
 #endif
 #endif
+
 #ifdef ENABLE_LE_ISOCHRONOUS_STREAMS
     HCI_INIT_LE_SET_HOST_FEATURE_CONNECTED_ISO_STREAMS,
     HCI_INIT_W4_LE_SET_HOST_FEATURE_CONNECTED_ISO_STREAMS,
+#endif
+
+#ifdef ENABLE_BLE
+    HCI_INIT_LE_SET_HOST_FEATURE_CONNECTION_SUBRATING,
+    HCI_INIT_W4_LE_SET_HOST_FEATURE_CONNECTION_SUBRATING,
 #endif
 
     HCI_INIT_DONE,

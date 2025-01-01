@@ -229,7 +229,7 @@ static uni_error_t arduino_on_device_ready(uni_hid_device_t* d) {
     logd("Arduino: assigned gamepad idx is: %d\n", ins->controller_idx);
 
     if (d->report_parser.set_player_leds != NULL) {
-        d->report_parser.set_player_leds(d, BIT(ins->controller_idx));
+        d->report_parser.set_player_leds(d, ins->controller_idx + 1);
     }
     return UNI_ERROR_SUCCESS;
 }

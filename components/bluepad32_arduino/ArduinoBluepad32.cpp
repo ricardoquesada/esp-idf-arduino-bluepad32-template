@@ -75,7 +75,10 @@ void Bluepad32::forgetBluetoothKeys() {
 }
 
 void Bluepad32::enableNewBluetoothConnections(bool enabled) {
-    uni_bt_enable_new_connections_safe(enabled);
+    if (enabled)
+        uni_bt_start_scanning_and_autoconnect_safe();
+    else
+        uni_bt_stop_scanning_safe();
 }
 
 void Bluepad32::setup(const GamepadCallback& onConnect, const GamepadCallback& onDisconnect) {

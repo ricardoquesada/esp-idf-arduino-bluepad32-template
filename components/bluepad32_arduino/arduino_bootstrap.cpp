@@ -121,4 +121,4 @@ void feedLoopWDT() {
     }
 }
 
-#endif // !CONFIG_AUTOSTART_ARDUINO
+#endif  // !CONFIG_AUTOSTART_ARDUINO

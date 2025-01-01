@@ -161,7 +161,7 @@ static void arduino_on_init_complete(void) {
     assert(_pending_queue != NULL);
 
     // Start scanning
-    uni_bt_enable_new_connections_unsafe(true);
+    uni_bt_start_scanning_and_autoconnect_safe();
 
 #if !CONFIG_AUTOSTART_ARDUINO
     arduino_bootstrap();
@@ -400,11 +400,28 @@ int arduino_forget_bluetooth_keys(void) {
     return UNI_ARDUINO_ERROR_SUCCESS;
 }
 
+uni_hid_device_t* arduino_get_internal_hid_device(int controller_idx) {
+    if (controller_idx == UNI_ARDUINO_GAMEPAD_INVALID) {
+        loge("Arduino: Invalid controller_idx, controller not assigned yet ?\n");
+        return NULL;
+    }
+    if (controller_idx < 0 || controller_idx >= CONFIG_BLUEPAD32_MAX_DEVICES) {
+        loge("Arduino: Invalid controller_idx, idx outside scope. controller_idx: %d\n", controller_idx);
+        return NULL;
+    }
+    uni_hid_device_t* d = uni_hid_device_get_instance_with_predicate(predicate_arduino_index, (void*)controller_idx);
+    if (!d) {
+        loge("Arduino: device cannot be found for controller_idx: %d\n", controller_idx);
+        return NULL;
+    }
+    return d;
+}
+
 static void version(void) {
     esp_chip_info_t info;
     esp_chip_info(&info);
 
-    const esp_app_desc_t* app_desc = esp_ota_get_app_description();
+    const esp_app_desc_t* app_desc = esp_app_get_description();
 
     logi("\nFirmware info:\n");
     logi("\tBluepad32 Version: v%s (%s)\n", UNI_VERSION, app_desc->version);

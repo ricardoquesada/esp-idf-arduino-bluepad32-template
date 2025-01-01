@@ -122,13 +122,13 @@ void dumpKeyboard(ControllerPtr ctl) {
     Console.printf("idx=%d, Pressed keys: ", ctl->index());
     for (int key = Keyboard_A; key <= Keyboard_UpArrow; key++) {
         if (ctl->isKeyPressed(static_cast<KeyboardKey>(key))) {
-            const char* keyName = key_names[key-4];
+            const char* keyName = key_names[key - 4];
             Console.printf("%s,", keyName);
-       }
+        }
     }
     for (int key = Keyboard_LeftControl; key <= Keyboard_RightMeta; key++) {
         if (ctl->isKeyPressed(static_cast<KeyboardKey>(key))) {
-            const char* keyName = modifier_names[key-0xe0];
+            const char* keyName = modifier_names[key - 0xe0];
             Console.printf("%s,", keyName);
         }
     }
@@ -211,7 +211,6 @@ void processMouse(ControllerPtr ctl) {
 }
 
 void processKeyboard(ControllerPtr ctl) {
-
     if (!ctl->isAnyKeyPressed())
         return;
 

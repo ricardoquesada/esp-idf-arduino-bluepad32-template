@@ -175,7 +175,7 @@ enum KeyboardKey : uint8_t {
     Keypad_000 = HID_USAGE_KP_000,
     Keyboard_ThousandsSeparator = HID_USAGE_KB_THOUSANDS_SEPARATOR,
     Keyboard_DecimalSeparator = HID_USAGE_KB_DECIMAL_SEPARATOR,
-    Keyboard_CurrentyUnit = HID_USAGE_KB_CURRENCY_UNIT,
+    Keyboard_CurrencyUnit = HID_USAGE_KB_CURRENCY_UNIT,
     Keyboard_CurrencySubUnit = HID_USAGE_KB_CURRENCY_SUB_UNIT,
     Keypad_OpenParenthesis = HID_USAGE_KP_OPARENTHESIS,
     Keypad_CloseParenthesis = HID_USAGE_KP_CPARENTHESIS,

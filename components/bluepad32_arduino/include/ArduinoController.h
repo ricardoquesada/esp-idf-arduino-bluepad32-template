@@ -67,6 +67,10 @@ class Controller {
 
     Controller();
 
+    // Delete copy constructor to avoid copying the state by mistake. If so,
+    // chances are that the controller won't get updated automatically.
+    Controller(const Controller&) = delete;
+
     //
     // Gamepad Related
     //
@@ -220,10 +224,6 @@ class Controller {
     ControllerData _data;
     ControllerProperties _properties;
     bool _hasData;
-
-    // Delete copy constructor to avoid copying the state by mistake. If so,
-    // chances are that the controller won't get updated automatically.
-    Controller(const Controller&) = delete;
 
     // For converting controller types to names.
     struct controllerNames {

@@ -90,7 +90,8 @@ int arduino_forget_bluetooth_keys(void);
 // Returns a uni_hid_device_t* for a giving Controller index. Must be called from the BP32/BTstack thread.
 // Any function that manipulates "uni_hid_device_t" MUST be called from the BTP32/BTstack thread.
 // This function is ONLY for advanced users!
-uni_hid_device_t* arduino_get_internal_hid_device(int idx);
+// "controller_idx" is the value returned by AndroidController.index();
+uni_hid_device_t* arduino_get_internal_hid_device(int controller_idx);
 
 #ifdef __cplusplus
 }

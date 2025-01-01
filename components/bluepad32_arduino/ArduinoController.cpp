@@ -45,7 +45,7 @@ const struct Controller::controllerNames Controller::_controllerNames[] = {
     {Controller::CONTROLLER_TYPE_GenericMouse, "Mouse"},
 };
 
-Controller::Controller() : _connected(false), _idx(-1), _data(), _properties() {}
+Controller::Controller() : _connected(false), _idx(-1), _data(), _properties(), _hasData(false) {}
 
 bool Controller::isConnected() const {
     return _connected;
@@ -94,7 +94,7 @@ void Controller::playDualRumble(uint16_t delayedStartMs,
 }
 
 String Controller::getModelName() const {
-    for (int i = 0; i < ARRAY_SIZE(_controllerNames); i++) {
+    for (int i = 0; i < std::size(_controllerNames); i++) {
         if (_properties.type == _controllerNames[i].type)
             return _controllerNames[i].name;
     }

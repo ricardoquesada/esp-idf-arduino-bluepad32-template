@@ -272,8 +272,15 @@ void setup() {
     const uint8_t* addr = BP32.localBdAddress();
     Console.printf("BD Addr: %2X:%2X:%2X:%2X:%2X:%2X\n", addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]);
 
-    // Setup the Bluepad32 callbacks
-    BP32.setup(&onConnectedController, &onDisconnectedController);
+    // Setup the Bluepad32 callbacks, and the default behavior for scanning or not.
+    // By default, if the "startScanning" parameter is not passed, it will do the "start scanning".
+    // Notice that "Start scanning" will try to auto-connect to devices that are compatible with Bluepad32.
+    // E.g: if a Gamepad, keyboard or mouse are detected, it will try to auto connect to them.
+    bool startScanning = true;
+    BP32.setup(&onConnectedController, &onDisconnectedController, startScanning);
+
+    // Notice that scanning can be stopped / started at any time by calling:
+    // BP32.enableNewBluetoothConnections(enabled);
 
     // "forgetBluetoothKeys()" should be called when the user performs
     // a "device factory reset", or similar.

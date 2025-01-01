@@ -65,7 +65,9 @@ class Bluepad32 {
     // By default, it is disabled.
     void enableBLEService(bool enabled);
 
-    void setup(const ControllerCallback& onConnect, const ControllerCallback& onDisconnect);
+    // Sets up the callbacks.
+    // And can start scanning right after setup. By default, scanning is true.
+    void setup(const ControllerCallback& onConnect, const ControllerCallback& onDisconnect, bool startScanning = true);
 
     //
     // Get the local Bluetooth Address.

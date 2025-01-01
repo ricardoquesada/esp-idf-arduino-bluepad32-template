@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Requires ESP-IDF 5.3
 - Added "arduino_get_internal_hid_device". Returns a uni_hid_device_t
 - Set correct PlayerLED when controller connects
+- BP32.setup() has an optional 3rd parameter that will start scanning if true.
+  - If no parameter is passed, it will start scanning.
+  - What's changed is that "start scanning" was on by default when "on_init"
+    was called. Now the behavior was moved to BP32.Setup().
+  - Part of isssue [Github Issue #130][github_issue_130]
+
+[github_issue_130]: https://github.com/ricardoquesada/bluepad32/issues/130
 
 ## [4.1.0] - 2024-06-03
 - Bluepad32 v4.1.0

@@ -81,9 +81,11 @@ void Bluepad32::enableNewBluetoothConnections(bool enabled) {
         uni_bt_stop_scanning_safe();
 }
 
-void Bluepad32::setup(const GamepadCallback& onConnect, const GamepadCallback& onDisconnect) {
+void Bluepad32::setup(const GamepadCallback& onConnect, const GamepadCallback& onDisconnect, bool startScanning) {
     _onConnect = onConnect;
     _onDisconnect = onDisconnect;
+
+    enableNewBluetoothConnections(startScanning);
 }
 
 const uint8_t* Bluepad32::localBdAddress() {

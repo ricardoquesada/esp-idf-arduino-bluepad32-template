@@ -160,9 +160,6 @@ static void arduino_on_init_complete(void) {
     pending_queue_ = xQueueCreate(MAX_PENDING_REQUESTS, sizeof(pending_request_t));
     assert(pending_queue_ != NULL);
 
-    // Start scanning
-    uni_bt_start_scanning_and_autoconnect_safe();
-
 #if !CONFIG_AUTOSTART_ARDUINO
     arduino_bootstrap();
 #endif  // !CONFIG_AUTOSTART_ARDUINO

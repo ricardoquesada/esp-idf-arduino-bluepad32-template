@@ -18,13 +18,12 @@ limitations under the License.
 
 #include <stdlib.h>
 
+#include <arduino_platform.h>
 #include <btstack_port_esp32.h>
 #include <btstack_run_loop.h>
 #include <uni.h>
-#include <arduino_platform.h>
 
 #include "sdkconfig.h"
-
 
 // Sanity check
 #ifndef CONFIG_BLUEPAD32_PLATFORM_CUSTOM
@@ -32,7 +31,7 @@ limitations under the License.
 #endif
 
 // Defined in my_platform.c
-struct uni_platform *get_my_platform(void);
+struct uni_platform* get_my_platform(void);
 
 int app_main(void) {
     // hci_dump_open(NULL, HCI_DUMP_STDOUT);

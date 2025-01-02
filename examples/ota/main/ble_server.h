@@ -9,4 +9,4 @@
 
 void BLE_SERVER_SETUP();
 
-#endif // BLE_SERVER_H
+#endif  // BLE_SERVER_H

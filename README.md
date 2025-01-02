@@ -8,7 +8,7 @@ This is a template application to be used with [Espressif IoT Development Framew
 
 Please check [ESP-IDF docs](https://docs.espressif.com/projects/esp-idf/en/latest/get-started/index.html) for getting started instructions.
 
-Requires ESP-IDF **v5.1**.x (don't use 4.4 or 5.2!)
+Requires ESP-IDF **v5.3.2**.
 
 Includes the following ESP-IDF components, with a pre-configured `sdkconfig` file:
 
@@ -24,10 +24,15 @@ Clone the template project:
    git clone --recursive https://github.com/ricardoquesada/esp-idf-arduino-bluepad32-template.git my_project
    ```
 
-After cloning the *template* you have two options:
+After cloning the *template* you have the following options:
 
-* A) Using PlatformIO (easier)
-* B) or Using ESP-IDF (requires more steps)
+* A) Using PlatformIO
+* B) Visual Studio Code + ESP-IDF plugin
+* C) CLion (personal favorite)
+* D) ESP-IDF from command line
+
+
+*Note: Arduino IDE is not supported in this "template app" project*
 
 ### A) Using PlatformIO + ESP-IDF
 
@@ -39,6 +44,9 @@ After cloning the *template* you have two options:
 That's it. The PlatformIO will download the ESP-IDF toolchain and its dependencies.
 
 It might take a few minutes to download all dependencies. Be patient.
+
+*Note: You might need to remove previously installed PlatformIO packages. Just do `rm -rf ~/.platformio`
+and reinstall the PlatformIO plugin.*
 
 ![build_project][pio_build_project]
 
@@ -61,17 +69,43 @@ Further reading: [PlatformIO Espressif IoT Development Framework][pio_espidf]
 [pio_monitor_project]: https://lh3.googleusercontent.com/pw/ABLVV845uPqRtJkUrv4JlODuTr7Shnw0HR7BdojRbxv3xWyiUO-V_Kv42YAKAV-XyoNRPY5vsyj0yRDsRxH0mxz8Q1NYzvhCKw5Ni9MH6UYR8IiaT8XS9hysR81APn8X2tnVgnmJ6ZkSPCgUURnE2MVYIWYrNQ=-no-gm?authuser=0
 [pio_espidf]: https://docs.platformio.org/en/latest/frameworks/espidf.html
 
-### or B) Using ESP-IDF
+### B) Visual Studio Code + ESP-IDF plugin
+
+Open [Visual Studio Code][vscode] and install the [ESP-IDF plugin][esp-idf-plugin].
+
+Features:
+
+* All the regular Visual Studio Code regular features
+* ...plus configure, build, flash and monitor your project
+* ...and much more
+
+![vscode_ide](https://lh3.googleusercontent.com/pw/AM-JKLUxjqUhU2tM-bKw3togS3gTkBdtmi40kqW2c2KieAybnD770I3pdaLnFU7a-sM7dUUGmcWpigvElc1fGo1J-5bJlVdbg8HOJZKbUXo6A_IqIvUGEK6GtwxqNy5EFJmijrBnB_aQhd_fi3GQnXZ1V7WYvw=-no)
+
+[vscode]: https://code.visualstudio.com/
+[esp-idf-plugin]: https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/vscode-setup.html
+
+### C) CLion
+
+![clion_ide](https://lh3.googleusercontent.com/pw/AP1GczO-t-uncCZJF8ygBXWmO8Dvrx3C4f7tHhisfF39GKXUaryiRA5rYJWx3SQR8fR1orYGmHdOSVnZLVdoYtoc6IYnurdbtXo6_4ZIVgwnzyWJrNkyQFHu6kma6c__YePCddO9BjMFWHyVrBBk7rmNki5EDQ=-no-gm?authuser=0)
+
+[CLion][clion] is a great IDE, and my personal favorite. It works very well with ESP-IDF based projects.
+
+To integrate your project with CLion, follow the steps in the [CLion official documentation][clion_esp_idf].
+
+[clion]: https://www.jetbrains.com/clion/
+[clion_esp_idf]: https://www.jetbrains.com/help/clion/esp-idf.html
+
+### D) ESP-IDF from command line
 
 #### For Windows
 
-1. Install [ESP-IDF v5.1][esp-idf-windows-installer]. For further info, read: [ESP-IDF Getting Started for Windows][esp-idf-windows-setup]
+1. Install [ESP-IDF v5.3][esp-idf-windows-installer]. For further info, read: [ESP-IDF Getting Started for Windows][esp-idf-windows-setup]
 
    * Either the Online or Offline version should work
    * When asked which components to install, don't change anything. Default options are Ok.
    * When asked whether ESP can modify the system, answer "Yes"
 
-2. Launch the "ESP-IDF v5.1 CMD" (type that in the Windows search box)
+2. Launch the "ESP-IDF v5.3 CMD" (type that in the Windows search box)
 
 3. Compile it
 
@@ -85,7 +119,7 @@ Further reading: [PlatformIO Espressif IoT Development Framework][pio_espidf]
     ```
 
 [esp-idf-windows-setup]: https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/windows-setup.html
-[esp-idf-windows-installer]: https://dl.espressif.com/dl/esp-idf/?idf=5.1
+[esp-idf-windows-installer]: https://dl.espressif.com/dl/esp-idf/?idf=5.3
 
 #### For Linux / macOS
 
@@ -112,7 +146,7 @@ Further reading: [PlatformIO Espressif IoT Development Framework][pio_espidf]
     # Needs to be done just once
     # Clone the ESP-IDF git repo
     mkdir ~/esp && cd ~/esp
-    git clone -b release/v5.1 --recursive https://github.com/espressif/esp-idf.git
+    git clone -b release/v5.3 --recursive https://github.com/espressif/esp-idf.git
 
     # Then install the toolchain
     cd ~/esp/esp-idf
@@ -211,23 +245,6 @@ And that's it. Now you can include `ESP32Servo` from your code. E.g:
 ```
 
 [esp32servo]: https://github.com/madhephaestus/ESP32Servo.git
-
-## IDE
-
-Arduino IDE is not supported, but you can use [Visual Studio Code][vscode] + [ESP-IDF plugin][esp-idf-plugin].
-
-You can do:
-
-* All the regular Visual Studio Code regular features
-* ...plus configure, build, flash and monitor your project
-* ...and much more
-
-![ide](https://lh3.googleusercontent.com/pw/AM-JKLUxjqUhU2tM-bKw3togS3gTkBdtmi40kqW2c2KieAybnD770I3pdaLnFU7a-sM7dUUGmcWpigvElc1fGo1J-5bJlVdbg8HOJZKbUXo6A_IqIvUGEK6GtwxqNy5EFJmijrBnB_aQhd_fi3GQnXZ1V7WYvw=-no)
-
-Subjective opinion: VSCode + ESP-IDF plugin is muuuuuch better than Arduino IDE. Highly recommended!
-
-[vscode]: https://code.visualstudio.com/
-[esp-idf-plugin]: https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/vscode-setup.html
 
 ## Further info
 

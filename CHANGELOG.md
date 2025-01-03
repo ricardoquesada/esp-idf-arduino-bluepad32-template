@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - 2025-xx-xx
+## [4.2.0] - 2025-01-03
 - Bluepad32 v4.2.0
 - BTstack v1.6.2
 - Arduino Core v3.1.0
@@ -15,9 +15,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - If no parameter is passed, it will start scanning.
   - What's changed is that "start scanning" was on by default when "on_init"
     was called. Now the behavior was moved to BP32.Setup().
-  - Part of isssue [Github Issue #130][github_issue_130]
+  - Part of issue [Github Issue #130][github_issue_130]
+- Updated [platformio.ini][platformio_ini]
+  - See [PlatformIO issue 1225][github_pio_issue_1225] to learn what's going on between PlatformIO and Espressif.
+  - You might need to uninstall PlatformIO first. E.g: `rm -rf ~/.platformio`
+- Updated [README][readme_md] with more detailed IDE options
 
 [github_issue_130]: https://github.com/ricardoquesada/bluepad32/issues/130
+[github_pio_issue_1225]: https://github.com/platformio/platform-espressif32/issues/1225
+[platformio_ini]: https://github.com/ricardoquesada/esp-idf-arduino-bluepad32-template/blob/main/platformio.ini
+[readme_md]: https://github.com/ricardoquesada/esp-idf-arduino-bluepad32-template/blob/main/README.md
 
 ## [4.1.0] - 2024-06-03
 - Bluepad32 v4.1.0

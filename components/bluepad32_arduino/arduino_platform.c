@@ -421,7 +421,7 @@ static void version(void) {
     const esp_app_desc_t* app_desc = esp_app_get_description();
 
     logi("\nFirmware info:\n");
-    logi("\tBluepad32 Version: v%s (%s)\n", UNI_VERSION, app_desc->version);
+    logi("\tBluepad32 Version: v%s (%s)\n", UNI_VERSION_STRING, app_desc->version);
     logi("\tArduino Core Version: v%d.%d.%d\n", ESP_ARDUINO_VERSION_MAJOR, ESP_ARDUINO_VERSION_MINOR,
          ESP_ARDUINO_VERSION_PATCH);
     logi("\tCompile Time: %s %s\n", app_desc->date, app_desc->time);

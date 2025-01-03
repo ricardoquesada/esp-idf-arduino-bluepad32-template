@@ -13,7 +13,7 @@
 Bluepad32::Bluepad32() : _prevConnectedControllers(0), _controllers(), _onConnect(), _onDisconnect() {}
 
 const char* Bluepad32::firmwareVersion() const {
-    return "Bluepad32 for Arduino v" UNI_VERSION;
+    return "Bluepad32 for Arduino v" UNI_VERSION_STRING;
 }
 
 bool Bluepad32::update() {

@@ -8,13 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Arduino Core v3.2
   - Requires ESP-IDF 5.4
 - Increase stack for ESP32-C6 [Github Issue#149][github_issue_149]
+- BTstack 1.6.2 mater branch
 
 [github_issue_149]: https://github.com/ricardoquesada/bluepad32/issues/149
 
 
 ## [4.2.0] - 2025-01-03
 - Bluepad32 v4.2.0
-- BTstack v1.6.2
+- BTstack pre-v1.6.2
 - Arduino Core v3.1.0
   - Requires ESP-IDF 5.3
 - Added "arduino_get_internal_hid_device". Returns a uni_hid_device_t

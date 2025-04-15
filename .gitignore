@@ -3,6 +3,7 @@ sdkconfig.old
 sdkconfig
 
 # misc
+.pio
 .pioenvs
 .clang_complete
 .gcc-flags.json
@@ -16,6 +17,8 @@ dist/
 build/
 cmake-build-*/
 build/
+managed_components/
+
 
 # Xcode
 *.mode*v*

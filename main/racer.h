@@ -74,8 +74,8 @@ public:
 
     void f_left()
     {
-        m1(1, 0);
-        m2(0, 0);
+        m1(0, 0);
+        m2(1, 0);
     }
     void r_left()
     {
@@ -85,8 +85,8 @@ public:
 
     void f_right()
     {
-        m1(0, 0);
-        m2(1, 0);
+        m1(1, 0);
+        m2(0, 0);
     }
     void r_right()
     {

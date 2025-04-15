@@ -37,6 +37,34 @@ ControllerPtr myControllers[BP32_MAX_GAMEPADS];
 MPU6500_WE myMPU6500 = MPU6500_WE(MPU6500_ADDR);
 
 
+void process_x(float x, bool force=false)
+{
+    static bool upside_down = false;
+    if (x > 0.5 && upside_down) {
+        Console.println("rightside up");
+        upside_down = false;
+    }
+    else if (x < -0.5 && !upside_down) {
+        Console.println("upside down");
+        upside_down = true;
+    }
+    else if (!force)
+    {
+        return;
+    }
+
+    if (upside_down){
+        leds[0] = CRGB::Red;
+        leds[1] = CRGB::White;
+    }
+    else{
+        leds[0] = CRGB::White;
+        leds[1] = CRGB::Red;
+    }
+    FastLED.show();
+}
+
+
 // This callback gets called any time a new gamepad is connected.
 // Up to 4 gamepads can be connected at the same time.
 void onConnectedController(ControllerPtr ctl) {
@@ -57,6 +85,9 @@ void onConnectedController(ControllerPtr ctl) {
     if (!foundEmptySlot) {
         Console.println("CALLBACK: Controller connected, but could not found empty slot");
     }
+    process_x(1, true);
+    ctl->playDualRumble(0, 0xc0 /* force */, 0xc0, 0xc0 /* duration */);
+
 }
 
 void onDisconnectedController(ControllerPtr ctl) {
@@ -99,31 +130,12 @@ void dumpGamepad(ControllerPtr ctl) {
     );
 }
 
-void process_x(float x)
-{
-    static bool upside_down = false;
-    if (x > 0.5 && upside_down) {
-        Console.println("rightside up");
-        upside_down = false;
-        leds[0] = CRGB::White;
-        leds[1] = CRGB::Red;
-        FastLED.show();
-    }
-    else if (x < -0.5 && !upside_down) {
-        Console.println("upside down");
-        upside_down = true;
-        leds[0] = CRGB::Red;
-        leds[1] = CRGB::White;
-        FastLED.show();
-    }
-}
-
 void processGamepad(ControllerPtr myGamepad) {
 
     xyzFloat gValue = myMPU6500.getGValues();
     static bool direction = true;
 
-    const float triggeraccel = 2.0;
+    const float triggeraccel = 0.5;
     if (gValue.y > triggeraccel || gValue.y < -triggeraccel || gValue.z > triggeraccel || gValue.z < -triggeraccel)
         myGamepad->playDualRumble(0, 0xc0 /* force */, 0xc0, 0xc0 /* duration */);
 

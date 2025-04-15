@@ -12,6 +12,12 @@
 #include <Wire.h>
 
 #include "racer.h"
+
+#define MPU6500_ADDR 0x68
+
+#define NUM_LEDS 2
+#define DATA_PIN 18
+CRGB leds[NUM_LEDS];
 //
 // README FIRST, README FIRST, README FIRST
 //
@@ -28,6 +34,8 @@
 
 Racer racer{};
 ControllerPtr myControllers[BP32_MAX_GAMEPADS];
+MPU6500_WE myMPU6500 = MPU6500_WE(MPU6500_ADDR);
+
 
 // This callback gets called any time a new gamepad is connected.
 // Up to 4 gamepads can be connected at the same time.
@@ -91,14 +99,37 @@ void dumpGamepad(ControllerPtr ctl) {
     );
 }
 
+void process_x(float x)
+{
+    static bool upside_down = false;
+    if (x > 0.5 && upside_down) {
+        Console.println("rightside up");
+        upside_down = false;
+        leds[0] = CRGB::White;
+        leds[1] = CRGB::Red;
+        FastLED.show();
+    }
+    else if (x < -0.5 && !upside_down) {
+        Console.println("upside down");
+        upside_down = true;
+        leds[0] = CRGB::Red;
+        leds[1] = CRGB::White;
+        FastLED.show();
+    }
+}
+
 void processGamepad(ControllerPtr myGamepad) {
 
-    if (myGamepad->a())
-    {
-        racer.free();
-        Console.printf("RACER: free\n");
-        return;
-    }
+    xyzFloat gValue = myMPU6500.getGValues();
+    static bool direction = true;
+
+    const float triggeraccel = 2.0;
+    if (gValue.y > triggeraccel || gValue.y < -triggeraccel || gValue.z > triggeraccel || gValue.z < -triggeraccel)
+        myGamepad->playDualRumble(0, 0xc0 /* force */, 0xc0, 0xc0 /* duration */);
+
+    process_x(gValue.x);
+
+
     if (myGamepad->l1())
     {
         racer.spinleft();
@@ -112,7 +143,28 @@ void processGamepad(ControllerPtr myGamepad) {
         return;
     }
 
-    switch (myGamepad->dpad())
+
+    auto dpad = myGamepad->dpad();
+
+    if (myGamepad->a()) { //B
+        Console.printf("RACER: a\n");
+
+        dpad |= 0x01;
+    }
+    if (myGamepad->y()) {//X
+        dpad |= 0x02;
+        Console.printf("RACER: y\n");
+    }
+    if (myGamepad->b()) {//A
+        Console.printf("RACER: b\n");
+    }
+    if (myGamepad->x()) {//Y
+        Console.printf("RACER: x\n");
+
+    }
+    if (dpad)
+        Console.printf("dpad: %i\n", dpad);
+    switch (dpad)
     {
         case 0x00:
             racer.brake();
@@ -186,15 +238,7 @@ void processGamepad(ControllerPtr myGamepad) {
     // }
     // _btn_plus = btn_plus;
 
-    if (false)
-        myGamepad->playDualRumble(0, 0xc0 /* force */, 0xc0, 0xc0 /* duration */);
 
-
-    // Another way to query controller data is by getting the buttons() function.
-    // See how the different "dump*" functions dump the Controller info.
-    // dumpGamepad(myGamepad);
-
-    // See ArduinoController.h for all the available functions.
 }
 
 void processControllers() {
@@ -214,6 +258,21 @@ void setup() {
     Console.printf("Firmware: %s\n", BP32.firmwareVersion());
     const uint8_t* addr = BP32.localBdAddress();
     Console.printf("BD Addr: %2X:%2X:%2X:%2X:%2X:%2X\n", addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]);
+
+    Wire.begin(19, 23);
+    if(!myMPU6500.init()){
+      Console.println("MPU6500 does not respond");
+    }
+    myMPU6500.setAccRange(MPU6500_ACC_RANGE_8G);
+    myMPU6500.enableAccDLPF(true);
+    myMPU6500.setAccDLPF(MPU6500_DLPF_6);
+
+    FastLED.addLeds<NEOPIXEL, DATA_PIN>(leds, NUM_LEDS);
+
+    leds[0] = CRGB::Blue;
+    leds[1] = CRGB::Blue;
+    FastLED.show();
+
 
     // Setup the Bluepad32 callbacks, and the default behavior for scanning or not.
     // By default, if the "startScanning" parameter is not passed, it will do the "start scanning".

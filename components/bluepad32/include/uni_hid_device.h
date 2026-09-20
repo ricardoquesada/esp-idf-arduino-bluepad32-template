@@ -39,6 +39,14 @@
 #define HID_DEVICE_MAX_PLATFORM_DATA 256  ///< Max size for platform-specific data.
 
 /**
+ * @brief Allow HID devices that don't expose the Device Information Service (DIS, 0x180A).
+ *
+ * Set to 1 to accept devices without DIS and continue to HID.
+ * Set to 0 to reject devices without DIS.
+ */
+#define UNI_HID_DEVICE_ALLOW_NO_DIS 1
+
+/**
  * @brief HID_DEVICE_CONNECTION_TIMEOUT_MS includes the time from when the device is created until it is ready.
  */
 #define HID_DEVICE_CONNECTION_TIMEOUT_MS 20000
@@ -234,14 +242,14 @@ uni_hid_device_t* uni_hid_device_get_instance_with_predicate(uni_hid_device_pred
  * @param idx The index.
  * @return The HID device, or NULL if not found.
  */
-uni_hid_device_t* uni_hid_device_get_instance_for_idx(int idx);
+uni_hid_device_t* uni_hid_device_get_instance_for_idx(int32_t idx);
 
 /**
  * @brief Returns the index of the given HID device.
  * @param d The HID device.
  * @return The index, or -1 if not found.
  */
-int uni_hid_device_get_idx_for_instance(const uni_hid_device_t* d);
+int32_t uni_hid_device_get_idx_for_instance(const uni_hid_device_t* d);
 
 /**
  * @brief Initializes a HID device.

@@ -10,7 +10,7 @@ with [Espressif IoT Development Framework](https://github.com/espressif/esp-idf)
 Please check [ESP-IDF docs](https://docs.espressif.com/projects/esp-idf/en/latest/get-started/index.html) for getting
 started instructions.
 
-Requires ESP-IDF **v5.4.2**.
+Requires ESP-IDF **v5.5.5**.
 
 Includes the following ESP-IDF components, with a pre-configured `sdkconfig` file:
 

@@ -8,8 +8,6 @@
 
 #include "parser/uni_hid_parser_switch.h"
 
-#include <assert.h>
-
 #define ENABLE_SPI_FLASH_DUMP 0
 #define ENABLE_IMU_REPORT 1
 
@@ -22,7 +20,9 @@
 
 #include "bt/uni_bt_conn.h"
 #include "controller/uni_controller.h"
+#include "controller/uni_gamepad.h"
 #include "hid_usage.h"
+#include "parser/uni_hid_parser_rumble.h"
 #include "uni_common.h"
 #include "uni_hid_device.h"
 #include "uni_log.h"
@@ -46,12 +46,18 @@ static const uint16_t SWITCH_FACTORY_STICK_CAL_DATA_ADDR_RIGHT = 0x6046;
 static const uint16_t SWITCH_USER_STICK_CAL_DATA_ADDR_LEFT = 0x8010;
 static const uint16_t SWITCH_USER_STICK_CAL_DATA_ADDR_RIGHT = 0x801B;
 
-// Constants taken from Linux kernel / Nintendo Rev.Eng doc
+// Constants taken from Linux kernel (hid-nintendo.c) / Nintendo Switch Reverse Engineering doc:
+// - Factory SPI flash `cal_accel.scale` (~16384 = 0x4000) is the count span for 4.0g (`SWITCH_ACCEL_CALIB_G`)
+//   at 4096 LSB/g (`SWITCH_ACCEL_RES_PER_G`) in the LSM6DS3H +/-8g range.
+// - Factory SPI flash `cal_gyro.scale - cal_gyro.offset` (~13371) is the count span for 936.0 deg/s
+//   (`SWITCH_GYRO_CALIB_SPEED_DEG_S`, ~14.285 LSB/(deg/s)) in the LSM6DS3H +/-2000 dps range.
 static const int16_t DEFAULT_ACCEL_OFFSET = 0;
 static const int16_t DEFAULT_ACCEL_SCALE = 16384;
 static const int16_t DEFAULT_GYRO_OFFSET = 0;
 static const int16_t DEFAULT_GYRO_SCALE = 13371;
-#define SWITCH_IMU_PREC_RANGE_SCALE 1000
+#define SWITCH_ACCEL_CALIB_G 4.0f
+#define SWITCH_ACCEL_RES_PER_G 4096.0f
+#define SWITCH_GYRO_CALIB_SPEED_DEG_S 936.0f
 
 #define SWITCH_FACTORY_IMU_CAL_DATA_SIZE 24
 static const uint16_t SWITCH_FACTORY_IMU_CAL_DATA_ADDR = 0x6020;
@@ -72,6 +78,7 @@ enum switch_state {
     STATE_READ_FACTORY_IMU_CALIBRATION,    // Factory IMU calibration info
     STATE_SET_FULL_REPORT,                 // Request report 0x30
     STATE_ENABLE_IMU,                      // Enable/Disable gyro/accel
+    STATE_ENABLE_VIBRATION,                // Enable rumble (Joy-Cons ignore rumble until enabled)
     STATE_DUMP_FLASH,                      // Dump SPI Flash memory
     STATE_UPDATE_LED,                      // Update LEDs
     STATE_READY,                           // Gamepad setup ready!
@@ -94,10 +101,12 @@ enum switch_proto_reqs {
 
 // Received in SUBCMD_REQ_DEV_INFO
 enum switch_controller_types {
-    SWITCH_CONTROLLER_TYPE_JCL = 0x01,   // Joy-con left
-    SWITCH_CONTROLLER_TYPE_JCR = 0x02,   // Joy-con right
-    SWITCH_CONTROLLER_TYPE_PRO = 0x03,   // Pro Controller
-    SWITCH_CONTROLLER_TYPE_SNES = 0x0b,  // SNES Controller
+    SWITCH_CONTROLLER_TYPE_JCL = 0x01,    // Joy-con left
+    SWITCH_CONTROLLER_TYPE_JCR = 0x02,    // Joy-con right
+    SWITCH_CONTROLLER_TYPE_PRO = 0x03,    // Pro Controller
+    SWITCH_CONTROLLER_TYPE_NES_L = 0x09,  // NES Controller (Left)
+    SWITCH_CONTROLLER_TYPE_NES_R = 0x0a,  // NES Controller (Right)
+    SWITCH_CONTROLLER_TYPE_SNES = 0x0b,   // SNES Controller
 };
 
 enum {
@@ -111,13 +120,8 @@ enum switch_subcmd {
     SUBCMD_SPI_FLASH_READ = 0x10,
     SUBCMD_SET_PLAYER_LEDS = 0x30,
     SUBCMD_ENABLE_IMU = 0x40,
+    SUBCMD_ENABLE_VIBRATION = 0x48,
 };
-
-typedef enum {
-    SWITCH_STATE_RUMBLE_DISABLED,
-    SWITCH_STATE_RUMBLE_DELAYED,
-    SWITCH_STATE_RUMBLE_IN_PROGRESS,
-} switch_state_rumble_t;
 
 // Calibration values for a stick.
 typedef struct switch_cal_stick_s {
@@ -134,17 +138,7 @@ typedef struct switch_cal_imu_s {
 
 // switch_instance_t represents data used by the Switch driver instance.
 typedef struct switch_instance_s {
-    // Although technically, we can use one timer for delay and duration, easier to debug/maintain if we have two.
-    btstack_timer_source_t rumble_timer_duration;
-    btstack_timer_source_t rumble_timer_delayed_start;
-    switch_state_rumble_t rumble_state;
-
     btstack_timer_source_t setup_timer;
-
-    // Used by delayed start
-    uint16_t rumble_weak_magnitude;
-    uint16_t rumble_strong_magnitude;
-    uint16_t rumble_duration_ms;
 
     enum switch_state state;
     enum switch_flags mode;
@@ -322,6 +316,7 @@ static void fsm_read_user_stick_calibration(struct uni_hid_device_s* d);
 static void fsm_read_factory_imu_calibration(struct uni_hid_device_s* d);
 static void fsm_set_full_report(struct uni_hid_device_s* d);
 static void fsm_enable_imu(struct uni_hid_device_s* d);
+static void fsm_enable_vibration(struct uni_hid_device_s* d);
 static void fsm_update_led(struct uni_hid_device_s* d);
 static void fsm_ready(struct uni_hid_device_s* d);
 static void process_reply_read_spi_dump(struct uni_hid_device_s* d, const uint8_t* data, int len);
@@ -335,20 +330,22 @@ static void process_reply_set_player_leds(struct uni_hid_device_s* d, const stru
 static void process_reply_enable_imu(struct uni_hid_device_s* d, const struct switch_report_21_s* r, int len);
 static int32_t calibrate_axis(int32_t v, switch_cal_stick_t cal);
 static void set_led(uni_hid_device_t* d, uint8_t leds);
-static void on_switch_set_rumble_on(btstack_timer_source_t* ts);
-static void on_switch_set_rumble_off(btstack_timer_source_t* ts);
-static void switch_stop_rumble_now(uni_hid_device_t* d);
-static void switch_play_dual_rumble_now(uni_hid_device_t* d,
-                                        uint16_t duration_ms,
-                                        uint8_t weak_magnitude,
-                                        uint8_t strong_magnitude);
+static uni_rumble_result_t switch_rumble_start(struct uni_hid_device_s* d,
+                                               uint8_t weak_magnitude,
+                                               uint8_t strong_magnitude,
+                                               uint8_t trigger_left,
+                                               uint8_t trigger_right);
+static uni_rumble_result_t switch_rumble_stop(struct uni_hid_device_s* d);
 static void switch_setup_timeout_callback(btstack_timer_source_t* ts);
 static void parse_stick_calibration(switch_cal_stick_t* x, switch_cal_stick_t* y, const uint8_t* data, bool is_left);
 
 void uni_hid_parser_switch_setup(struct uni_hid_device_s* d) {
     switch_instance_t* ins = get_switch_instance(d);
 
+    // Ensure setup_timer is disarmed before zeroing the instance struct.
+    btstack_run_loop_remove_timer(&ins->setup_timer);
     memset(ins, 0, sizeof(*ins));
+    uni_hid_parser_rumble_init(d, switch_rumble_start, switch_rumble_stop);
 
     ins->state = STATE_SETUP;
     ins->mode = SWITCH_MODE_NONE;
@@ -386,6 +383,15 @@ void uni_hid_parser_switch_setup(struct uni_hid_device_s* d) {
     ctl->klass = UNI_CONTROLLER_CLASS_GAMEPAD;
 
     process_fsm(d);
+}
+
+void uni_hid_parser_switch_deinit(struct uni_hid_device_s* d) {
+    if (!d)
+        return;
+    // Remove setup_timer from BTstack's run-loop timer list before uni_hid_device_delete()
+    // or uni_hid_device_setup() zeroes d->parser_data with memset.
+    switch_instance_t* ins = get_switch_instance(d);
+    btstack_run_loop_remove_timer(&ins->setup_timer);
 }
 
 void uni_hid_parser_switch_init_report(uni_hid_device_t* d) {
@@ -451,6 +457,10 @@ static void process_fsm(struct uni_hid_device_s* d) {
             break;
         case STATE_ENABLE_IMU:
             logd("STATE_ENABLE_IMU\n");
+            fsm_enable_vibration(d);
+            break;
+        case STATE_ENABLE_VIBRATION:
+            logd("STATE_ENABLE_VIBRATION\n");
             fsm_dump_rom(d);
             break;
         case STATE_DUMP_FLASH:
@@ -551,14 +561,18 @@ static void process_reply_read_spi_user_stick_calibration(struct uni_hid_device_
     bool process_left = false;
     bool process_right = false;
     uint8_t data_pointer = 2;
+    if (len < 2) {
+        loge("Switch: invalid spi user stick calibration len; got %d, wanted >= 2\n", len);
+        return;
+    }
     logi("Switch: Got magic bits 0x%02x 0x%02x\n", data[0], data[1]);
     if (ins->controller_type == SWITCH_CONTROLLER_TYPE_PRO) {
         // If data is longer than expected, we treat it as Ok.
         // Clones might report longer length.
         // See: https://github.com/ricardoquesada/bluepad32/issues/94
-        if (len < SWITCH_FACTORY_STICK_CAL_DATA_SIZE * 2) {
-            loge("Switch: invalid spi factory stick calibration len; got %d, wanted >= %d\n", len,
-                 SWITCH_FACTORY_STICK_CAL_DATA_SIZE * 2);
+        if (len < SWITCH_USER_STICK_CAL_DATA_SIZE * 2) {
+            loge("Switch: invalid spi user stick calibration len; got %d, wanted >= %d\n", len,
+                 SWITCH_USER_STICK_CAL_DATA_SIZE * 2);
             printf_hexdump(data, len);
             return;
         }
@@ -570,12 +584,12 @@ static void process_reply_read_spi_user_stick_calibration(struct uni_hid_device_
             process_right = true;
         }
     } else {
-        if (len < SWITCH_FACTORY_STICK_CAL_DATA_SIZE) {
+        if (len < SWITCH_USER_STICK_CAL_DATA_SIZE) {
             // If data is longer than expected, we treat it as Ok.
             // Clones might report longer length.
             // See: https://github.com/ricardoquesada/bluepad32/issues/94
-            loge("Switch: invalid spi factory stick calibration len; got %d, wanted >= %d\n", len,
-                 SWITCH_FACTORY_STICK_CAL_DATA_SIZE);
+            loge("Switch: invalid spi user stick calibration len; got %d, wanted >= %d\n", len,
+                 SWITCH_USER_STICK_CAL_DATA_SIZE);
             printf_hexdump(data, len);
             return;
         }
@@ -648,7 +662,10 @@ static void process_reply_read_spi_factory_imu_calibration(struct uni_hid_device
 
 // Reply to SUBCMD_REQ_DEV_INFO
 static void process_reply_req_dev_info(struct uni_hid_device_s* d, const struct switch_report_21_s* r, int len) {
-    ARG_UNUSED(len);
+    if (len < (int)(sizeof(*r) + 3)) {
+        loge("Switch: Invalid SUBCMD_REQ_DEV_INFO length, expected >= %zu, got: %d\n", sizeof(*r) + 3, len);
+        return;
+    }
     switch_instance_t* ins = get_switch_instance(d);
     if (ins->state > STATE_SETUP && ins->mode == SWITCH_MODE_NONE) {
         bool enable_imu;
@@ -682,11 +699,15 @@ static void process_reply_set_report_mode(struct uni_hid_device_s* d, const stru
 // Reply to SUBCMD_SPI_FLASH_READ
 static void process_reply_spi_flash_read(struct uni_hid_device_s* d, const struct switch_report_21_s* r, int len) {
     // +5 because it includes the address and size of the payload
-    if (len < sizeof(*r) + 5) {
-        loge("Switch: Invalid SPI flash read length, expected >= %d, got: %d\n", sizeof(*r) + 5, len);
+    if (len < (int)(sizeof(*r) + 5)) {
+        loge("Switch: Invalid SPI flash read length, expected >= %zu, got: %d\n", sizeof(*r) + 5, len);
         return;
     }
     int mem_len = r->data[4];
+    if (mem_len < 0 || sizeof(*r) + 5 + (size_t)mem_len > (size_t)len) {
+        loge("Switch: SPI flash read mem_len=%d exceeds packet len=%d\n", mem_len, len);
+        return;
+    }
     uint32_t addr = r->data[0] | r->data[1] << 8 | r->data[2] << 16 | r->data[3] << 24;
 
     logd("Switch: Reading from %#x, mem len=%d, struct size=%d, report size=%d\n", addr, mem_len, sizeof(*r), len);
@@ -732,6 +753,11 @@ static void process_input_subcmd_reply(struct uni_hid_device_s* d, const uint8_t
     // 21 D9 80 08 10 00 18 A8 78 F2 C7 70 0C 80 30 00 00 00 00 00 00 00 00 00
     // 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     // 00
+    if (len < (int)sizeof(struct switch_report_21_s)) {
+        loge("Switch: Invalid subcommand reply length, expected >= %zu, got: %d\n", sizeof(struct switch_report_21_s),
+             len);
+        return;
+    }
     const struct switch_report_21_s* r = (const struct switch_report_21_s*)report;
     if ((r->ack & 0b10000000) == 0) {
         loge("Switch: Error, subcommand id=0x%02x was not successful.\n", r->subcmd_id);
@@ -751,6 +777,9 @@ static void process_input_subcmd_reply(struct uni_hid_device_s* d, const uint8_t
             break;
         case SUBCMD_ENABLE_IMU:
             process_reply_enable_imu(d, r, len);
+            break;
+        case SUBCMD_ENABLE_VIBRATION:
+            // Nothing to parse: the ack bit is already checked above.
             break;
         default:
             loge("Switch: Error, unexpected subcmd_id=0x%02x in report 0x21\n", r->subcmd_id);
@@ -823,30 +852,47 @@ static void parse_imu(uni_hid_device_t* d, const struct switch_imu_data_s* r) {
     switch_instance_t* ins = get_switch_instance(d);
     uni_controller_t* ctl = &d->controller;
 
-    int accel[3];
-    int gyro[3];
+    float accel_mps2[3];
+    float gyro_rads[3];
 
+    // Convert raw 16-bit signed sensor deltas into m/s^2 and rad/s.
+    // Third-party/clone controllers may reply with all-zero SPI flash calibration data
+    // (`imu_cal_*_divisor[i] == 0`), in which case we fall back to the nominal hardware
+    // sensitivities (`SWITCH_ACCEL_RES_PER_G` = 4096 LSB/g and `DEFAULT_GYRO_SCALE` = 13371 LSB per 936 deg/s).
     for (int i = 0; i < 3; i++) {
-        if (ins->imu_cal_accel_divisor[i] == 0)
-            accel[i] = r->accel[i];
-        else
-            accel[i] = (r->accel[i] * ins->cal_accel.scale[i]) / ins->imu_cal_accel_divisor[i];
-        gyro[i] = mult_frac((SWITCH_IMU_PREC_RANGE_SCALE * (r->gyro[i] - ins->cal_gyro.offset[i])),
-                            ins->cal_gyro.scale[i], ins->imu_cal_gyro_divisor[i]);
+        const float raw_accel = (float)(r->accel[i] - ins->cal_accel.offset[i]);
+        if (ins->imu_cal_accel_divisor[i] == 0) {
+            accel_mps2[i] = (raw_accel / SWITCH_ACCEL_RES_PER_G) * UNI_STANDARD_GRAVITY;
+        } else {
+            accel_mps2[i] =
+                (raw_accel * (SWITCH_ACCEL_CALIB_G / (float)ins->imu_cal_accel_divisor[i])) * UNI_STANDARD_GRAVITY;
+        }
+
+        const float raw_gyro = (float)(r->gyro[i] - ins->cal_gyro.offset[i]);
+        if (ins->imu_cal_gyro_divisor[i] == 0) {
+            gyro_rads[i] = (raw_gyro * (SWITCH_GYRO_CALIB_SPEED_DEG_S / (float)DEFAULT_GYRO_SCALE)) * UNI_DEG_TO_RAD;
+        } else {
+            gyro_rads[i] =
+                (raw_gyro * (SWITCH_GYRO_CALIB_SPEED_DEG_S / (float)ins->imu_cal_gyro_divisor[i])) * UNI_DEG_TO_RAD;
+        }
     }
 
-    // Right joycon has Y and Z axes negated.
+    // Right Joy-Con physical IMU mounting has Y and Z axes inverted relative to Left Joy-Con / Pro Controller.
     if (ins->controller_type == SWITCH_CONTROLLER_TYPE_JCR) {
-        accel[1] = -accel[1];
-        accel[2] = -accel[2];
-        gyro[1] = -gyro[1];
-        gyro[2] = -gyro[2];
+        accel_mps2[1] = -accel_mps2[1];
+        accel_mps2[2] = -accel_mps2[2];
+        gyro_rads[1] = -gyro_rads[1];
+        gyro_rads[2] = -gyro_rads[2];
     }
 
-    for (int i = 0; i < 3; i++) {
-        ctl->gamepad.accel[i] = accel[i];
-        ctl->gamepad.gyro[i] = gyro[i];
-    }
+    // Map Switch native frame (X=Forward, Y=Left, Z=Up) to canonical Y-up frame (X=Right, Y=Up, Z=Back).
+    ctl->gamepad.accel[0] = -accel_mps2[1];
+    ctl->gamepad.accel[1] = accel_mps2[2];
+    ctl->gamepad.accel[2] = -accel_mps2[0];
+
+    ctl->gamepad.gyro[0] = -gyro_rads[1];
+    ctl->gamepad.gyro[1] = gyro_rads[2];
+    ctl->gamepad.gyro[2] = -gyro_rads[0];
 }
 
 // Process 0x30 input report: SWITCH_INPUT_IMU_DATA
@@ -855,8 +901,6 @@ static void parse_report_30(struct uni_hid_device_s* d, const uint8_t* report, i
     // (a1) 30 44 60 00 00 00 FD 87 7B 0E B8 70 00 6C FD FC FF 78 10 35 00 C1 FF
     // 9D FF 72 FD 01 00 72 10 35 00 C1 FF 9B FF 75 FD FF FF 6C 10 34 00 C2 FF
     // 9A FF
-
-    ARG_UNUSED(len);
 
     switch_instance_t* ins = get_switch_instance(d);
     uni_controller_t* ctl = &d->controller;
@@ -872,6 +916,8 @@ static void parse_report_30(struct uni_hid_device_s* d, const uint8_t* report, i
             parse_report_30_joycon_right(d, r);
             break;
         case SWITCH_CONTROLLER_TYPE_PRO:
+        case SWITCH_CONTROLLER_TYPE_NES_L:
+        case SWITCH_CONTROLLER_TYPE_NES_R:
         case SWITCH_CONTROLLER_TYPE_SNES:
             parse_report_30_pro_controller(d, r);
             break;
@@ -881,11 +927,12 @@ static void parse_report_30(struct uni_hid_device_s* d, const uint8_t* report, i
     }
 
     // IMU is valid for all 3 types of controllers.
-
-    // 3 gyro/accel frames are reported.
-    // Different approaches: take the latest one, or average them.
-    // We just take the latest one. If it is not accurate enough, we can average them.
-    if (ins->mode == SWITCH_MODE_IMU)
+    // 3 gyro/accel frames are reported; we take the latest sample (`r->imu[2]`).
+    // Because `uni_hid_parser_switch_parse_input_report()` admits packets with `len >= 12`
+    // (enough for the 3-byte header + 9-byte `switch_buttons_s`), verify that the report
+    // contains the full 48-byte `3 + sizeof(struct switch_report_30_s)` payload before
+    // dereferencing `r->imu[2]` (bytes 36..47) to prevent out-of-bounds reads on short/clone packets.
+    if (ins->mode == SWITCH_MODE_IMU && len >= (int)(3 + sizeof(struct switch_report_30_s)))
         parse_imu(d, &r->imu[2]);
 }
 
@@ -1173,6 +1220,18 @@ static void fsm_enable_imu(struct uni_hid_device_s* d) {
     send_subcmd(d, req, sizeof(out));
 }
 
+static void fsm_enable_vibration(struct uni_hid_device_s* d) {
+    switch_instance_t* ins = get_switch_instance(d);
+    ins->state = STATE_ENABLE_VIBRATION;
+
+    uint8_t out[sizeof(struct switch_subcmd_request) + 1] = {0};
+    struct switch_subcmd_request* req = (struct switch_subcmd_request*)&out[0];
+    req->report_id = 0x01;  // 0x01 for sub commands
+    req->subcmd_id = SUBCMD_ENABLE_VIBRATION;
+    req->data[0] = 0x01;  // enable
+    send_subcmd(d, req, sizeof(out));
+}
+
 static void fsm_update_led(struct uni_hid_device_s* d) {
     switch_instance_t* ins = get_switch_instance(d);
     ins->state = STATE_UPDATE_LED;
@@ -1215,6 +1274,16 @@ static struct switch_rumble_amp_data find_rumble_amp(uint16_t amp) {
     return rumble_amps[i];
 }
 
+// Rumble keeps a fixed frequency (320 Hz) in both bands and maps the 0..255 magnitude onto the amplitude
+// table, capped at 800 of its maximum 1003. Same approach as DS4Windows (SwitchProDevice.PrepareRumbleData,
+// AMP_LIMIT_MAX).
+#define SWITCH_RUMBLE_FREQ_HZ 320
+#define SWITCH_RUMBLE_AMP_MAX 800
+
+static uint16_t switch_rumble_magnitude_to_amp(uint8_t magnitude) {
+    return (uint16_t)((magnitude * SWITCH_RUMBLE_AMP_MAX) / 255);
+}
+
 static void switch_encode_rumble(uint8_t* data, uint16_t freq_low, uint16_t freq_high, uint16_t amp) {
     struct switch_rumble_freq_data freq_data_low;
     struct switch_rumble_freq_data freq_data_high;
@@ -1252,33 +1321,8 @@ void uni_hid_parser_switch_play_dual_rumble(struct uni_hid_device_s* d,
         return;
     }
 
-    switch_instance_t* ins = get_switch_instance(d);
-    switch (ins->rumble_state) {
-        case SWITCH_STATE_RUMBLE_DELAYED:
-            btstack_run_loop_remove_timer(&ins->rumble_timer_delayed_start);
-            break;
-        case SWITCH_STATE_RUMBLE_IN_PROGRESS:
-            btstack_run_loop_remove_timer(&ins->rumble_timer_duration);
-            break;
-        default:
-            // Do nothing
-            break;
-    }
-
-    if (start_delay_ms == 0) {
-        switch_play_dual_rumble_now(d, duration_ms, weak_magnitude, strong_magnitude);
-    } else {
-        // Set timer to have a delayed start
-        ins->rumble_timer_delayed_start.process = &on_switch_set_rumble_on;
-        ins->rumble_timer_delayed_start.context = d;
-        ins->rumble_state = SWITCH_STATE_RUMBLE_DELAYED;
-        ins->rumble_duration_ms = duration_ms;
-        ins->rumble_strong_magnitude = strong_magnitude;
-        ins->rumble_weak_magnitude = weak_magnitude;
-
-        btstack_run_loop_set_timer(&ins->rumble_timer_delayed_start, start_delay_ms);
-        btstack_run_loop_add_timer(&ins->rumble_timer_delayed_start);
-    }
+    uni_hid_parser_rumble_play_dual(d, start_delay_ms, duration_ms, weak_magnitude, strong_magnitude,
+                                    switch_rumble_start, switch_rumble_stop);
 }
 
 bool uni_hid_parser_switch_does_name_match(struct uni_hid_device_s* d, const char* name) {
@@ -1349,9 +1393,13 @@ static void send_subcmd(uni_hid_device_t* d, struct switch_subcmd_request* r, in
 static int32_t calibrate_axis(int32_t v, switch_cal_stick_t cal) {
     int32_t ret;
     if (v > cal.center) {
+        if (cal.max <= cal.center)
+            return 0;
         ret = (v - cal.center) * AXIS_NORMALIZE_RANGE / 2;
         ret /= (cal.max - cal.center);
     } else {
+        if (cal.center <= cal.min)
+            return 0;
         ret = (cal.center - v) * -AXIS_NORMALIZE_RANGE / 2;
         ret /= (cal.center - cal.min);
     }
@@ -1361,13 +1409,7 @@ static int32_t calibrate_axis(int32_t v, switch_cal_stick_t cal) {
     return ret;
 }
 
-static void switch_stop_rumble_now(uni_hid_device_t* d) {
-    switch_instance_t* ins = get_switch_instance(d);
-
-    // No need to protect it with a mutex since it runs in the same main thread
-    assert(ins->rumble_state == SWITCH_STATE_RUMBLE_IN_PROGRESS);
-    ins->rumble_state = SWITCH_STATE_RUMBLE_DISABLED;
-
+static uni_rumble_result_t switch_rumble_stop(struct uni_hid_device_s* d) {
     struct switch_subcmd_request req = {0};
 
     req.report_id = OUTPUT_RUMBLE_ONLY;
@@ -1377,50 +1419,31 @@ static void switch_stop_rumble_now(uni_hid_device_t* d) {
 
     // Rumble request don't include the last byte of "switch_subcmd_request": subcmd_id
     send_subcmd(d, (struct switch_subcmd_request*)&req, sizeof(req) - 1);
+    return UNI_RUMBLE_OK;
 }
 
-static void switch_play_dual_rumble_now(uni_hid_device_t* d,
-                                        uint16_t duration_ms,
-                                        uint8_t weak_magnitude,
-                                        uint8_t strong_magnitude) {
-    switch_instance_t* ins = get_switch_instance(d);
-
-    if (duration_ms == 0) {
-        if (ins->rumble_state != SWITCH_STATE_RUMBLE_DISABLED)
-            switch_stop_rumble_now(d);
-        return;
-    }
+static uni_rumble_result_t switch_rumble_start(struct uni_hid_device_s* d,
+                                               uint8_t weak_magnitude,
+                                               uint8_t strong_magnitude,
+                                               uint8_t trigger_left,
+                                               uint8_t trigger_right) {
+    ARG_UNUSED(trigger_left);
+    ARG_UNUSED(trigger_right);
 
     struct switch_subcmd_request req = {
         .report_id = OUTPUT_RUMBLE_ONLY,
     };
-    switch_encode_rumble(req.rumble_left, weak_magnitude << 2, weak_magnitude, 500);
-    switch_encode_rumble(req.rumble_right, strong_magnitude << 2, strong_magnitude, 500);
+    switch_encode_rumble(req.rumble_left, SWITCH_RUMBLE_FREQ_HZ, SWITCH_RUMBLE_FREQ_HZ,
+                         switch_rumble_magnitude_to_amp(weak_magnitude));
+    switch_encode_rumble(req.rumble_right, SWITCH_RUMBLE_FREQ_HZ, SWITCH_RUMBLE_FREQ_HZ,
+                         switch_rumble_magnitude_to_amp(strong_magnitude));
 
     // Rumble request don't include the last byte of "switch_subcmd_request": subcmd_id
     send_subcmd(d, &req, sizeof(req) - 1);
-
-    // Set timer to turn off rumble
-    ins->rumble_timer_duration.process = &on_switch_set_rumble_off;
-    ins->rumble_timer_duration.context = d;
-    ins->rumble_state = SWITCH_STATE_RUMBLE_IN_PROGRESS;
-    btstack_run_loop_set_timer(&ins->rumble_timer_duration, duration_ms);
-    btstack_run_loop_add_timer(&ins->rumble_timer_duration);
+    return UNI_RUMBLE_OK;
 }
 
-static void on_switch_set_rumble_on(btstack_timer_source_t* ts) {
-    uni_hid_device_t* d = ts->context;
-    switch_instance_t* ins = get_switch_instance(d);
-
-    switch_play_dual_rumble_now(d, ins->rumble_duration_ms, ins->rumble_weak_magnitude, ins->rumble_strong_magnitude);
-}
-
-static void on_switch_set_rumble_off(btstack_timer_source_t* ts) {
-    uni_hid_device_t* d = btstack_run_loop_get_timer_context(ts);
-    switch_stop_rumble_now(d);
-}
-
-void switch_setup_timeout_callback(btstack_timer_source_t* ts) {
+static void switch_setup_timeout_callback(btstack_timer_source_t* ts) {
     uni_hid_device_t* d = btstack_run_loop_get_timer_context(ts);
     switch_instance_t* ins = get_switch_instance(d);
     logi("Switch: setup timer timeout, failed state: 0x%02x\n", ins->state);

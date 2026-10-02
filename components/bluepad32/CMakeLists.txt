@@ -28,6 +28,7 @@ set(srcs
          "parser/uni_hid_parser_nimbus.c"
          "parser/uni_hid_parser_ouya.c"
          "parser/uni_hid_parser_psmove.c"
+         "parser/uni_hid_parser_rumble.c"
          "parser/uni_hid_parser_smarttvremote.c"
          "parser/uni_hid_parser_stadia.c"
          "parser/uni_hid_parser_steam.c"
@@ -45,13 +46,13 @@ set(srcs
          "uni_version.c"
          "uni_virtual_device.c")
 
- if(CONFIG_IDF_TARGET_ESP32 OR PICO_SDK_VERSION_STRING OR BLUEPAD32_TARGET_POSIX)
+if(CONFIG_SOC_BT_CLASSIC_SUPPORTED OR PICO_SDK_VERSION_STRING OR BLUEPAD32_TARGET_POSIX)
     # Bluetooth Classic files used by:
-    # - ESP32
+    # - ESP32 dual-mode targets (ESP32, ESP32-S31)
     # - Pico W
     # - Linux (assuming BT dongle supports BR/EDR)
     list(APPEND srcs
-         # BR/EDR code only gets compiled on ESP32
+         # BR/EDR code only gets compiled on targets with Classic BT support
          "bt/uni_bt_bredr.c"
          "bt/uni_bt_sdp.c")
 endif()
@@ -75,31 +76,30 @@ elseif(PICO_SDK_VERSION_STRING)
          "arch/uni_console_pico.c"
          "arch/uni_system_pico.c"
          "arch/uni_log_pico.c"
-         "arch/uni_property_pico.c")
+         "arch/uni_property_btstack_tlv.c")
 elseif(BLUEPAD32_TARGET_POSIX)
     list(APPEND srcs
          "arch/uni_console_posix.c"
          "arch/uni_system_posix.c"
          "arch/uni_log_posix.c"
-         "arch/uni_property_posix.c")
+         "arch/uni_property_btstack_tlv.c")
 else()
     message(FATAL_ERROR "Define target")
 endif()
 
 if(CONFIG_IDF_TARGET_ESP32)
     # Files that are only meant to be compiled on ESP32 (original)
-    list(APPEND srcs
-        # Place here files that are ESP32-only
-         "platform/uni_platform_mightymiggy.c"
-         "platform/uni_platform_nina.c"
-         "platform/uni_platform_unijoysticle.c"
-         "platform/uni_platform_unijoysticle_2.c"
-         "platform/uni_platform_unijoysticle_2plus.c"
-         "platform/uni_platform_unijoysticle_800xl.c"
-         "platform/uni_platform_unijoysticle_a500.c"
-         "platform/uni_platform_unijoysticle_c64.c"
-         "platform/uni_platform_unijoysticle_msx.c"
-         "platform/uni_platform_unijoysticle_singleport.c")
+    if(CONFIG_BLUEPAD32_PLATFORM_UNIJOYSTICLE)
+        list(APPEND srcs
+             "platform/uni_platform_unijoysticle.c"
+             "platform/uni_platform_unijoysticle_2.c"
+             "platform/uni_platform_unijoysticle_2plus.c"
+             "platform/uni_platform_unijoysticle_800xl.c"
+             "platform/uni_platform_unijoysticle_a500.c"
+             "platform/uni_platform_unijoysticle_c64.c"
+             "platform/uni_platform_unijoysticle_msx.c"
+             "platform/uni_platform_unijoysticle_singleport.c")
+    endif()
 endif()
 
 #
@@ -144,14 +144,9 @@ endif()
 
 # Valid for ESP-IDF only
 if(IDF_TARGET)
-    set(requires "nvs_flash" "btstack" "app_update" "esp_timer" "driver")
-
-    if("${IDF_VERSION_MAJOR}" GREATER_EQUAL 5)
-        list(APPEND requires "cmd_nvs" "cmd_system" "esp_driver_ledc" "esp_driver_spi")
-    else()
-        # Use legacy components when compiled using ESP-IDF v4.4
-        list(APPEND requires "cmd_nvs_4.4" "cmd_system_4.4")
-    endif()
+    set(requires "nvs_flash" "btstack" "app_update" "esp_timer" "driver"
+                 "cmd_nvs" "cmd_system" "esp_driver_ledc" "esp_driver_spi"
+                 "esp_driver_gptimer" "esp_driver_gpio" "esp_driver_uart")
 
     idf_component_register(SRCS "${srcs}"
                         INCLUDE_DIRS "include"

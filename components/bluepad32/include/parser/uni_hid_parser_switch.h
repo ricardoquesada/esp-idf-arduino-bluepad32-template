@@ -10,8 +10,23 @@
 
 #include "parser/uni_hid_parser.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // Nintendo Switch devices
+
+/** @brief Initialize the Nintendo Switch parser state machine, calibration defaults, and rumble callbacks. */
 void uni_hid_parser_switch_setup(struct uni_hid_device_s* d);
+
+/**
+ * @brief Disarm the Switch `setup_timer` before the device struct is zeroed or deleted.
+ *
+ * Prevents BTstack's intrusive run-loop timer list from retaining a dangling pointer into
+ * `d->parser_data` when a Switch controller disconnects mid-setup.
+ */
+void uni_hid_parser_switch_deinit(struct uni_hid_device_s* d);
+
 void uni_hid_parser_switch_init_report(struct uni_hid_device_s* d);
 void uni_hid_parser_switch_parse_input_report(struct uni_hid_device_s* d, const uint8_t* report, uint16_t len);
 void uni_hid_parser_switch_set_player_leds(struct uni_hid_device_s* d, uint8_t leds);
@@ -22,5 +37,9 @@ void uni_hid_parser_switch_play_dual_rumble(struct uni_hid_device_s* d,
                                             uint8_t strong_magnitude);
 bool uni_hid_parser_switch_does_name_match(struct uni_hid_device_s* d, const char* name);
 void uni_hid_parser_switch_device_dump(struct uni_hid_device_s* d);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif  // UNI_HID_PARSER_SWITCH_H

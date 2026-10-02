@@ -6,25 +6,6 @@ menu "Bluepad32"
         help
             Select the Bluepad32 target platform.
 
-        config BLUEPAD32_PLATFORM_AIRLIFT
-            bool "AirLift"
-            help
-                Targets Adafruit devices that have an AirLift co-processor,
-                like the Adafruit Metro M4 Express AirLift.
-
-        config BLUEPAD32_PLATFORM_MIGHTYMIGGY
-            bool "MightyMiggy"
-            help
-                Targets MightyMiggy device.
-
-        config BLUEPAD32_PLATFORM_NINA
-            bool "NINA"
-            depends on SPI_FLASH_USE_LEGACY_IMPL
-            help
-                Targets Arduino devices that have the NINA co-processor,
-                like the Arduino Nano RP2040 Connect.
-                Requires "Component config" -> "Spi Flasher Driver" -> "Use the legacy..." to be enabled.
-
         config BLUEPAD32_PLATFORM_UNIJOYSTICLE
             bool "Unijoysticle"
             help
@@ -90,10 +71,14 @@ menu "Bluepad32"
     config BLUEPAD32_USB_CONSOLE_ENABLE
         bool "Enable USB Console"
         default  y
-        depends on !ESP_CONSOLE_NONE
+        depends on ESP_CONSOLE_UART || ESP_CONSOLE_USB_SERIAL_JTAG
         help
             Enables the USB console.
             User can interact with the Bluepad32 firmware via commands.
+
+            Supports UART (ESP_CONSOLE_UART_DEFAULT / ESP_CONSOLE_UART_CUSTOM)
+            and USB_SERIAL_JTAG as the primary console. USB_CDC primary console
+            is not supported by the underlying ESP-IDF REPL helpers.
 
     config BLUEPAD32_CONSOLE_NVS_COMMAND_ENABLE
         bool "Enable NVS console commands"

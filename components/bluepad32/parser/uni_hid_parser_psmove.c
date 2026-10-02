@@ -9,9 +9,11 @@
 
 #include "parser/uni_hid_parser_psmove.h"
 
+#include <stdint.h>
 #include <string.h>
 
 #include "controller/uni_controller.h"
+#include "controller/uni_gamepad.h"
 #include "hid_usage.h"
 #include "uni_config.h"
 #include "uni_hid_device.h"
@@ -19,6 +21,12 @@
 
 #define ZCM1_PID 0x03d5
 #define ZCM2_PID 0x0c5e
+
+// PS Move IMU hardware sensitivities:
+// - Accelerometer: 4096 LSB/g across both ZCM1 (PS3) and ZCM2 (PS4) revisions.
+// - Gyroscope: ~16.4 LSB/(deg/s) (~7500 counts at 80 rpm = 480 deg/s).
+#define PSMOVE_ACCEL_RES_PER_G 4096.0f
+#define PSMOVE_GYRO_RES_PER_DEG_S 16.4f
 
 // Required steps to determine what kind of extensions are supported.
 typedef enum psmove_fsm {
@@ -33,27 +41,24 @@ typedef enum psmove_model {
     PSMOVE_MODEL_ZCM2,
 } psmove_model_t;
 
-typedef enum {
-    PSMOVE_STATE_RUMBLE_DISABLED,
-    PSMOVE_STATE_RUMBLE_DELAYED,
-    PSMOVE_STATE_RUMBLE_IN_PROGRESS,
-} psmove_state_rumble_t;
-
 // psmove_instance_t represents data used by the psmove driver instance.
 typedef struct psmove_instance_s {
     psmove_model_t model;
     psmove_fsm_t state;
     uint8_t led_rgb[3];
-
-    btstack_timer_source_t rumble_timer_duration;
-    btstack_timer_source_t rumble_timer_delayed_start;
-    psmove_state_rumble_t rumble_state;
-
-    // Used by delayed start
-    uint16_t rumble_magnitude;
-    uint16_t rumble_duration_ms;
+    uint8_t rumble_magnitude;
 } psmove_instance_t;
 _Static_assert(sizeof(psmove_instance_t) < HID_DEVICE_MAX_PARSER_DATA, "PSMove intance too big");
+
+// Decode a 16-bit raw IMU sensor word according to hardware revision:
+// - ZCM2 (PS4 Move, PID 0x0c5e): signed 16-bit two's complement (int16_t).
+// - ZCM1 (PS3 Move, PID 0x03d5): unsigned 16-bit offset-binary centered at 0x8000.
+static int32_t psmove_decode_sensor(const psmove_instance_t* ins, uint16_t raw) {
+    if (ins->model == PSMOVE_MODEL_ZCM2) {
+        return (int32_t)(int16_t)raw;
+    }
+    return (int32_t)raw - 0x8000;
+}
 
 // As defined here:
 // https://github.com/thp/psmoveapi/blob/master/src/psmove.c#L123
@@ -124,9 +129,12 @@ typedef struct __attribute((packed)) {
 
 static psmove_instance_t* get_psmove_instance(uni_hid_device_t* d);
 static void psmove_send_output_report(uni_hid_device_t* d, psmove_output_report_t* out);
-static void on_psmove_set_rumble_on(btstack_timer_source_t* ts);
-static void on_psmove_set_rumble_off(btstack_timer_source_t* ts);
-static void psmove_play_dual_rumble_now(uni_hid_device_t* d, uint16_t duration_ms, uint8_t magnitude);
+static uni_rumble_result_t psmove_stop_rumble_now(struct uni_hid_device_s* d);
+static uni_rumble_result_t psmove_start_rumble_now(struct uni_hid_device_s* d,
+                                                   uint8_t weak_magnitude,
+                                                   uint8_t strong_magnitude,
+                                                   uint8_t trigger_left,
+                                                   uint8_t trigger_right);
 
 void uni_hid_parser_psmove_init_report(uni_hid_device_t* d) {
     uni_controller_t* ctl = &d->controller;
@@ -187,13 +195,23 @@ void uni_hid_parser_psmove_parse_input_report(uni_hid_device_t* d, const uint8_t
 
     ctl->gamepad.throttle = r->trigger * 4;
 
-    ctl->gamepad.accel[0] = r->accel_x;
-    ctl->gamepad.accel[1] = r->accel_y;
-    ctl->gamepad.accel[2] = r->accel_z;
+    const psmove_instance_t* ins = get_psmove_instance(d);
+    const int32_t ax = psmove_decode_sensor(ins, r->accel_x);
+    const int32_t ay = psmove_decode_sensor(ins, r->accel_y);
+    const int32_t az = psmove_decode_sensor(ins, r->accel_z);
 
-    ctl->gamepad.gyro[0] = r->gyro_x;
-    ctl->gamepad.gyro[1] = r->gyro_y;
-    ctl->gamepad.gyro[2] = r->gyro_z;
+    const int32_t gx = psmove_decode_sensor(ins, r->gyro_x);
+    const int32_t gy = psmove_decode_sensor(ins, r->gyro_y);
+    const int32_t gz = psmove_decode_sensor(ins, r->gyro_z);
+
+    // Map PS Move frame (X=Right, Y=Forward along wand, Z=Up through face buttons) to canonical Y-up frame.
+    ctl->gamepad.accel[0] = (float)ax * (UNI_STANDARD_GRAVITY / PSMOVE_ACCEL_RES_PER_G);
+    ctl->gamepad.accel[1] = (float)az * (UNI_STANDARD_GRAVITY / PSMOVE_ACCEL_RES_PER_G);
+    ctl->gamepad.accel[2] = (float)(-ay) * (UNI_STANDARD_GRAVITY / PSMOVE_ACCEL_RES_PER_G);
+
+    ctl->gamepad.gyro[0] = (float)gx * (UNI_DEG_TO_RAD / PSMOVE_GYRO_RES_PER_DEG_S);
+    ctl->gamepad.gyro[1] = (float)gz * (UNI_DEG_TO_RAD / PSMOVE_GYRO_RES_PER_DEG_S);
+    ctl->gamepad.gyro[2] = (float)(-gy) * (UNI_DEG_TO_RAD / PSMOVE_GYRO_RES_PER_DEG_S);
 
     if (r->battery <= 5)
         ctl->battery = r->battery * 51;
@@ -209,34 +227,13 @@ void uni_hid_parser_psmove_play_dual_rumble(struct uni_hid_device_s* d,
         return;
     }
 
-    uint8_t magnitude = btstack_max(weak_magnitude, strong_magnitude);
-
-    psmove_instance_t* ins = get_psmove_instance(d);
-    switch (ins->rumble_state) {
-        case PSMOVE_STATE_RUMBLE_DELAYED:
-            btstack_run_loop_remove_timer(&ins->rumble_timer_delayed_start);
-            break;
-        case PSMOVE_STATE_RUMBLE_IN_PROGRESS:
-            btstack_run_loop_remove_timer(&ins->rumble_timer_duration);
-            break;
-        default:
-            // Do nothing
-            break;
+    if (weak_magnitude == 0 && strong_magnitude == 0) {
+        start_delay_ms = 0;
+        duration_ms = 0;
     }
 
-    if (start_delay_ms == 0) {
-        psmove_play_dual_rumble_now(d, duration_ms, magnitude);
-    } else {
-        // Set timer to have a delayed start
-        ins->rumble_timer_delayed_start.process = &on_psmove_set_rumble_on;
-        ins->rumble_timer_delayed_start.context = d;
-        ins->rumble_state = PSMOVE_STATE_RUMBLE_DELAYED;
-        ins->rumble_duration_ms = duration_ms;
-        ins->rumble_magnitude = magnitude;
-
-        btstack_run_loop_set_timer(&ins->rumble_timer_delayed_start, start_delay_ms);
-        btstack_run_loop_add_timer(&ins->rumble_timer_delayed_start);
-    }
+    uni_hid_parser_rumble_play_dual(d, start_delay_ms, duration_ms, weak_magnitude, strong_magnitude,
+                                    psmove_start_rumble_now, psmove_stop_rumble_now);
 }
 
 void uni_hid_parser_psmove_set_lightbar_color(uni_hid_device_t* d, uint8_t r, uint8_t g, uint8_t b) {
@@ -258,6 +255,7 @@ void uni_hid_parser_psmove_set_lightbar_color(uni_hid_device_t* d, uint8_t r, ui
 void uni_hid_parser_psmove_setup(struct uni_hid_device_s* d) {
     psmove_instance_t* ins = get_psmove_instance(d);
     memset(ins, 0, sizeof(*ins));
+    uni_hid_parser_rumble_init(d, psmove_start_rumble_now, psmove_stop_rumble_now);
 
     switch (d->product_id) {
         case ZCM1_PID:
@@ -269,7 +267,7 @@ void uni_hid_parser_psmove_setup(struct uni_hid_device_s* d) {
             logi("psmove: Detected ZCM2 model\n");
             break;
         default:
-            loge("psmove: Unknown PSMove PID = %#x, assuming ZCM1\n", ins->model);
+            loge("psmove: Unknown PSMove PID = %#x, assuming ZCM1\n", d->product_id);
             ins->model = PSMOVE_MODEL_ZCM1;
             break;
     }
@@ -284,12 +282,8 @@ static psmove_instance_t* get_psmove_instance(uni_hid_device_t* d) {
     return (psmove_instance_t*)&d->parser_data[0];
 }
 
-static void psmove_stop_rumble_now(uni_hid_device_t* d) {
+static uni_rumble_result_t psmove_stop_rumble_now(struct uni_hid_device_s* d) {
     psmove_instance_t* ins = get_psmove_instance(d);
-
-    // No need to protect it with a mutex since it runs in the same main thread
-    assert(ins->rumble_state == PSMOVE_STATE_RUMBLE_IN_PROGRESS);
-    ins->rumble_state = PSMOVE_STATE_RUMBLE_DISABLED;
     ins->rumble_magnitude = 0;
 
     psmove_output_report_t out = {
@@ -302,16 +296,23 @@ static void psmove_stop_rumble_now(uni_hid_device_t* d) {
     };
 
     psmove_send_output_report(d, &out);
+    return UNI_RUMBLE_OK;
 }
 
-static void psmove_play_dual_rumble_now(uni_hid_device_t* d, uint16_t duration_ms, uint8_t magnitude) {
-    psmove_instance_t* ins = get_psmove_instance(d);
+static uni_rumble_result_t psmove_start_rumble_now(struct uni_hid_device_s* d,
+                                                   uint8_t weak_magnitude,
+                                                   uint8_t strong_magnitude,
+                                                   uint8_t trigger_left,
+                                                   uint8_t trigger_right) {
+    ARG_UNUSED(trigger_left);
+    ARG_UNUSED(trigger_right);
 
-    if (duration_ms == 0) {
-        if (ins->rumble_state == PSMOVE_STATE_RUMBLE_IN_PROGRESS)
-            psmove_stop_rumble_now(d);
-        return;
+    uint8_t magnitude = btstack_max(weak_magnitude, strong_magnitude);
+    if (magnitude == 0) {
+        return psmove_stop_rumble_now(d);
     }
+
+    psmove_instance_t* ins = get_psmove_instance(d);
 
     psmove_output_report_t out = {
         .report_id = 0x06,
@@ -326,25 +327,7 @@ static void psmove_play_dual_rumble_now(uni_hid_device_t* d, uint16_t duration_m
     ins->rumble_magnitude = magnitude;
 
     psmove_send_output_report(d, &out);
-
-    // Set timer to turn off rumble
-    ins->rumble_timer_duration.process = &on_psmove_set_rumble_off;
-    ins->rumble_timer_duration.context = d;
-    ins->rumble_state = PSMOVE_STATE_RUMBLE_IN_PROGRESS;
-    btstack_run_loop_set_timer(&ins->rumble_timer_duration, duration_ms);
-    btstack_run_loop_add_timer(&ins->rumble_timer_duration);
-}
-
-static void on_psmove_set_rumble_on(btstack_timer_source_t* ts) {
-    uni_hid_device_t* d = ts->context;
-    psmove_instance_t* ins = get_psmove_instance(d);
-
-    psmove_play_dual_rumble_now(d, ins->rumble_duration_ms, ins->rumble_magnitude);
-}
-
-static void on_psmove_set_rumble_off(btstack_timer_source_t* ts) {
-    uni_hid_device_t* d = ts->context;
-    psmove_stop_rumble_now(d);
+    return UNI_RUMBLE_OK;
 }
 
 static void psmove_send_output_report(uni_hid_device_t* d, psmove_output_report_t* out) {

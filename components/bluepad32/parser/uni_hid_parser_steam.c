@@ -10,6 +10,8 @@
 
 #include "parser/uni_hid_parser_steam.h"
 
+#include <stdint.h>
+
 #include "controller/uni_controller.h"
 #include "hid_usage.h"
 #include "uni_common.h"
@@ -111,20 +113,37 @@ static void uni_steam_handle_gatt_client_event(uint8_t packet_type, uint16_t cha
     uint8_t att_status;
     uni_hid_device_t* device;
     steam_instance_t* ins;
+    hci_con_handle_t con_handle;
 
+    ARG_UNUSED(channel);
     ARG_UNUSED(size);
 
     if (packet_type != HCI_EVENT_PACKET)
         return;
 
-    device = uni_hid_device_get_instance_for_connection_handle(channel);
+    uint8_t event = hci_event_packet_get_type(packet);
+    switch (event) {
+        case GATT_EVENT_SERVICE_QUERY_RESULT:
+            con_handle = gatt_event_service_query_result_get_handle(packet);
+            break;
+        case GATT_EVENT_CHARACTERISTIC_QUERY_RESULT:
+            con_handle = gatt_event_characteristic_query_result_get_handle(packet);
+            break;
+        case GATT_EVENT_QUERY_COMPLETE:
+            con_handle = gatt_event_query_complete_get_handle(packet);
+            break;
+        default:
+            loge("Steam: Unknown GATT event: %#x\n", event);
+            return;
+    }
+
+    device = uni_hid_device_get_instance_for_connection_handle(con_handle);
     if (!device) {
-        loge("Steam: Invalid device for connection handle: %d\n", channel);
+        loge("Steam: Invalid device for connection handle: %#x\n", con_handle);
         return;
     }
     ins = get_steam_instance(device);
 
-    uint8_t event = hci_event_packet_get_type(packet);
     switch (ins->query_state) {
         case STATE_QUERY_SERVICE:
             switch (event) {
@@ -143,7 +162,7 @@ static void uni_steam_handle_gatt_client_event(uint8_t packet_type, uint16_t cha
                     // service query complete, look for characteristic report
                     ins->query_state = STATE_QUERY_CHARACTERISTIC_REPORT;
                     gatt_client_discover_characteristics_for_service_by_uuid128(uni_steam_handle_gatt_client_event,
-                                                                                channel, &ins->service,
+                                                                                con_handle, &ins->service,
                                                                                 le_steam_characteristic_report_uuid);
                     break;
                 default:
@@ -160,7 +179,7 @@ static void uni_steam_handle_gatt_client_event(uint8_t packet_type, uint16_t cha
                         // gap_disconnect(connection_handle);
                         break;
                     }
-                    gatt_client_write_value_of_characteristic(uni_steam_handle_gatt_client_event, channel,
+                    gatt_client_write_value_of_characteristic(uni_steam_handle_gatt_client_event, con_handle,
                                                               ins->characteristic_report.value_handle,
                                                               sizeof(cmd_clear_mappings), cmd_clear_mappings);
                     ins->query_state = STATE_QUERY_CLEAR_MAPPINGS;
@@ -182,7 +201,7 @@ static void uni_steam_handle_gatt_client_event(uint8_t packet_type, uint16_t cha
                         // gap_disconnect(connection_handle);
                         break;
                     }
-                    gatt_client_write_value_of_characteristic(uni_steam_handle_gatt_client_event, channel,
+                    gatt_client_write_value_of_characteristic(uni_steam_handle_gatt_client_event, con_handle,
                                                               ins->characteristic_report.value_handle,
                                                               sizeof(cmd_disable_lizard), cmd_disable_lizard);
                     ins->query_state = STATE_QUERY_DISABLE_LIZARD;
@@ -264,25 +283,44 @@ void uni_hid_parser_steam_parse_input_report(struct uni_hid_device_s* d, const u
 
     uint16_t report_flags = (report[2] & 0xf0) + (report[3] << 8);
 
+    // Each flagged section is packed sequentially starting at byte offset 4.
+    // A 20-byte BLE report has 16 payload bytes after the 4-byte header, whereas enabling
+    // all 5 flags simultaneously requests 3 + 2 + 4 + 4 + 4 = 17 bytes (21 > 20).
+    // Guard every section read with `idx + N <= len` and always advance `idx` by the
+    // section's wire size (including the unmapped 4-byte LEFT_PAD section) so subsequent
+    // sections read from the correct offset without reading past `report + len`.
     idx = 4;
     if (report_flags & STEAM_CONTROLLER_FLAG_BUTTONS) {
-        parse_buttons(d, &report[idx]);
+        if (idx + 3 <= len) {
+            parse_buttons(d, &report[idx]);
+        }
+        idx += 3;
     }
 
     if (report_flags & STEAM_CONTROLLER_FLAG_TRIGGERS) {
-        parse_triggers(d, &report[idx]);
+        if (idx + 2 <= len) {
+            parse_triggers(d, &report[idx]);
+        }
+        idx += 2;
     }
 
     if (report_flags & STEAM_CONTROLLER_FLAG_THUMBSTICK) {
-        parse_thumbstick(d, &report[idx]);
+        if (idx + 4 <= len) {
+            parse_thumbstick(d, &report[idx]);
+        }
+        idx += 4;
     }
 
     if (report_flags & STEAM_CONTROLLER_FLAG_LEFT_PAD) {
+        // Not mapped for the moment, but still occupies 4 bytes in the report stream.
         idx += 4;
     }
 
     if (report_flags & STEAM_CONTROLLER_FLAG_RIGHT_PAD) {
-        parse_right_pad(d, &report[idx]);
+        if (idx + 4 <= len) {
+            parse_right_pad(d, &report[idx]);
+        }
+        idx += 4;
     }
 }
 
@@ -332,8 +370,10 @@ static void parse_buttons(struct uni_hid_device_s* d, const uint8_t* data) {
 static void parse_thumbstick(struct uni_hid_device_s* d, const uint8_t* data) {
     uni_controller_t* ctl = &d->controller;
 
-    int16_t x = (data[0] | data[1] << 8);
-    int16_t y = (data[2] | data[3] << 8);
+    // Widen to 32-bit signed integers after 16-bit sign-extension so negating INT16_MIN
+    // (-32768 / 0x8000) produces +32768 (+512 after >> 6) instead of signed 16-bit overflow UB.
+    int32_t x = (int16_t)(data[0] | (data[1] << 8));
+    int32_t y = (int16_t)(data[2] | (data[3] << 8));
     y = -y;
 
     ctl->gamepad.axis_x = (x >> 6);
@@ -350,8 +390,10 @@ static void parse_triggers(struct uni_hid_device_s* d, const uint8_t* data) {
 static void parse_right_pad(struct uni_hid_device_s* d, const uint8_t* data) {
     uni_controller_t* ctl = &d->controller;
 
-    int16_t x = (data[0] | data[1] << 8);
-    int16_t y = (data[2] | data[3] << 8);
+    // Widen to 32-bit signed integers after 16-bit sign-extension so negating INT16_MIN
+    // (-32768 / 0x8000) produces +32768 (+512 after >> 6) instead of signed 16-bit overflow UB.
+    int32_t x = (int16_t)(data[0] | (data[1] << 8));
+    int32_t y = (int16_t)(data[2] | (data[3] << 8));
     y = -y;
 
     ctl->gamepad.axis_rx = (x >> 6);

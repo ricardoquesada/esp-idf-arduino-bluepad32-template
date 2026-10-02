@@ -7,6 +7,8 @@
 
 #include "parser/uni_hid_parser_atari.h"
 
+#include <stdint.h>
+
 #include "controller/uni_controller.h"
 #include "hid_usage.h"
 #include "uni_common.h"
@@ -23,7 +25,7 @@ static void atari_parse_report_id_01(struct uni_hid_device_s* d, const uint8_t* 
     // Report example:
     // 01 00 00 FF 03
     if (len != sizeof(atari_input_report_01_t)) {
-        logi("Atari: Unexpected report len = %d\n", len);
+        logi("Atari: Unexpected report len = %u\n", len);
         return;
     }
 
@@ -50,9 +52,11 @@ static void atari_parse_report_id_01(struct uni_hid_device_s* d, const uint8_t* 
         DPAD_UP | DPAD_LEFT,     // 8
     };
 
-    // Convert joystick to dpad
+    // Convert 4-bit hat nibble (0..15) to dpad bitmask.
+    // Guard against out-of-range nibble values (9..15) in malformed reports so we never
+    // index past the 9-element `dpad_map` array.
     uint8_t joy_value = r->buttons[1] >> 4;
-    ctl->gamepad.dpad = dpad_map[joy_value];
+    ctl->gamepad.dpad = (joy_value < ARRAY_SIZE(dpad_map)) ? dpad_map[joy_value] : 0;
 
     // No need to map, already in the 0, 0x400 range, but just in case in changes.
     ctl->gamepad.throttle = r->axis & 0x3ff;
@@ -85,6 +89,10 @@ void uni_hid_parser_atari_init_report(uni_hid_device_t* d) {
 }
 
 void uni_hid_parser_atari_parse_input_report(struct uni_hid_device_s* d, const uint8_t* report, uint16_t len) {
+    // Reject empty reports before reading the Report ID byte at report[0].
+    if (len < 1) {
+        return;
+    }
     // Report Id
     switch (report[0]) {
         case 0x01:
@@ -100,6 +108,6 @@ void uni_hid_parser_atari_parse_input_report(struct uni_hid_device_s* d, const u
             break;
 
         default:
-            logi("Atari: Unknown report id = %x#\n", report[0]);
+            logi("Atari: Unknown report id = %#x\n", report[0]);
     }
 }

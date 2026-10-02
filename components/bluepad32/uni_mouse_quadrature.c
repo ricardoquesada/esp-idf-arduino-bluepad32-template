@@ -10,6 +10,7 @@
 
 #include <math.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <string.h>
 #include <sys/cdefs.h>
 
@@ -43,7 +44,7 @@
 #define QUADRATURE_PHASES 4
 
 // Helper to pack port and encoder indexes into a single argument for a task.
-#define PACK_TIMER_ARG(port, encoder) ((void*)(((port) << 16) | (encoder)))
+#define PACK_TIMER_ARG(port, encoder) ((void*)(uintptr_t)(((uint32_t)(port) << 16) | (uint32_t)(encoder)))
 
 enum direction {
     PHASE_DIRECTION_NEG,
@@ -107,7 +108,7 @@ static void process_quadrature(struct quadrature_state* q) {
 
 // This function is the entry point for each of the timer tasks.
 static void timer_task(void* arg) {
-    uint32_t task_arg = (uint32_t)arg;
+    uint32_t task_arg = (uint32_t)(uintptr_t)arg;
     uint16_t port_idx = (task_arg >> 16);
     uint16_t encoder_idx = (task_arg & 0xffff);
 
@@ -120,7 +121,7 @@ static void timer_task(void* arg) {
 static bool IRAM_ATTR timer_handler(gptimer_handle_t timer, const gptimer_alarm_event_data_t* edata, void* user_ctx) {
     ARG_UNUSED(timer);
     ARG_UNUSED(edata);
-    uint32_t task_arg = (uint32_t)user_ctx;
+    uint32_t task_arg = (uint32_t)(uintptr_t)user_ctx;
     uint16_t port_idx = (task_arg >> 16);
     uint16_t encoder_idx = (task_arg & 0xffff);
 
@@ -129,7 +130,8 @@ static bool IRAM_ATTR timer_handler(gptimer_handle_t timer, const gptimer_alarm_
     return (high_task_awoken == pdTRUE);
 }
 
-static void init_from_cpu_task() {
+static void init_from_cpu_task(void* pvParameters) {
+    ARG_UNUSED(pvParameters);
     // From ESP-IDF documentation:
     // "Register Timer interrupt handler, the handler is an ISR.
     // The handler will be attached to the same CPU core that this function is running on."
@@ -215,7 +217,8 @@ static void process_update(struct quadrature_state* q, int32_t delta) {
         // smaller numbers make it slower, high number faster
         float max_ticks = 128 * TICKS_PER_80US;
         float delta_f = abs_delta;
-        float units_f = max_ticks / (delta_f * s_scale_factor);
+        float scale = (s_scale_factor > 0.0f) ? s_scale_factor : 1.0f;
+        float units_f = max_ticks / (delta_f * scale);
         if (units_f < TICKS_PER_80US)
             units_f = TICKS_PER_80US;
         count_value = roundf(units_f);
@@ -259,14 +262,27 @@ void uni_mouse_quadrature_setup_port(int port_idx,
 }
 
 void uni_mouse_quadrature_deinit(void) {
-    // Stop the timers
+    if (!initialized)
+        return;
+
+    // ESP-IDF gptimer state machine requires an enabled timer to be stopped (if running)
+    // and disabled before gptimer_del_timer() is called; otherwise deletion fails with ESP_ERR_INVALID_STATE.
     for (int i = 0; i < UNI_MOUSE_QUADRATURE_PORT_MAX; i++) {
         for (int j = 0; j < UNI_MOUSE_QUADRATURE_ENCODER_MAX; j++) {
-            gptimer_del_timer(s_gptimers[i][j]);
-            s_gptimers[i][j] = NULL;
-            vTaskDelete(s_timer_tasks[i][j]);
-            s_timer_tasks[i][j] = NULL;
+            if (s_gptimers[i][j]) {
+                if (timer_started[i]) {
+                    gptimer_stop(s_gptimers[i][j]);
+                }
+                gptimer_disable(s_gptimers[i][j]);
+                gptimer_del_timer(s_gptimers[i][j]);
+                s_gptimers[i][j] = NULL;
+            }
+            if (s_timer_tasks[i][j]) {
+                vTaskDelete(s_timer_tasks[i][j]);
+                s_timer_tasks[i][j] = NULL;
+            }
         }
+        timer_started[i] = false;
     }
 
     initialized = false;
@@ -274,7 +290,7 @@ void uni_mouse_quadrature_deinit(void) {
 
 void uni_mouse_quadrature_start(int port_idx) {
     if (!initialized) {
-        loge("%s: Error, Not initialized\n");
+        loge("%s: Error, Not initialized\n", __func__);
         return;
     }
 
@@ -294,7 +310,7 @@ void uni_mouse_quadrature_start(int port_idx) {
 
 void uni_mouse_quadrature_pause(int port_idx) {
     if (!initialized) {
-        loge("%s: Error, Not initialized\n");
+        loge("%s: Error, Not initialized\n", __func__);
         return;
     }
 
@@ -315,7 +331,7 @@ void uni_mouse_quadrature_pause(int port_idx) {
 // Should be called everytime that mouse report is received.
 void uni_mouse_quadrature_update(int port_idx, int32_t dx, int32_t dy) {
     if (!initialized) {
-        loge("%s: Error, Not initialized\n");
+        loge("%s: Error, Not initialized\n", __func__);
         return;
     }
     if (port_idx < 0 || port_idx >= UNI_MOUSE_QUADRATURE_PORT_MAX) {
@@ -329,6 +345,10 @@ void uni_mouse_quadrature_update(int port_idx, int32_t dx, int32_t dy) {
 }
 
 void uni_mouse_quadrature_set_scale_factor(float scale) {
+    if (scale <= 0.0f) {
+        loge("%s: Invalid scale factor=%f, must be > 0\n", __func__, scale);
+        return;
+    }
     uni_property_value_t value;
     value.f32 = scale;
 
@@ -340,6 +360,6 @@ float uni_mouse_quadrature_get_scale_factor(void) {
     uni_property_value_t value;
 
     value = uni_property_get(UNI_PROPERTY_IDX_MOUSE_SCALE);
-    s_scale_factor = value.f32;
-    return value.f32;
+    s_scale_factor = (value.f32 > 0.0f) ? value.f32 : 1.0f;
+    return s_scale_factor;
 }

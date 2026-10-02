@@ -89,10 +89,14 @@ void uni_joy_to_single_from_wii_accel(const uni_gamepad_t* gp, uni_joystick_t* o
     // Button "1" is Brake (down), and button "2" is Throttle (up)
     // Buttons "1" and "2" can override values from Dpad.
 
-    const int16_t accel_threshold = 26;
+    // Threshold of ~0.25g in m/s^2 (equivalent to the legacy 26-count threshold at 104 LSB/g:
+    // 26 / 104 * 9.80665 m/s^2 = 2.45166 m/s^2).
+    const float accel_threshold = 2.45f;
 
-    int sx = gp->accel[0];
-    int sy = gp->accel[1];
+    // Recover Wiimote native horizontal tilt axes (sx = Left, sy = Forward) in m/s^2
+    // from the canonical Y-up gamepad frame (where accel[0] = -sx and accel[2] = -sy).
+    const float sx = -gp->accel[0];
+    const float sy = -gp->accel[2];
 
     memset(out_joy, 0, sizeof(*out_joy));
 
@@ -110,8 +114,8 @@ void uni_joy_to_single_from_wii_accel(const uni_gamepad_t* gp, uni_joystick_t* o
 
         // Button "1" is Brake (down), and button "2" is Throttle (up)
         // Buttons "1" and "2" can override values from Dpad.
-        out_joy->down |= (gp->buttons & BUTTON_A) ? DPAD_DOWN : 0;
-        out_joy->up |= (gp->buttons & BUTTON_B) ? DPAD_UP : 0;
+        out_joy->down |= (gp->buttons & BUTTON_A) ? 1 : 0;
+        out_joy->up |= (gp->buttons & BUTTON_B) ? 1 : 0;
 
         // Either "A" or "trigger" is used as fire
         out_joy->fire = (gp->buttons & BUTTON_X) ? 1 : 0;
@@ -135,7 +139,7 @@ void uni_joy_to_single_from_wii_accel(const uni_gamepad_t* gp, uni_joystick_t* o
     }
     if (sy < -accel_threshold) {
         out_joy->up = 1;
-    } else if (sy > (accel_threshold / 2)) {
+    } else if (sy > (accel_threshold / 2.0f)) {
         // Threshold for down is 50% because it is not as easy to tilt the
         // device down as it is it to tilt it up.
         out_joy->down = 1;
@@ -316,7 +320,7 @@ void uni_joy_to_single_joy_from_balance_board(const uni_balance_board_t* bb,
                 break;
             }
             if (bb->tl >= UNI_BALANCE_BOARD_IDLE_THRESHOLD || bb->tr >= UNI_BALANCE_BOARD_IDLE_THRESHOLD ||
-                bb->bl > UNI_BALANCE_BOARD_IDLE_THRESHOLD || bb->br >= UNI_BALANCE_BOARD_IDLE_THRESHOLD) {
+                bb->bl >= UNI_BALANCE_BOARD_IDLE_THRESHOLD || bb->br >= UNI_BALANCE_BOARD_IDLE_THRESHOLD) {
                 bb_state->fire_state = UNI_BALANCE_BOARD_STATE_RESET;
                 bb_state->fire_counter = 0;
             }

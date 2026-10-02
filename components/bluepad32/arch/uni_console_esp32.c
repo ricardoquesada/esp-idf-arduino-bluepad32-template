@@ -16,6 +16,7 @@
 #include "bt/uni_bt.h"
 #include "bt/uni_bt_allowlist.h"
 #include "bt/uni_bt_le.h"
+#include "controller/uni_balance_board.h"
 #include "platform/uni_platform.h"
 #include "uni_common.h"
 #include "uni_gpio.h"
@@ -86,6 +87,87 @@ static struct {
     struct arg_end* end;
 } getprop_args;
 
+#ifdef CONFIG_BLUEPAD32_USB_CONSOLE_ENABLE
+// Balance Board CLI commands are hosted in the ESP32 console module so that
+// controller/uni_balance_board.c does not depend on ESP-IDF <esp_console.h> / <argtable3/argtable3.h>.
+static struct {
+    struct arg_int* value;
+    struct arg_end* end;
+} bb_move_threshold_args;
+
+static struct {
+    struct arg_int* value;
+    struct arg_end* end;
+} bb_fire_threshold_args;
+
+static int cmd_bb_move_threshold(int argc, char** argv) {
+    int nerrors = arg_parse(argc, argv, (void**)&bb_move_threshold_args);
+    if (nerrors != 0) {
+        arg_print_errors(stderr, bb_move_threshold_args.end, argv[0]);
+
+        // Don't treat as error, just print current value.
+        int threshold = uni_balance_board_get_move_threshold();
+        logi("%d\n", threshold);
+        return 0;
+    }
+    int threshold = bb_move_threshold_args.value->ival[0];
+    uni_balance_board_set_move_threshold(threshold);
+    logi("Done\n");
+    logi("New Balance Board Move threshold: %d\n", threshold);
+    return 0;
+}
+
+static int cmd_bb_fire_threshold(int argc, char** argv) {
+    int nerrors = arg_parse(argc, argv, (void**)&bb_fire_threshold_args);
+    if (nerrors != 0) {
+        arg_print_errors(stderr, bb_fire_threshold_args.end, argv[0]);
+
+        // Don't treat as error, just print current value.
+        int threshold = uni_balance_board_get_fire_threshold();
+        logi("%d\n", threshold);
+        return 0;
+    }
+    int threshold = bb_fire_threshold_args.value->ival[0];
+    uni_balance_board_set_fire_threshold(threshold);
+    logi("Done\n");
+    logi("New Balance Board Fire threshold: %d\n", threshold);
+    return 0;
+}
+#endif  // CONFIG_BLUEPAD32_USB_CONSOLE_ENABLE
+
+void uni_balance_board_register_cmds(void) {
+#ifdef CONFIG_BLUEPAD32_USB_CONSOLE_ENABLE
+    bb_move_threshold_args.value = arg_int1(NULL, NULL, "<threshold>", "balance board 'move weight' threshold");
+    bb_move_threshold_args.end = arg_end(2);
+
+    bb_fire_threshold_args.value = arg_int1(NULL, NULL, "<threshold>", "balance board 'fire weight' threshold");
+    bb_fire_threshold_args.end = arg_end(2);
+
+    const esp_console_cmd_t bb_move_threshold = {
+        .command = "bb_move_threshold",
+        .help =
+            "Get/Set the Balance Board 'Move Weight' threshold\n"
+            "Default: 1500",  // BB_MOVE_THRESHOLD_DEFAULT
+        .hint = NULL,
+        .func = &cmd_bb_move_threshold,
+        .argtable = &bb_move_threshold_args,
+    };
+
+    const esp_console_cmd_t bb_fire_threshold = {
+        .command = "bb_fire_threshold",
+        .help =
+            "Get/Set the Balance Board 'Fire Weight' threshold\n"
+            "Default: 5000",  // BB_FIRE_THRESHOLD_DEFAULT
+        .hint = NULL,
+        .func = &cmd_bb_fire_threshold,
+        .argtable = &bb_fire_threshold_args,
+    };
+
+    ESP_ERROR_CHECK(esp_console_cmd_register(&bb_move_threshold));
+    ESP_ERROR_CHECK(esp_console_cmd_register(&bb_fire_threshold));
+#endif  // CONFIG_BLUEPAD32_USB_CONSOLE_ENABLE
+}
+
 static int list_devices(int argc, char** argv) {
     // FIXME: Should not belong to "bluetooth"
     uni_bt_dump_devices_safe();
@@ -102,7 +184,7 @@ static void print_mouse_scale(void) {
 
     // ets_printf() doesn't support "%f"
     sprintf(buf, "%f\n", scale);
-    logi(buf);
+    logi("%s", buf);
 }
 
 static int mouse_scale(int argc, char** argv) {
@@ -164,8 +246,8 @@ static int gap_periodic_inquiry(int argc, char** argv) {
     max = gap_periodic_inquiry_args.max->ival[0];
     min = gap_periodic_inquiry_args.min->ival[0];
     len = gap_periodic_inquiry_args.len->ival[0];
-    uni_bt_set_gap_max_peridic_length(max);
-    uni_bt_set_gap_min_peridic_length(min);
+    uni_bt_set_gap_max_periodic_length(max);
+    uni_bt_set_gap_min_periodic_length(min);
     uni_bt_set_gap_inquiry_length(len);
     logi("Done. Restart required. Type 'restart' + Enter\n");
     return 0;
@@ -357,7 +439,7 @@ static int getprop(int argc, char** argv) {
 
 #ifdef CONFIG_BLUEPAD32_USB_CONSOLE_ENABLE
 
-static void register_bluepad32() {
+static void register_bluepad32(void) {
     mouse_scale_args.value = arg_dbl1(NULL, NULL, "<value>", "Global mouse scale factor. Higher means faster");
     mouse_scale_args.end = arg_end(2);
 
@@ -536,7 +618,6 @@ static void register_bluepad32() {
     ESP_ERROR_CHECK(esp_console_cmd_register(&cmd_incoming_connections_enable));
     ESP_ERROR_CHECK(esp_console_cmd_register(&cmd_scan_and_autoconnect));
     ESP_ERROR_CHECK(esp_console_cmd_register(&cmd_ble_enable));
-    ESP_ERROR_CHECK(esp_console_cmd_register(&cmd_ble_enable));
     ESP_ERROR_CHECK(esp_console_cmd_register(&cmd_allowlist_list));
     ESP_ERROR_CHECK(esp_console_cmd_register(&cmd_allowlist_add));
     ESP_ERROR_CHECK(esp_console_cmd_register(&cmd_allowlist_remove));
@@ -551,7 +632,13 @@ void uni_console_init(void) {
 #ifdef CONFIG_BLUEPAD32_USB_CONSOLE_ENABLE
     esp_console_repl_t* repl = NULL;
     esp_console_repl_config_t repl_config = ESP_CONSOLE_REPL_CONFIG_DEFAULT();
+#if CONFIG_ESP_CONSOLE_UART
     esp_console_dev_uart_config_t uart_config = ESP_CONSOLE_DEV_UART_CONFIG_DEFAULT();
+#elif CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG
+    esp_console_dev_usb_serial_jtag_config_t jtag_config = ESP_CONSOLE_DEV_USB_SERIAL_JTAG_CONFIG_DEFAULT();
+#else
+#error "BLUEPAD32_USB_CONSOLE_ENABLE requires ESP_CONSOLE_UART or ESP_CONSOLE_USB_SERIAL_JTAG as the primary console"
+#endif
     /* Prompt to be printed before each line.
      * This can be customized, made dynamic, etc.
      */
@@ -579,7 +666,11 @@ void uni_console_init(void) {
     if (uni_get_platform()->register_console_cmds)
         uni_get_platform()->register_console_cmds();
 
+#if CONFIG_ESP_CONSOLE_UART
     ESP_ERROR_CHECK(esp_console_new_repl_uart(&uart_config, &repl_config, &repl));
+#elif CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG
+    ESP_ERROR_CHECK(esp_console_new_repl_usb_serial_jtag(&jtag_config, &repl_config, &repl));
+#endif
 
     ESP_ERROR_CHECK(esp_console_start_repl(repl));
 

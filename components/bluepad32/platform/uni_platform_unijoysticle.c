@@ -88,8 +88,6 @@
 
 // Unijoysticle properties: Keep them sorted
 #define UNI_PROPERTY_NAME_UNI_AUTOFIRE_CPS "bp.uni.autofire"
-#define UNI_PROPERTY_NAME_UNI_BB_FIRE_THRESHOLD "bp.uni.bb_fire"
-#define UNI_PROPERTY_NAME_UNI_BB_MOVE_THRESHOLD "bp.uni.bb_move"
 #define UNI_PROPERTY_NAME_UNI_C64_POT_MODE "bp.uni.c64pot"
 #define UNI_PROPERTY_NAME_UNI_MODEL "bp.uni.model"
 #define UNI_PROPERTY_NAME_UNI_MOUSE_EMULATION "bp.uni.mouseemu"
@@ -163,7 +161,7 @@ struct push_button_state {
 
 // --- Function declaration
 
-static board_model_t get_uni_model_from_pins();
+static board_model_t get_uni_model_from_pins(void);
 static void set_gamepad_seat(uni_hid_device_t* d, uni_gamepad_seat_t seat);
 static void process_joystick(uni_hid_device_t* d, uni_gamepad_seat_t seat, const uni_joystick_t* joy);
 static void process_mouse(uni_hid_device_t* d,
@@ -213,10 +211,6 @@ static const char* mouse_modes[] = {
 static const uni_property_t properties[] = {
     {UNI_PROPERTY_IDX_UNI_AUTOFIRE_CPS, UNI_PROPERTY_NAME_UNI_AUTOFIRE_CPS, UNI_PROPERTY_TYPE_U8,
      .default_value.u8 = AUTOFIRE_CPS_DEFAULT},
-    {UNI_PROPERTY_IDX_UNI_BB_FIRE_THRESHOLD, UNI_PROPERTY_NAME_UNI_BB_FIRE_THRESHOLD, UNI_PROPERTY_TYPE_U32,
-     .default_value.u32 = UNI_BALANCE_BOARD_MOVE_THRESHOLD_DEFAULT},
-    {UNI_PROPERTY_IDX_UNI_BB_MOVE_THRESHOLD, UNI_PROPERTY_NAME_UNI_BB_MOVE_THRESHOLD, UNI_PROPERTY_TYPE_U32,
-     .default_value.u32 = UNI_BALANCE_BOARD_FIRE_THRESHOLD_DEFAULT},
     {UNI_PROPERTY_IDX_UNI_C64_POT_MODE, UNI_PROPERTY_NAME_UNI_C64_POT_MODE, UNI_PROPERTY_TYPE_U8,
      .default_value.u8 = UNI_PLATFORM_UNIJOYSTICLE_C64_POT_MODE_3BUTTONS},
     {UNI_PROPERTY_IDX_UNI_MODEL, UNI_PROPERTY_NAME_UNI_MODEL, UNI_PROPERTY_TYPE_STRING, .default_value.str = "Unknown",
@@ -408,6 +402,7 @@ static void unijoysticle_on_init_complete(void) {
 static void unijoysticle_on_device_connected(uni_hid_device_t* d) {
     if (d == NULL) {
         loge("ERROR: unijoysticle_on_device_connected: Invalid NULL device\n");
+        return;
     }
 
     // Blink when a connection is started
@@ -894,6 +889,10 @@ static int get_uni_serial_number_from_nvs(void) {
 }
 
 static void set_autofire_cps_to_nvs(int cps) {
+    if (cps <= 0) {
+        loge("Invalid autofire cps: %d, must be > 0\n", cps);
+        return;
+    }
     uni_property_value_t value;
     value.u8 = cps;
 
@@ -905,7 +904,7 @@ static int get_autofire_cps_from_nvs(void) {
     uni_property_value_t value;
 
     value = uni_property_get(UNI_PROPERTY_IDX_UNI_AUTOFIRE_CPS);
-    return value.u8;
+    return (value.u8 > 0) ? value.u8 : 1;
 }
 
 static board_model_t get_uni_model_from_pins(void) {
@@ -988,7 +987,7 @@ static void process_mouse(uni_hid_device_t* d,
     if (!(g_variant->flags & UNI_PLATFORM_UNIJOYSTICLE_VARIANT_FLAG_QUADRATURE_MOUSE))
         return;
 
-    static uint16_t prev_buttons = 0;
+    static uint16_t prev_buttons[UNI_MOUSE_QUADRATURE_PORT_MAX] = {0};
 
     if (mouse_emulation_cached == UNI_PLATFORM_UNIJOYSTICLE_MOUSE_EMULATION_ATARIST) {
         if (delta_x < -ATARIST_MOUSE_DELTA_MAX)
@@ -1007,8 +1006,8 @@ static void process_mouse(uni_hid_device_t* d,
 
     uni_mouse_quadrature_update(port_idx, delta_x, delta_y);
 
-    if (buttons != prev_buttons) {
-        prev_buttons = buttons;
+    if (buttons != prev_buttons[port_idx]) {
+        prev_buttons[port_idx] = buttons;
         int fire, button2, button3;
         if (seat == GAMEPAD_SEAT_A) {
             fire = g_gpio_config->port_a[UNI_PLATFORM_UNIJOYSTICLE_JOY_FIRE];
@@ -1363,11 +1362,7 @@ static void version(void) {
     uint32_t flash_size;
     esp_chip_info(&info);
 
-#if ESP_IDF_VERSION_MAJOR == 4
-    const esp_app_desc_t* app_desc = esp_ota_get_app_description();
-#else
     const esp_app_desc_t* app_desc = esp_app_get_description();
-#endif
 
     logi("Unijoysticle info:\n");
     logi("\tModel: %s\n", get_uni_model_from_nvs());
@@ -1717,6 +1712,10 @@ static int cmd_autofire_cps(int argc, char** argv) {
         return 0;
     }
     cps = autofire_cps_args.value->ival[0];
+    if (cps <= 0) {
+        loge("Invalid autofire cps: %d, must be > 0\n", cps);
+        return 1;
+    }
     set_autofire_cps_to_nvs(cps);
 
     logi("New autofire cps: %d\n", cps);

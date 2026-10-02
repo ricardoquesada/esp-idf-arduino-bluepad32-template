@@ -107,11 +107,12 @@ static void hog_disconnect(hci_con_handle_t con_handle) {
     uni_hid_device_t* device;
 
     device = uni_hid_device_get_instance_for_connection_handle(con_handle);
-    if (device) {
+    if (device && device->hids_cid != 0xffff) {
         status = hids_host_disconnect(device->hids_cid);
-        if (status != ERROR_CODE_SUCCESS) {
+        if (status != ERROR_CODE_SUCCESS && status != ERROR_CODE_UNKNOWN_CONNECTION_IDENTIFIER) {
             loge("Failed to disconnect HIDS client for hids_cid=%d, status=%d\n", device->hids_cid, status);
         }
+        device->hids_cid = 0xffff;
         // gap_delete_bonding(0, device->conn.btaddr);
     }
 
@@ -149,12 +150,17 @@ static void get_advertisement_data(const uint8_t* adv_data, uint8_t adv_size, ui
             case BLUETOOTH_DATA_TYPE_LIST_OF_128_BIT_SERVICE_SOLICITATION_UUIDS:
                 break;
             case BLUETOOTH_DATA_TYPE_SHORTENED_LOCAL_NAME:
-            case BLUETOOTH_DATA_TYPE_COMPLETE_LOCAL_NAME:
-                for (i = 0; i < size; i++) {
+            case BLUETOOTH_DATA_TYPE_COMPLETE_LOCAL_NAME: {
+                // Clamp to 63 bytes + NUL terminator because the caller passes a 64-byte stack
+                // buffer (`char name[64]`), whereas malformed or extended BLE advertising
+                // payloads can report `size` up to 255 bytes.
+                int copy_len = (size < 63) ? size : 63;
+                for (i = 0; i < copy_len; i++) {
                     name[i] = data[i];
                 }
-                name[size] = 0;
+                name[copy_len] = 0;
                 break;
+            }
             case BLUETOOTH_DATA_TYPE_TX_POWER_LEVEL:
                 break;
             case BLUETOOTH_DATA_TYPE_SLAVE_CONNECTION_INTERVAL_RANGE:
@@ -166,7 +172,9 @@ static void get_advertisement_data(const uint8_t* adv_data, uint8_t adv_size, ui
                 break;
             case BLUETOOTH_DATA_TYPE_APPEARANCE:
                 // https://developer.bluetooth.org/gatt/characteristics/Pages/CharacteristicViewer.aspx?u=org.bluetooth.characteristic.gap.appearance.xml
-                *appearance = little_endian_read_16(data, 0);
+                if (size >= 2) {
+                    *appearance = little_endian_read_16(data, 0);
+                }
                 break;
             case BLUETOOTH_DATA_TYPE_ADVERTISING_INTERVAL:
                 break;
@@ -175,12 +183,16 @@ static void get_advertisement_data(const uint8_t* adv_data, uint8_t adv_size, ui
             case BLUETOOTH_DATA_TYPE_MANUFACTURER_SPECIFIC_DATA:  // Manufacturer Specific Data
                 break;
             case BLUETOOTH_DATA_TYPE_CLASS_OF_DEVICE:
-                logi("class of device: %#x\n", little_endian_read_16(data, 0));
+                if (size >= 2) {
+                    logi("class of device: %#x\n", little_endian_read_16(data, 0));
+                }
                 break;
             case BLUETOOTH_DATA_TYPE_SIMPLE_PAIRING_HASH_C:
             case BLUETOOTH_DATA_TYPE_SIMPLE_PAIRING_RANDOMIZER_R:
             case BLUETOOTH_DATA_TYPE_DEVICE_ID:
-                logi("device id: %#x\n", little_endian_read_16(data, 0));
+                if (size >= 2) {
+                    logi("device id: %#x\n", little_endian_read_16(data, 0));
+                }
                 break;
             case BLUETOOTH_DATA_TYPE_LE_BLUETOOTH_DEVICE_ADDRESS:
             case BLUETOOTH_DATA_TYPE_MESH_BEACON:
@@ -196,15 +208,22 @@ static void get_advertisement_data(const uint8_t* adv_data, uint8_t adv_size, ui
     }
 }
 
-static void adv_event_get_data(const uint8_t* packet, uint16_t* appearance, char* name) {
+static void adv_event_get_data(const uint8_t* packet, uint16_t size, uint16_t* appearance, char* name) {
     const uint8_t* ad_data;
     uint16_t ad_len;
 
+    if (size < 12) {
+        return;
+    }
+
     ad_data = gap_event_advertising_report_get_data(packet);
     ad_len = gap_event_advertising_report_get_data_length(packet);
+    if (ad_len > size - 12) {
+        ad_len = size - 12;
+    }
 
     // if (!ad_data_contains_uuid16(ad_len, ad_data, ORG_BLUETOOTH_SERVICE_HUMAN_INTERFACE_DEVICE))
-    get_advertisement_data(ad_data, ad_len, appearance, name);
+    get_advertisement_data(ad_data, (uint8_t)ad_len, appearance, name);
 }
 
 static void parse_report(const uint8_t* packet, uint16_t size) {
@@ -238,6 +257,9 @@ static void parse_report(const uint8_t* packet, uint16_t size) {
     }
     report_data = gattservice_subevent_hid_report_get_report(packet);
     report_len = gattservice_subevent_hid_report_get_report_len(packet);
+    if (report_len < 1) {
+        return;
+    }
 
     uni_hid_parse_input_report(device, report_data, report_len);
     uni_hid_device_process_controller(device);
@@ -283,6 +305,7 @@ static void uni_hids_client_packet_handler(uint8_t packet_type, uint16_t channel
                     device = uni_hid_device_get_instance_for_hids_cid(hids_cid);
                     if (!device) {
                         loge("Hids Cid: Could not find valid device for hids_cid=%d\n", hids_cid);
+                        resume_scanning_hint();
                         break;
                     }
 #if 0
@@ -301,6 +324,17 @@ static void uni_hids_client_packet_handler(uint8_t packet_type, uint16_t channel
                     break;
                 default:
                     loge("HID service client connection failed, err 0x%02x.\n", status);
+                    hids_cid = gattservice_subevent_hid_service_connected_get_hids_cid(packet);
+                    device = uni_hid_device_get_instance_for_hids_cid(hids_cid);
+                    if (device) {
+                        // hids_host.c calls hids_host_finalize(client) immediately after this callback
+                        // returns on non-zero status, so clear device->hids_cid and disconnect GAP.
+                        device->hids_cid = 0xffff;
+                        if (device->conn.handle != HCI_CON_HANDLE_INVALID) {
+                            gap_disconnect(device->conn.handle);
+                        }
+                    }
+                    resume_scanning_hint();
                     break;
             }
             break;
@@ -351,6 +385,17 @@ static void uni_device_information_packet_handler(uint8_t packet_type,
                                                   uint16_t channel,
                                                   uint8_t* packet,
                                                   uint16_t size) {
+    UNUSED(channel);
+
+    if (packet_type != HCI_EVENT_PACKET) {
+        loge("uni_device_information_packet_handler: unsupported packet type: %#x\n", packet_type);
+        return;
+    }
+
+    uni_bt_le_on_hci_event_gattservice_meta(packet, size);
+}
+
+void uni_bt_le_on_hci_event_gattservice_meta(const uint8_t* packet, uint16_t size) {
     uint8_t code;
     uint8_t status;
     uint8_t att_status;
@@ -359,13 +404,7 @@ static void uni_device_information_packet_handler(uint8_t packet_type,
     uint8_t event_type;
     uint16_t hids_cid;
 
-    UNUSED(channel);
     UNUSED(size);
-
-    if (packet_type != HCI_EVENT_PACKET) {
-        loge("uni_device_information_packet_handler: unsupported packet type: %#x\n", packet_type);
-        return;
-    }
 
     event_type = hci_event_packet_get_type(packet);
     if (event_type != HCI_EVENT_GATTSERVICE_META) {
@@ -541,6 +580,8 @@ static void uni_device_information_packet_handler(uint8_t packet_type,
             if (att_status != ATT_ERROR_SUCCESS) {
                 logi("PNP ID read failed, ATT Error 0x%02x\n", att_status);
             } else {
+                // Only record Vendor ID and Product ID when the GATT characteristic read succeeded;
+                // on ATT errors, the packet payload does not contain valid PnP ID fields (fixes B6).
                 logi("Vendor Source ID: 0x%02x\n",
                      gattservice_subevent_device_information_pnp_id_get_vendor_source_id(packet));
                 logi("Vendor  ID:       0x%04x\n",
@@ -549,11 +590,20 @@ static void uni_device_information_packet_handler(uint8_t packet_type,
                      gattservice_subevent_device_information_pnp_id_get_product_id(packet));
                 logi("Product Version:  0x%04x\n",
                      gattservice_subevent_device_information_pnp_id_get_product_version(packet));
+                uni_hid_device_set_vendor_id(device,
+                                             gattservice_subevent_device_information_pnp_id_get_vendor_id(packet));
+                uni_hid_device_set_product_id(device,
+                                              gattservice_subevent_device_information_pnp_id_get_product_id(packet));
             }
-            uni_hid_device_set_vendor_id(device, gattservice_subevent_device_information_pnp_id_get_vendor_id(packet));
-            uni_hid_device_set_product_id(device,
-                                          gattservice_subevent_device_information_pnp_id_get_product_id(packet));
 
+            break;
+
+        case GATTSERVICE_SUBEVENT_HID_SERVICE_CONNECTED:
+        case GATTSERVICE_SUBEVENT_HID_REPORT:
+        case GATTSERVICE_SUBEVENT_HID_INFORMATION:
+        case GATTSERVICE_SUBEVENT_HID_PROTOCOL_MODE:
+        case GATTSERVICE_SUBEVENT_HID_SERVICE_REPORTS_NOTIFICATION:
+            uni_hids_client_packet_handler(HCI_EVENT_PACKET, 0, (uint8_t*)packet, size);
             break;
 
         default:
@@ -711,6 +761,7 @@ void uni_bt_le_on_hci_event_le_meta(const uint8_t* packet, uint16_t size) {
     hci_con_handle_t con_handle;
     bd_addr_t event_addr;
     uint8_t subevent;
+    uint8_t status;
 
     ARG_UNUSED(size);
 
@@ -718,10 +769,22 @@ void uni_bt_le_on_hci_event_le_meta(const uint8_t* packet, uint16_t size) {
 
     switch (subevent) {
         case HCI_SUBEVENT_LE_CONNECTION_COMPLETE:
+            status = hci_subevent_le_connection_complete_get_status(packet);
             hci_subevent_le_connection_complete_get_peer_address(packet, event_addr);
             device = uni_hid_device_get_instance_for_address(event_addr);
+            if (status != ERROR_CODE_SUCCESS) {
+                loge("uni_bt_le_on_connection_complete: failed with status=0x%02x for addr: %s\n", status,
+                     bd_addr_to_str(event_addr));
+                if (device) {
+                    uni_hid_device_disconnect(device);
+                    uni_hid_device_delete(device);
+                }
+                resume_scanning_hint();
+                break;
+            }
             if (!device) {
                 loge("uni_bt_le_on_connection_complete: Device not found for addr: %s\n", bd_addr_to_str(event_addr));
+                resume_scanning_hint();
                 break;
             }
             con_handle = hci_subevent_le_connection_complete_get_connection_handle(packet);
@@ -785,7 +848,9 @@ void uni_bt_le_on_gap_event_advertising_report(const uint8_t* packet, uint16_t s
     appearance = 0;
     name[0] = 0;
 
-    ARG_UNUSED(size);
+    if (size < 12) {
+        return;
+    }
 
     gap_event_advertising_report_get_address(packet, addr);
     if (uni_hid_device_get_instance_for_address(addr)) {
@@ -793,7 +858,7 @@ void uni_bt_le_on_gap_event_advertising_report(const uint8_t* packet, uint16_t s
         return;
     }
 
-    adv_event_get_data(packet, &appearance, name);
+    adv_event_get_data(packet, size, &appearance, name);
 
     if (appearance != UNI_BT_HID_APPEARANCE_GAMEPAD && appearance != UNI_BT_HID_APPEARANCE_JOYSTICK &&
         appearance != UNI_BT_HID_APPEARANCE_MOUSE && appearance != UNI_BT_HID_APPEARANCE_KEYBOARD) {
@@ -912,6 +977,15 @@ void uni_bt_le_setup(void) {
     sm_init();
     sm_set_io_capabilities(IO_CAPABILITY_NO_INPUT_NO_OUTPUT);
 
+    // BTstack v1.8.2+ enables LE Secure Connections Only mode (`sm_sc_only_mode = true`) and raises
+    // `sm_min_encryption_key_size` from 7 to 16 bytes by default in `sm_init()`.
+    // Disable SC-only mode and restore the 7..16-byte key size range so BLE peripherals that only
+    // support Bluetooth 4.0/4.1 LE Legacy Pairing (e.g., Steam Controller 2015 BLE firmware) are not
+    // rejected with `SM_REASON_AUTHENTHICATION_REQUIREMENTS` (reason = 3), and `sm_init_setup()`
+    // respects `sm_set_authentication_requirements(SM_AUTHREQ_BONDING)` instead of forcing SC.
+    sm_set_secure_connections_only_mode(false);
+    sm_set_encryption_key_size_range(7, 16);
+
     // TL;DR:
     // Enable Secure connection, disable bonding
 
@@ -985,7 +1059,7 @@ void uni_bt_le_set_enabled(bool enabled) {
     ble_enabled = enabled;
 }
 
-bool uni_bt_le_is_enabled() {
+bool uni_bt_le_is_enabled(void) {
     // Expensive call. Avoid calling it from this same file.
     // Called from "uni_bt_setup"
     uni_property_value_t val;

@@ -10,7 +10,7 @@ with [Espressif IoT Development Framework](https://github.com/espressif/esp-idf)
 Please check [ESP-IDF docs](https://docs.espressif.com/projects/esp-idf/en/latest/get-started/index.html) for getting
 started instructions.
 
-Requires ESP-IDF **v5.5.5**.
+Requires ESP-IDF **v6.1**.
 
 Includes the following ESP-IDF components, with a pre-configured `sdkconfig` file:
 
@@ -105,14 +105,14 @@ To integrate your project with CLion, follow the steps in the [CLion official do
 
 #### For Windows
 
-1. Install [ESP-IDF v5.4][esp-idf-windows-installer]. For further info,
+1. Install [ESP-IDF v6.1][esp-idf-windows-installer]. For further info,
    read: [ESP-IDF Getting Started for Windows][esp-idf-windows-setup]
 
     * Either the Online or Offline version should work
     * When asked which components to install, don't change anything. Default options are Ok.
     * When asked whether ESP can modify the system, answer "Yes"
 
-2. Launch the "ESP-IDF v5.4 CMD" (type that in the Windows search box)
+2. Launch the "ESP-IDF v6.1 CMD" (type that in the Windows search box)
 
 3. Compile it
 
@@ -127,7 +127,7 @@ To integrate your project with CLion, follow the steps in the [CLion official do
 
 [esp-idf-windows-setup]: https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/windows-setup.html
 
-[esp-idf-windows-installer]: https://dl.espressif.com/dl/esp-idf/?idf=5.4
+[esp-idf-windows-installer]: https://dl.espressif.com/dl/esp-idf/?idf=6.1
 
 #### For Linux / macOS
 
@@ -154,7 +154,7 @@ To integrate your project with CLion, follow the steps in the [CLion official do
     # Needs to be done just once
     # Clone the ESP-IDF git repo
     mkdir ~/esp && cd ~/esp
-    git clone -b release/v5.4 --recursive https://github.com/espressif/esp-idf.git
+    git clone -b release/v6.1 --recursive https://github.com/espressif/esp-idf.git
 
     # Then install the toolchain
     cd ~/esp/esp-idf
